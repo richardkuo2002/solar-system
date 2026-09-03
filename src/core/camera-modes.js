@@ -166,10 +166,22 @@ export function computePose(state, bodyPositions) {
   switch (state.mode) {
     case CAMERA_MODES.HELIOCENTRIC_TOPDOWN: {
       const target = bodyPositions[state.focusBody] ?? { x: 0, y: 0, z: 0 };
+      // World up (0,1,0), matching every other mode — NOT the horizontal
+      // (0,0,-1) this used to be. OrbitControls decomposes camera position
+      // into spherical coordinates around `up` as the pole axis; since this
+      // camera sits directly above `target` (along world +Y), `up` must
+      // also be world +Y for drag-to-orbit to behave normally (horizontal
+      // drag = spin, vertical drag = tilt). A horizontal up like (0,0,-1)
+      // put the camera at that spherical system's *equator* instead of its
+      // pole, which swaps what horizontal/vertical dragging does — that's
+      // what was making Top-Down mouse look reversed. lookAt still doesn't
+      // degenerate here even though up is now near-parallel to the view
+      // direction (straight down), because position.x's `+ 0.001` offset
+      // below keeps them not-quite-parallel.
       return {
         position: { x: target.x + 0.001, y: TOPDOWN_HEIGHT, z: target.z },
         target,
-        up: { x: 0, y: 0, z: -1 },
+        up: { x: 0, y: 1, z: 0 },
       };
     }
     case CAMERA_MODES.FREE_FLIGHT: {
