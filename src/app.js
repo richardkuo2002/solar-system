@@ -5,9 +5,10 @@
 import * as THREE from 'three';
 import { createRenderer, createScene, createCamera, createAmbientLight, wireResize, applyStarfield } from './render/scene-setup.js';
 import {
-  buildPlanetMesh, buildOrbitPath, buildSun, buildMoonMesh, toScenePosition,
+  buildPlanetMesh, buildOrbitPath, buildSun, buildMoonMesh, buildSaturnRing, toScenePosition,
 } from './render/bodies.js';
 import { createTimeControlsUI, createViewModeUI, createSurfaceControlsUI } from './render/ui-controls.js';
+import { createHoverLabels } from './render/hover-labels.js';
 import { createCameraRig } from './render/camera-rig.js';
 import {
   createTimeController, tick, togglePlayPause, setSpeed, reverse, jumpToDate,
@@ -37,6 +38,7 @@ const startJD = julianDateFromDate(new Date());
 
 const planetGroups = {};
 const moonMeshesByParent = {}; // parentKey -> [{ key, mesh, moonData }]
+const pickableMeshes = [sunMesh]; // bodies the hover-label raycaster tests against — rings/orbit lines excluded
 for (const key of PLANET_ORDER) {
   const planetData = PLANETS[key];
   const orbitLine = buildOrbitPath(planetData.elements, startJD);
@@ -45,9 +47,11 @@ for (const key of PLANET_ORDER) {
   const group = new THREE.Group();
   const mesh = buildPlanetMesh(planetData);
   group.add(mesh);
+  if (key === 'saturn') group.add(buildSaturnRing(planetData));
   scene.add(group);
   planetGroups[key] = group;
   moonMeshesByParent[key] = [];
+  pickableMeshes.push(mesh);
 }
 
 for (const moonKey of MOON_ORDER) {
@@ -55,7 +59,10 @@ for (const moonKey of MOON_ORDER) {
   const mesh = buildMoonMesh(moonData);
   planetGroups[moonData.parent].add(mesh);
   moonMeshesByParent[moonData.parent].push({ key: moonKey, mesh, moonData });
+  pickableMeshes.push(mesh);
 }
+
+createHoverLabels(canvas, camera, pickableMeshes);
 
 // Scene-space positions of every body this frame (planets + Sun), keyed by
 // bodyKey — the `bodyPositions` map camera-modes.js#computePose expects.

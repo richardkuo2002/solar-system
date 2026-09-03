@@ -64,6 +64,42 @@ export function buildMoonMesh(moonData) {
   return buildBodyMesh(moonData);
 }
 
+// Real-world km, not scaled by compressSize's planet-radius curve tuning —
+// close enough for a v1 visual (main rings: C through A, skipping the
+// fainter/wider F-and-beyond rings).
+const SATURN_RING_INNER_KM = 74500;
+const SATURN_RING_OUTER_KM = 136800;
+
+/**
+ * Saturn's ring, as a flat annulus using the same compressSize() curve as
+ * body radii (a real-world km measurement, same order of magnitude as a
+ * planet radius) so it scales consistently with Saturn's own compressed
+ * size. RingGeometry's default UVs aren't radial, which stretches a
+ * radial-gradient texture badly — remapped here so U runs outward from the
+ * inner to the outer edge instead.
+ */
+export function buildSaturnRing(planetData) {
+  const innerRadius = compressSize(SATURN_RING_INNER_KM);
+  const outerRadius = compressSize(SATURN_RING_OUTER_KM);
+  const geometry = new THREE.RingGeometry(innerRadius, outerRadius, 64, 1);
+  const pos = geometry.attributes.position;
+  const uv = geometry.attributes.uv;
+  const v3 = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v3.fromBufferAttribute(pos, i);
+    const radialT = (v3.length() - innerRadius) / (outerRadius - innerRadius);
+    uv.setXY(i, radialT, 1);
+  }
+  const map = loadTexture('saturnRing');
+  const material = new THREE.MeshBasicMaterial({
+    map, transparent: true, side: THREE.DoubleSide, depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.rotation.x = Math.PI / 2; // lie flat in the scene's XZ (equatorial) plane
+  mesh.name = `${planetData.name} Ring`;
+  return mesh;
+}
+
 /**
  * Precomputed closed orbit-path line, sampled at `segments` evenly spaced
  * mean anomalies at the *current* (not time-varying) osculating elements —
