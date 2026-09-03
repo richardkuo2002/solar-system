@@ -15,7 +15,7 @@ import {
   createTimeController, tick, togglePlayPause, setSpeed, reverse, jumpToDate,
 } from './core/time-controller.js';
 import { createCameraState, setMode, enterGeocentric, computePose, CAMERA_MODES } from './core/camera-modes.js';
-import { elementsAtDate, julianDateFromDate, moonLocalPosition } from './core/orbital-elements.js';
+import { elementsAtDate, julianDateFromDate, moonLocalPosition, circularOrbitAngle } from './core/orbital-elements.js';
 import { elementsToPosition } from './core/kepler.js';
 import { compressSize } from './core/scale.js';
 import { getPositionSync } from './core/ephemeris.js';
@@ -40,6 +40,7 @@ scene.add(sunLight);
 const startJD = julianDateFromDate(new Date());
 
 const planetGroups = {};
+const planetMeshes = {}; // key -> mesh (the group also holds Saturn's ring, which must not spin with the planet)
 const moonMeshesByParent = {}; // parentKey -> [{ key, mesh, moonData }]
 const pickableMeshes = [sunMesh]; // bodies the hover-label raycaster tests against — rings/orbit lines excluded
 for (const key of PLANET_ORDER) {
@@ -53,6 +54,7 @@ for (const key of PLANET_ORDER) {
   if (key === 'saturn') group.add(buildSaturnRing(planetData));
   scene.add(group);
   planetGroups[key] = group;
+  planetMeshes[key] = mesh;
   moonMeshesByParent[key] = [];
   pickableMeshes.push(mesh);
 }
@@ -111,12 +113,16 @@ function localPlanetPosition(bodyKey, jsDate) {
 
 function updateBodyPositions(currentDate) {
   const currentJD = julianDateFromDate(currentDate);
+  sunMesh.rotation.y = circularOrbitAngle(currentJD - startJD, SUN.rotationPeriodDays);
   for (const key of PLANET_ORDER) {
     const planetData = PLANETS[key];
     const auPos = getPositionSync(key, currentDate, localPlanetPosition);
     const scenePos = toScenePosition(auPos);
     planetGroups[key].position.set(scenePos.x, scenePos.y, scenePos.z);
     scenePositions[key] = scenePos;
+    // Axial spin — on the planet mesh itself, not the group, so Saturn's
+    // ring doesn't spin along with it.
+    planetMeshes[key].rotation.y = circularOrbitAngle(currentJD - startJD, planetData.rotationPeriodDays);
 
     const parentSceneRadius = compressSize(planetData.radiusKm);
     for (const { mesh, moonData } of moonMeshesByParent[key]) {
