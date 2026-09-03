@@ -16,6 +16,11 @@ export function createScene() {
   return scene;
 }
 
+/** Very low ambient light — just enough that a planet's unlit side isn't pure-black, not physically accurate. */
+export function createAmbientLight() {
+  return new THREE.AmbientLight(0x404050, 0.6);
+}
+
 export function createCamera() {
   const camera = new THREE.PerspectiveCamera(
     60,

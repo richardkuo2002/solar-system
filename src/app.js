@@ -1,19 +1,23 @@
-// Entry point. Step 4: camera-modes state machine + camera-rig replace the
-// hardcoded top-down camera; adds free-flight. Heliocentric top-down and
-// free-flight are the 2 of 4 modes implemented so far — surface/geocentric
-// buttons exist but stay disabled until steps 6/8.
+// Entry point. Step 5: real textures (solarsystemscope.com) replace flat
+// colors where available, Sun gets a PointLight + ambient fill light, and
+// the 5 v1 moons render orbiting their parent planet via a THREE.Group per
+// planet (so a moon inherits its parent's world position for free).
 import * as THREE from 'three';
-import { createRenderer, createScene, createCamera, wireResize } from './render/scene-setup.js';
-import { buildPlanetMesh, buildOrbitPath, toScenePosition } from './render/bodies.js';
+import { createRenderer, createScene, createCamera, createAmbientLight, wireResize } from './render/scene-setup.js';
+import {
+  buildPlanetMesh, buildOrbitPath, buildSun, buildMoonMesh, toScenePosition,
+} from './render/bodies.js';
 import { createTimeControlsUI, createViewModeUI } from './render/ui-controls.js';
 import { createCameraRig } from './render/camera-rig.js';
 import {
   createTimeController, tick, togglePlayPause, setSpeed, reverse, jumpToDate,
 } from './core/time-controller.js';
 import { createCameraState, setMode, computePose, CAMERA_MODES } from './core/camera-modes.js';
-import { elementsAtDate, julianDateFromDate } from './core/orbital-elements.js';
+import { elementsAtDate, julianDateFromDate, moonLocalPosition } from './core/orbital-elements.js';
 import { elementsToPosition } from './core/kepler.js';
-import { PLANETS, PLANET_ORDER } from './data/planets.js';
+import { compressSize } from './core/scale.js';
+import { PLANETS, PLANET_ORDER, SUN } from './data/planets.js';
+import { MOONS, MOON_ORDER } from './data/moons.js';
 
 const canvas = document.getElementById('scene');
 const renderer = createRenderer(canvas);
@@ -21,38 +25,55 @@ const scene = createScene();
 const camera = createCamera();
 wireResize(camera, renderer);
 
-const sunMesh = new THREE.Mesh(
-  new THREE.SphereGeometry(2, 32, 32),
-  new THREE.MeshBasicMaterial({ color: 0xffdd88 })
-);
+scene.add(createAmbientLight());
+
+const { mesh: sunMesh, light: sunLight } = buildSun(SUN);
 scene.add(sunMesh);
+scene.add(sunLight);
 
 const startJD = julianDateFromDate(new Date());
-const planetMeshes = {};
+
+const planetGroups = {};
+const moonMeshesByParent = {}; // parentKey -> [{ key, mesh, moonData }]
 for (const key of PLANET_ORDER) {
   const planetData = PLANETS[key];
   const orbitLine = buildOrbitPath(planetData.elements, startJD);
   scene.add(orbitLine);
 
+  const group = new THREE.Group();
   const mesh = buildPlanetMesh(planetData);
-  scene.add(mesh);
-  planetMeshes[key] = mesh;
+  group.add(mesh);
+  scene.add(group);
+  planetGroups[key] = group;
+  moonMeshesByParent[key] = [];
 }
 
-// Scene-space positions of every body this frame, keyed by bodyKey — this is
-// the `bodyPositions` map camera-modes.js#computePose expects. Kept in sync
-// by updatePlanetPositions() below.
+for (const moonKey of MOON_ORDER) {
+  const moonData = MOONS[moonKey];
+  const mesh = buildMoonMesh(moonData);
+  planetGroups[moonData.parent].add(mesh);
+  moonMeshesByParent[moonData.parent].push({ key: moonKey, mesh, moonData });
+}
+
+// Scene-space positions of every body this frame (planets + Sun), keyed by
+// bodyKey — the `bodyPositions` map camera-modes.js#computePose expects.
 const scenePositions = { sun: { x: 0, y: 0, z: 0 } };
 
-function updatePlanetPositions(currentDate) {
+function updateBodyPositions(currentDate) {
   const currentJD = julianDateFromDate(currentDate);
   for (const key of PLANET_ORDER) {
     const planetData = PLANETS[key];
     const els = elementsAtDate(planetData.elements, currentJD);
     const auPos = elementsToPosition(els);
     const scenePos = toScenePosition(auPos);
-    planetMeshes[key].position.set(scenePos.x, scenePos.y, scenePos.z);
+    planetGroups[key].position.set(scenePos.x, scenePos.y, scenePos.z);
     scenePositions[key] = scenePos;
+
+    const parentSceneRadius = compressSize(planetData.radiusKm);
+    for (const { mesh, moonData } of moonMeshesByParent[key]) {
+      const localPos = moonLocalPosition(moonData, planetData.radiusKm, parentSceneRadius, currentJD, startJD);
+      mesh.position.set(localPos.x, localPos.y, localPos.z);
+    }
   }
 }
 
@@ -72,7 +93,7 @@ const timeUI = createTimeControlsUI(document.getElementById('ui-root'), {
   },
   onJumpToDate(date) {
     timeState = jumpToDate(timeState, date);
-    updatePlanetPositions(timeState.currentDate);
+    updateBodyPositions(timeState.currentDate);
     timeUI.setCurrentDateDisplay(timeState.currentDate);
   },
 });
@@ -95,7 +116,7 @@ const viewModeUI = createViewModeUI(
 );
 viewModeUI.setActiveMode(cameraState.mode);
 
-updatePlanetPositions(timeState.currentDate);
+updateBodyPositions(timeState.currentDate);
 cameraRig.applyPose(computePose(cameraState, scenePositions));
 
 const clock = new THREE.Clock();
@@ -105,7 +126,7 @@ function animate() {
   const delta = clock.getDelta();
 
   timeState = tick(timeState, delta);
-  updatePlanetPositions(timeState.currentDate);
+  updateBodyPositions(timeState.currentDate);
   timeUI.setCurrentDateDisplay(timeState.currentDate);
 
   if (cameraState.mode === CAMERA_MODES.FREE_FLIGHT) {

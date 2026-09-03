@@ -22,6 +22,24 @@ export function compressSize(radiusKm) {
   return SIZE_BASE_SCALE * Math.pow(radiusKm / EARTH_RADIUS_KM, SIZE_POWER);
 }
 
+export const MOON_GAP_SCALE = 0.068;
+export const MOON_GAP_POWER = 0.4;
+
+/**
+ * Compress a moon's orbit radius into scene units, relative to its parent
+ * planet — NOT the same curve as compressDistance, which is tuned for
+ * heliocentric AU-scale distances (0.4-30 AU) and would collapse moon-scale
+ * orbits (hundreds of thousands of km) to well inside the parent planet's
+ * rendered radius. Uses the orbit-radius-in-parent-radii ratio (a
+ * physically meaningful, scale-invariant number — the Moon orbits at ~60
+ * Earth radii, Io at ~6 Jupiter radii) and always adds on top of the
+ * parent's own scene radius, so a moon can never render inside its parent.
+ */
+export function compressMoonOrbit(orbitKm, parentRadiusKm, parentSceneRadius) {
+  const radiiRatio = orbitKm / parentRadiusKm;
+  return parentSceneRadius + MOON_GAP_SCALE * Math.pow(radiiRatio, MOON_GAP_POWER);
+}
+
 /**
  * Compress a heliocentric position (AU, plain {x,y,z}) into scene units,
  * preserving direction — compresses the *radial distance* via

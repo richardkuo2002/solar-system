@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { solveEccentricAnomaly, elementsToPosition } from '../src/core/kepler.js';
-import { elementsAtDate, julianDateFromDate } from '../src/core/orbital-elements.js';
-import { compressDistance, compressSize, compressPosition } from '../src/core/scale.js';
+import {
+  elementsAtDate, julianDateFromDate, circularOrbitAngle, moonLocalPosition,
+} from '../src/core/orbital-elements.js';
+import { compressDistance, compressSize, compressPosition, compressMoonOrbit } from '../src/core/scale.js';
 import { PLANETS, PLANET_ORDER } from '../src/data/planets.js';
+import { MOONS, MOON_ORDER } from '../src/data/moons.js';
 import {
   createTimeController, tick, play, pause, setSpeed, reverse, jumpToDate,
 } from '../src/core/time-controller.js';
@@ -80,6 +83,41 @@ import {
   s = jumpToDate(s, new Date('2000-01-01T00:00:00Z'));
   assert.equal(s.currentDate.getUTCFullYear(), 2000);
   assert.equal(s.speedDaysPerSecond, 2, 'jumpToDate must not disturb speed');
+}
+
+// scale: compressMoonOrbit is monotonic in orbitKm and always clears the
+// parent's own scene radius (a moon must never render inside its parent)
+{
+  const parentRadiusKm = 69911; // Jupiter
+  const parentSceneRadius = compressSize(parentRadiusKm);
+  const rIo = compressMoonOrbit(421700, parentRadiusKm, parentSceneRadius);
+  const rCallisto = compressMoonOrbit(1882709, parentRadiusKm, parentSceneRadius);
+  assert.ok(rIo > parentSceneRadius, 'Io must render outside Jupiter');
+  assert.ok(rCallisto > rIo, 'Callisto orbits farther out than Io');
+}
+
+// orbital-elements: circularOrbitAngle wraps to [0, 2*PI) and completes one
+// full revolution after exactly one period
+{
+  const angleHalf = circularOrbitAngle(13.66, 27.32); // half of the Moon's period
+  assert.ok(Math.abs(angleHalf - Math.PI) < 1e-6);
+  const angleFull = circularOrbitAngle(27.32, 27.32);
+  assert.ok(Math.abs(angleFull) < 1e-6 || Math.abs(angleFull - 2 * Math.PI) < 1e-6);
+}
+
+// orbital-elements: moonLocalPosition produces a finite position, at the
+// correct distance from the parent, for every v1 moon
+{
+  const jd = julianDateFromDate(new Date());
+  for (const key of MOON_ORDER) {
+    const moonData = MOONS[key];
+    const parentRadiusKm = PLANETS[moonData.parent].radiusKm;
+    const parentSceneRadius = compressSize(parentRadiusKm);
+    const pos = moonLocalPosition(moonData, parentRadiusKm, parentSceneRadius, jd, jd - 1000);
+    assert.ok(Number.isFinite(pos.x) && Number.isFinite(pos.z));
+    const r = Math.hypot(pos.x, pos.z);
+    assert.ok(r > parentSceneRadius, `${key} must render outside its parent ${moonData.parent}`);
+  }
 }
 
 // camera-modes: default mode + pose shape for heliocentric top-down

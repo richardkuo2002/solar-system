@@ -126,3 +126,10 @@ export const PLANETS = {
 export const PLANET_ORDER = [
   'mercury', 'venus', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune',
 ];
+
+export const SUN = {
+  name: 'Sun',
+  radiusKm: 696000,
+  color: 0xffdd88,
+  textureKey: 'sun',
+};
