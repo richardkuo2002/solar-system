@@ -37,6 +37,7 @@ export const PLANETS = {
     radiusKm: 6051.8,
     color: 0xe8cda2,
     textureKey: 'venus',
+    atmosphereTextureKey: 'venusAtmosphere', // translucent shell over the surface map — see render/bodies.js#buildAtmosphereShell
     rotationPeriodDays: -243.025,
     axialTiltDeg: 2.64,
     elements: {
@@ -53,6 +54,8 @@ export const PLANETS = {
     radiusKm: 6371.0,
     color: 0x2a6ebb,
     textureKey: 'earth',
+    nightTextureKey: 'earthNight', // city-lights emissive map — see render/bodies.js#buildBodyMesh
+    cloudsTextureKey: 'earthClouds', // translucent shell over the day map — see render/bodies.js#buildAtmosphereShell
     rotationPeriodDays: 0.99727,
     axialTiltDeg: 23.44,
     elements: {

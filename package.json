@@ -5,9 +5,13 @@
   "type": "module",
   "scripts": {
     "smoke": "node scripts/smoke-test.js",
-    "test": "npm run smoke"
+    "test": "npm run smoke",
+    "fetch-textures": "node scripts/fetch-textures.mjs"
   },
   "keywords": ["threejs", "solar-system", "simulation", "astronomy"],
   "author": "Richard Kuo",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "sharp": "^0.35.4"
+  }
 }

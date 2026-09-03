@@ -3,7 +3,12 @@
 // only (not every frame) — cheap enough that no throttling is needed.
 import * as THREE from 'three';
 
-export function createHoverLabels(canvas, camera, pickables) {
+/**
+ * @param {(mesh: THREE.Object3D) => void} [onHover] — fired once per newly
+ * hovered body (not every mousemove tick) — app.js uses this to trigger
+ * that body's full-resolution texture load (see render/texture-loader.js).
+ */
+export function createHoverLabels(canvas, camera, pickables, onHover) {
   const el = document.createElement('div');
   el.className = 'hover-label';
   el.hidden = true;
@@ -11,6 +16,7 @@ export function createHoverLabels(canvas, camera, pickables) {
 
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
+  let lastHovered = null;
 
   canvas.addEventListener('mousemove', (event) => {
     const rect = canvas.getBoundingClientRect();
@@ -23,8 +29,13 @@ export function createHoverLabels(canvas, camera, pickables) {
       el.style.left = `${event.clientX + 14}px`;
       el.style.top = `${event.clientY + 14}px`;
       el.hidden = false;
+      if (hit.object !== lastHovered) {
+        lastHovered = hit.object;
+        onHover?.(hit.object);
+      }
     } else {
       el.hidden = true;
+      lastHovered = null;
     }
   });
 

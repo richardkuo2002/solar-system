@@ -19,6 +19,7 @@ export const COMETS = {
     name: 'Halley',
     radiusKm: 8980, // exaggerated for visibility — see file comment
     color: 0xcfd6dd,
+    proceduralPalette: 'comet', // comets don't have a standard photographic surface map — see ATTRIBUTION.md
     elements: {
       a: [17.834, 0],
       e: [0.96658, 0],

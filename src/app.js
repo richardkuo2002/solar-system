@@ -5,10 +5,12 @@
 import * as THREE from 'three';
 import { createRenderer, createScene, createCamera, createAmbientLight, wireResize, applyStarfield } from './render/scene-setup.js';
 import {
-  buildPlanetMesh, buildOrbitPath, buildSun, buildMoonMesh, buildSaturnRing, toScenePosition,
+  buildPlanetMesh, buildOrbitPath, buildSun, buildMoonMesh, buildSaturnRing, buildAtmosphereShell, toScenePosition,
 } from './render/bodies.js';
+import { initTextureLoader } from './render/texture-loader.js';
 import { createTimeControlsUI, createViewModeUI, createSurfaceControlsUI } from './render/ui-controls.js';
 import { createHoverLabels } from './render/hover-labels.js';
+import { createAttributionFooter } from './render/attribution-footer.js';
 import { createCameraRig } from './render/camera-rig.js';
 import { buildAsteroidBelt } from './render/asteroid-belt.js';
 import {
@@ -22,7 +24,7 @@ import { getPositionSync } from './core/ephemeris.js';
 import { PLANETS, PLANET_ORDER, SUN } from './data/planets.js';
 import { MOONS, MOON_ORDER } from './data/moons.js';
 import { COMETS, COMET_ORDER } from './data/comets.js';
-import { DWARF_PLANETS, DWARF_PLANET_ORDER } from './data/dwarf-planets.js';
+import { DWARF_PLANETS, DWARF_PLANET_ORDER, CHARON } from './data/dwarf-planets.js';
 
 const canvas = document.getElementById('scene');
 const renderer = createRenderer(canvas);
@@ -33,12 +35,32 @@ applyStarfield(scene);
 
 scene.add(createAmbientLight());
 
-const { mesh: sunMesh, light: sunLight } = buildSun(SUN);
+// Top-level await is fine here — this is a plain ES module entry point, no
+// bundler/build step to worry about. The texture loader needs the manifest
+// (which files are real vs. procedural-only) before any mesh is built.
+const textureLoader = await initTextureLoader(renderer);
+
+// mesh -> [{ textureKey, material, property }] — a single registry driving
+// every lazy-load trigger (hover, surface-mode pick, geocentric focus, the
+// idle background queue) so each of those call sites just does
+// `loadFullFor(someMesh)` instead of repeating per-body texture bookkeeping.
+const lazyBodies = new Map();
+function registerLazy(mesh, entries) {
+  lazyBodies.set(mesh, entries);
+}
+function loadFullFor(mesh) {
+  for (const { textureKey, material, property } of lazyBodies.get(mesh) ?? []) {
+    textureLoader.ensureFull(textureKey, material, { property });
+  }
+}
+
+const { mesh: sunMesh, light: sunLight } = buildSun(SUN, textureLoader);
 const sunTiltGroup = new THREE.Group();
 sunTiltGroup.rotation.z = THREE.MathUtils.degToRad(SUN.axialTiltDeg);
 sunTiltGroup.add(sunMesh);
 scene.add(sunTiltGroup);
 scene.add(sunLight);
+textureLoader.ensureFull(SUN.textureKey, sunMesh.material); // Sun always loads full-res immediately
 
 const startJD = julianDateFromDate(new Date());
 
@@ -55,13 +77,35 @@ for (const key of PLANET_ORDER) {
   // Static axial tilt, applied once — the planet spins (rotation.y, every
   // frame) as a *child* of this tilted group, so its spin axis stays fixed
   // and tilted instead of wobbling every frame if tilt and spin were both
-  // set directly on the same object. Saturn's ring shares the tilt (it's
-  // the planet's equatorial plane) but not the spin.
+  // set directly on the same object. Saturn's ring and Earth/Venus's
+  // cloud/atmosphere shells share the tilt (same equatorial plane) but not
+  // the spin.
   const tiltGroup = new THREE.Group();
   tiltGroup.rotation.z = THREE.MathUtils.degToRad(planetData.axialTiltDeg);
-  const mesh = buildPlanetMesh(planetData);
+  const mesh = buildPlanetMesh(planetData, textureLoader);
   tiltGroup.add(mesh);
-  if (key === 'saturn') tiltGroup.add(buildSaturnRing(planetData));
+
+  const lazyEntries = [{ textureKey: planetData.textureKey, material: mesh.material, property: 'map' }];
+  if (planetData.nightTextureKey) {
+    lazyEntries.push({ textureKey: planetData.nightTextureKey, material: mesh.material, property: 'emissiveMap' });
+  }
+  if (planetData.cloudsTextureKey) {
+    const cloudsMesh = buildAtmosphereShell(planetData, planetData.cloudsTextureKey, textureLoader, { opacity: 0.5 });
+    tiltGroup.add(cloudsMesh);
+    lazyEntries.push({ textureKey: planetData.cloudsTextureKey, material: cloudsMesh.material, property: 'alphaMap' });
+  }
+  if (planetData.atmosphereTextureKey) {
+    const atmosphereMesh = buildAtmosphereShell(planetData, planetData.atmosphereTextureKey, textureLoader, { opacity: 0.45 });
+    tiltGroup.add(atmosphereMesh);
+    lazyEntries.push({ textureKey: planetData.atmosphereTextureKey, material: atmosphereMesh.material, property: 'alphaMap' });
+  }
+  if (key === 'saturn') {
+    const ring = buildSaturnRing(planetData, textureLoader);
+    tiltGroup.add(ring);
+    lazyEntries.push({ textureKey: 'saturnRing', material: ring.material, property: 'map' });
+  }
+  registerLazy(mesh, lazyEntries);
+
   group.add(tiltGroup);
   scene.add(group);
   planetGroups[key] = group;
@@ -69,14 +113,17 @@ for (const key of PLANET_ORDER) {
   moonMeshesByParent[key] = [];
   pickableMeshes.push(mesh);
 }
+loadFullFor(planetMeshes.earth); // Earth always loads full-res immediately (map + night lights + clouds)
 
 for (const moonKey of MOON_ORDER) {
   const moonData = MOONS[moonKey];
-  const mesh = buildMoonMesh(moonData);
+  const mesh = buildMoonMesh(moonData, textureLoader);
   planetGroups[moonData.parent].add(mesh);
   moonMeshesByParent[moonData.parent].push({ key: moonKey, mesh, moonData });
   pickableMeshes.push(mesh);
+  registerLazy(mesh, [{ textureKey: moonData.textureKey, material: mesh.material, property: 'map' }]);
 }
+loadFullFor(moonMeshesByParent.earth[0].mesh); // the Moon always loads full-res immediately
 
 // Comets — same [value,rate] element shape as planets, so this reuses
 // buildOrbitPath/buildPlanetMesh unchanged (see data/comets.js).
@@ -87,30 +134,59 @@ for (const key of COMET_ORDER) {
   // so the default 256 undersamples the tight turn at perihelion.
   const orbitLine = buildOrbitPath(cometData.elements, startJD, 512, 0x88aacc);
   scene.add(orbitLine);
-  const mesh = buildPlanetMesh(cometData);
+  const mesh = buildPlanetMesh(cometData, textureLoader);
   scene.add(mesh);
   cometMeshes[key] = mesh;
   pickableMeshes.push(mesh);
+  registerLazy(mesh, [{ textureKey: cometData.textureKey, material: mesh.material, property: 'map' }]);
 }
 
 // Dwarf planets — same element shape as planets, reusing buildOrbitPath/
 // buildPlanetMesh unchanged. Distinct orbit-line color: the point of adding
 // Pluto is to make its ~17° inclination visually pop against the major
-// planets' near-coplanar orbits.
+// planets' near-coplanar orbits. Each gets a THREE.Group wrapper (planets
+// already have one; Pluto didn't) so Charon — Pluto's moon, not a generic
+// "any dwarf planet can have moons" system — can be added as its child.
+const dwarfPlanetGroups = {};
 const dwarfPlanetMeshes = {};
 for (const key of DWARF_PLANET_ORDER) {
   const dwarfData = DWARF_PLANETS[key];
   const orbitLine = buildOrbitPath(dwarfData.elements, startJD, 256, 0x996644);
   scene.add(orbitLine);
-  const mesh = buildPlanetMesh(dwarfData);
-  scene.add(mesh);
+  const group = new THREE.Group();
+  const mesh = buildPlanetMesh(dwarfData, textureLoader);
+  group.add(mesh);
+  scene.add(group);
+  dwarfPlanetGroups[key] = group;
   dwarfPlanetMeshes[key] = mesh;
   pickableMeshes.push(mesh);
+  registerLazy(mesh, [{ textureKey: dwarfData.textureKey, material: mesh.material, property: 'map' }]);
 }
+const charonMesh = buildMoonMesh(CHARON, textureLoader);
+dwarfPlanetGroups.pluto.add(charonMesh);
+pickableMeshes.push(charonMesh);
+registerLazy(charonMesh, [{ textureKey: CHARON.textureKey, material: charonMesh.material, property: 'map' }]);
 
 scene.add(buildAsteroidBelt());
 
-createHoverLabels(canvas, camera, pickableMeshes);
+createHoverLabels(canvas, camera, pickableMeshes, loadFullFor);
+createAttributionFooter(document.getElementById('ui-root'));
+
+// Background idle queue — everything not already eager-loaded (Sun/Earth/
+// Moon) or triggered by user interaction eventually loads full-res anyway,
+// one body per idle tick, so a patient viewer isn't stuck at preview
+// quality forever even if they never hover/select a given body.
+{
+  const remaining = pickableMeshes.filter((mesh) => mesh !== sunMesh && mesh !== planetMeshes.earth && mesh !== moonMeshesByParent.earth[0].mesh);
+  const idle = typeof requestIdleCallback === 'function' ? requestIdleCallback : (fn) => setTimeout(fn, 200);
+  function stepIdleLoad() {
+    const mesh = remaining.shift();
+    if (!mesh) return;
+    loadFullFor(mesh);
+    idle(stepIdleLoad);
+  }
+  idle(stepIdleLoad);
+}
 
 // Scene-space positions of every body this frame (planets + Sun), keyed by
 // bodyKey — the `bodyPositions` map camera-modes.js#computePose expects.
@@ -154,15 +230,19 @@ function updateCometPositions(currentDate) {
   }
 }
 
-/** Dwarf planets, same treatment as comets — local Kepler math, no Horizons lookup. */
+/** Dwarf planets, same treatment as comets — local Kepler math, no Horizons lookup. Charon orbits Pluto locally, same helper moons use. */
 function updateDwarfPlanetPositions(currentDate) {
   const currentJD = julianDateFromDate(currentDate);
   for (const key of DWARF_PLANET_ORDER) {
     const els = elementsAtDate(DWARF_PLANETS[key].elements, currentJD);
     const scenePos = toScenePosition(elementsToPosition(els));
-    dwarfPlanetMeshes[key].position.set(scenePos.x, scenePos.y, scenePos.z);
+    dwarfPlanetGroups[key].position.set(scenePos.x, scenePos.y, scenePos.z);
     scenePositions[key] = scenePos;
   }
+  const plutoData = DWARF_PLANETS.pluto;
+  const plutoSceneRadius = compressSize(plutoData.radiusKm);
+  const charonLocalPos = moonLocalPosition(CHARON, plutoData.radiusKm, plutoSceneRadius, currentJD, startJD);
+  charonMesh.position.set(charonLocalPos.x, charonLocalPos.y, charonLocalPos.z);
 }
 
 let timeState = createTimeController({ startDate: new Date(), speedDaysPerSecond: 1 });
@@ -206,6 +286,7 @@ const viewModeUI = createViewModeUI(
     cameraRig.setMode(cameraState.mode);
     cameraRig.applyPose(computePose(cameraState, scenePositions));
     viewModeUI.setActiveMode(cameraState.mode);
+    if (mode === CAMERA_MODES.GEOCENTRIC) loadFullFor(planetMeshes.mars);
   },
   [CAMERA_MODES.HELIOCENTRIC_TOPDOWN, CAMERA_MODES.FREE_FLIGHT, CAMERA_MODES.SURFACE_FIRST_PERSON, CAMERA_MODES.GEOCENTRIC]
 );
@@ -216,6 +297,7 @@ createSurfaceControlsUI(document.getElementById('ui-root'), PLANET_ORDER, (plane
   cameraRig.setMode(cameraState.mode);
   cameraRig.applyPose(computePose(cameraState, scenePositions));
   viewModeUI.setActiveMode(cameraState.mode);
+  loadFullFor(planetMeshes[planet]);
 });
 
 updateBodyPositions(timeState.currentDate);
@@ -232,6 +314,7 @@ function animate() {
   timeState = tick(timeState, delta);
   updateBodyPositions(timeState.currentDate);
   updateCometPositions(timeState.currentDate);
+  updateDwarfPlanetPositions(timeState.currentDate);
   timeUI.setCurrentDateDisplay(timeState.currentDate);
 
   if (cameraState.mode === CAMERA_MODES.FREE_FLIGHT) {

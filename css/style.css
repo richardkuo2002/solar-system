@@ -104,6 +104,19 @@ html, body {
   width: 56px;
 }
 
+.attribution-footer {
+  pointer-events: auto;
+  position: fixed;
+  right: 8px;
+  bottom: 4px;
+  font: 11px system-ui, sans-serif;
+  color: #888;
+}
+
+.attribution-footer a {
+  color: #99b8d6;
+}
+
 .hover-label {
   position: fixed;
   pointer-events: none;

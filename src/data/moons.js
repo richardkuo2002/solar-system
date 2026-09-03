@@ -1,7 +1,15 @@
-// Moon + the 4 Galilean moons. Elements are simplified relative to the
-// parent planet (orbit radius + period, near-circular approximation) —
-// full Standish-grade precision isn't needed for v1 moons.
-// radiusKm/orbitKm/periodDays: NASA planetary fact sheets.
+// Moon + the 4 Galilean moons + Titan + Triton. Elements are simplified
+// relative to the parent planet (orbit radius + period, near-circular
+// approximation) — full Standish-grade precision isn't needed for v1 moons.
+// radiusKm/orbitKm/periodDays: NASA planetary fact sheets. Negative
+// periodDays = retrograde orbit (Triton) — same sign trick already used for
+// Venus/Uranus retrograde axial spin in planets.js, reusing
+// core/orbital-elements.js#circularOrbitAngle unchanged.
+//
+// textureKey: real texture if one exists in data/textures.js (see
+// ATTRIBUTION.md for sourcing); proceduralPalette: fallback used by
+// src/render/procedural-textures.js when there's no real file (Callisto —
+// see ATTRIBUTION.md for why).
 
 export const MOONS = {
   moon: {
@@ -27,8 +35,18 @@ export const MOONS = {
   callisto: {
     name: 'Callisto', parent: 'jupiter',
     radiusKm: 2410.3, orbitKm: 1882709, periodDays: 16.69,
-    textureKey: 'callisto', color: 0x6e6a5e,
+    proceduralPalette: 'callisto', color: 0x6e6a5e,
+  },
+  titan: {
+    name: 'Titan', parent: 'saturn',
+    radiusKm: 2574.7, orbitKm: 1221870, periodDays: 15.945,
+    textureKey: 'titan', color: 0xd9a85c,
+  },
+  triton: {
+    name: 'Triton', parent: 'neptune',
+    radiusKm: 1353.4, orbitKm: 354759, periodDays: -5.877, // retrograde
+    textureKey: 'triton', color: 0xcac8c5,
   },
 };
 
-export const MOON_ORDER = ['moon', 'io', 'europa', 'ganymede', 'callisto'];
+export const MOON_ORDER = ['moon', 'io', 'europa', 'ganymede', 'callisto', 'titan', 'triton'];

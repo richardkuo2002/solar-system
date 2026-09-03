@@ -7,7 +7,8 @@ import { compressDistance, compressSize, compressPosition, compressMoonOrbit } f
 import { PLANETS, PLANET_ORDER } from '../src/data/planets.js';
 import { MOONS, MOON_ORDER } from '../src/data/moons.js';
 import { COMETS, COMET_ORDER } from '../src/data/comets.js';
-import { DWARF_PLANETS, DWARF_PLANET_ORDER } from '../src/data/dwarf-planets.js';
+import { DWARF_PLANETS, DWARF_PLANET_ORDER, CHARON } from '../src/data/dwarf-planets.js';
+import { hasRealTextureFile } from '../src/core/texture-resolution.js';
 import { parseVectorsBlock, HorizonsUnavailableError } from '../src/core/horizons-client.js';
 import { getPositionSync, isHorizonsAvailable, resetCircuitBreaker } from '../src/core/ephemeris.js';
 import {
@@ -157,6 +158,29 @@ import {
     const r = Math.hypot(pos.x, pos.z);
     assert.ok(r > parentSceneRadius, `${key} must render outside its parent ${moonData.parent}`);
   }
+}
+
+// orbital-elements: Charon (Pluto's moon) produces a finite position
+// outside Pluto's own scene radius, same helper regular moons use
+{
+  const jd = julianDateFromDate(new Date());
+  const plutoData = DWARF_PLANETS.pluto;
+  const parentSceneRadius = compressSize(plutoData.radiusKm);
+  const pos = moonLocalPosition(CHARON, plutoData.radiusKm, parentSceneRadius, jd, jd - 1000);
+  assert.ok(Number.isFinite(pos.x) && Number.isFinite(pos.z));
+  assert.ok(Math.hypot(pos.x, pos.z) > parentSceneRadius, 'Charon must render outside Pluto');
+}
+
+// texture-resolution: hasRealTextureFile is a pure manifest lookup — true
+// only when the manifest has a truthy entry for the path's filename, false
+// for a missing path, an absent manifest entry, or a falsy one (a body
+// whose fetch failed and fell back to procedural)
+{
+  const manifest = { '2k_earth_daymap.jpg': { body: 'earth' }, 'callisto.jpg': false };
+  assert.equal(hasRealTextureFile(manifest, 'assets/textures/2k_earth_daymap.jpg'), true);
+  assert.equal(hasRealTextureFile(manifest, 'assets/textures/callisto.jpg'), false);
+  assert.equal(hasRealTextureFile(manifest, 'assets/textures/pluto.jpg'), false, 'no manifest entry at all');
+  assert.equal(hasRealTextureFile(manifest, undefined), false, 'no textureKey at all (procedural-only body)');
 }
 
 // camera-modes: default mode + pose shape for heliocentric top-down

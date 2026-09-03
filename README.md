@@ -12,9 +12,12 @@ retrograde motion).
 
 ## Features
 
-- **8 planets** (Mercury–Neptune) + **5 major moons** (the Moon, Io, Europa,
-  Ganymede, Callisto), positioned using real low-precision Keplerian orbital
-  elements (Standish 1992 / JPL SSD).
+- **8 planets** (Mercury–Neptune) + **Pluto** + **7 moons** (the Moon, Io,
+  Europa, Ganymede, Callisto, Titan, Triton) + **Charon** (Pluto's moon) +
+  **Halley's Comet** + a static asteroid belt, positioned using real
+  low-precision Keplerian orbital elements (Standish 1992 / JPL SSD).
+- Real axial rotation and axial tilt per planet (NASA planetary fact sheet
+  values), including Venus's/Uranus's real retrograde spin.
 - **Live position data** from [NASA JPL Horizons](https://ssd.jpl.nasa.gov/horizons/)
   when online, falling back silently to local Kepler-equation math when
   offline or the API is unavailable — the render loop never blocks on a
@@ -78,16 +81,29 @@ npm test
   element tables (Standish 1992), valid ~1800–2050 AD.
 - Live positions: [JPL Horizons API](https://ssd-api.jpl.nasa.gov/doc/horizons.html)
   (no API key required).
-- Textures: [solarsystemscope.com](https://www.solarsystemscope.com/textures/)
-  2k textures, CC BY 4.0. Self-hosted under `assets/textures/` rather than
-  hotlinked, since their CDN doesn't send CORS headers WebGL needs.
+- Textures: see [Assets](#assets) below.
 
 ## Status
 
 v1 — desktop packaging (Tauri/Electron) is a possible future phase, not part
-of this build. Saturn's rings and hover labels for bodies are known
-stretch goals, intentionally left out for now.
+of this build.
+
+## Assets
+
+Code is MIT licensed (see [License](#license) below), but the third-party
+planet/moon textures under `assets/textures/` keep their own original
+licenses — MIT doesn't relicense them. Full per-file breakdown, sources, and
+credits: **[ATTRIBUTION.md](ATTRIBUTION.md)**.
+
+Planetary textures based on [Solar System Scope](https://www.solarsystemscope.com/textures/)
+assets, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+Modified for web rendering where noted. Selected moon imagery (Io, Europa,
+Ganymede, Titan, Triton, Charon) from Steve Albers / NOAA Science On a
+Sphere, compiled from NASA source imagery. Textures are downloaded by
+`scripts/fetch-textures.mjs` (`npm run fetch-textures`), not committed by
+hand — re-run it any time to refresh them or pick up a body that had no
+working source URL yet (see the TODO list in `ATTRIBUTION.md`).
 
 ## License
 
-MIT
+MIT (code only — see [Assets](#assets) above)
