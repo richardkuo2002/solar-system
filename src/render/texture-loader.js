@@ -27,7 +27,10 @@ export async function initTextureLoader(renderer) {
   const lruOrder = []; // textureKey, most-recently-used at the end
 
   function configure(texture, { colorSpace }) {
-    if (colorSpace) texture.colorSpace = colorSpace;
+    // NoColorSpace is '' (falsy) — `if (colorSpace)` would silently skip
+    // it. Harmless today since three.js's own default is already
+    // NoColorSpace, but checking !== undefined makes the intent explicit.
+    if (colorSpace !== undefined) texture.colorSpace = colorSpace;
     texture.anisotropy = maxAnisotropy;
     return texture;
   }

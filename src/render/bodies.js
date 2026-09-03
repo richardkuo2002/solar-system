@@ -118,7 +118,11 @@ export function buildSaturnRing(planetData, textureLoader) {
   }
   const map = textureLoader.getInitial('Saturn Ring', 'saturnRing', {});
   const material = new THREE.MeshBasicMaterial({
-    map, transparent: true, side: THREE.DoubleSide, depthWrite: false,
+    // depthWrite off (a transparent ring shouldn't occlude what's behind
+    // it) + alphaTest (discard near-fully-transparent texels outright)
+    // together avoid the classic alpha-ring depth-sort edge artifact —
+    // depthWrite alone can still leave a faint dark seam at grazing angles.
+    map, transparent: true, side: THREE.DoubleSide, depthWrite: false, alphaTest: 0.1,
   });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.rotation.x = Math.PI / 2; // lie flat in the scene's XZ (equatorial) plane
