@@ -34,7 +34,10 @@ applyStarfield(scene);
 scene.add(createAmbientLight());
 
 const { mesh: sunMesh, light: sunLight } = buildSun(SUN);
-scene.add(sunMesh);
+const sunTiltGroup = new THREE.Group();
+sunTiltGroup.rotation.z = THREE.MathUtils.degToRad(SUN.axialTiltDeg);
+sunTiltGroup.add(sunMesh);
+scene.add(sunTiltGroup);
 scene.add(sunLight);
 
 const startJD = julianDateFromDate(new Date());
@@ -49,9 +52,17 @@ for (const key of PLANET_ORDER) {
   scene.add(orbitLine);
 
   const group = new THREE.Group();
+  // Static axial tilt, applied once — the planet spins (rotation.y, every
+  // frame) as a *child* of this tilted group, so its spin axis stays fixed
+  // and tilted instead of wobbling every frame if tilt and spin were both
+  // set directly on the same object. Saturn's ring shares the tilt (it's
+  // the planet's equatorial plane) but not the spin.
+  const tiltGroup = new THREE.Group();
+  tiltGroup.rotation.z = THREE.MathUtils.degToRad(planetData.axialTiltDeg);
   const mesh = buildPlanetMesh(planetData);
-  group.add(mesh);
-  if (key === 'saturn') group.add(buildSaturnRing(planetData));
+  tiltGroup.add(mesh);
+  if (key === 'saturn') tiltGroup.add(buildSaturnRing(planetData));
+  group.add(tiltGroup);
   scene.add(group);
   planetGroups[key] = group;
   planetMeshes[key] = mesh;
