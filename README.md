@@ -2,6 +2,8 @@
 
 [English](README.md) | [繁體中文](README.zh-TW.md)
 
+**Live demo: https://richardkuo2002.github.io/solar-system/**
+
 An interactive 3D solar system simulation, in the browser, with zero build
 step. Real orbital mechanics, real textures, and four different ways to
 look at the sky — top-down, free-flight, standing on a planet's surface, or
