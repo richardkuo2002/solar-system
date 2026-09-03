@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Keys & Secrets
+*.key
+*.pem
+*.id_rsa
+.env
+.env.local
+*credentials*.json
+
+# Logs
+logs/
+*.log
+.codegraph/

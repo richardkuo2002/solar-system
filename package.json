@@ -1,0 +1,13 @@
+{
+  "name": "solar-system",
+  "version": "0.1.0",
+  "description": "Interactive 3D solar system simulation (Three.js, browser-only, zero-build)",
+  "type": "module",
+  "scripts": {
+    "smoke": "node scripts/smoke-test.js",
+    "test": "npm run smoke"
+  },
+  "keywords": ["threejs", "solar-system", "simulation", "astronomy"],
+  "author": "Richard Kuo",
+  "license": "MIT"
+}
