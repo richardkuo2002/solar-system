@@ -51,3 +51,31 @@ html, body {
   margin-left: auto;
   font-variant-numeric: tabular-nums;
 }
+
+.view-mode-controls {
+  pointer-events: auto;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  gap: 6px;
+}
+
+.view-mode-controls button {
+  font: 13px system-ui, sans-serif;
+  padding: 6px 10px;
+  background: rgba(10, 10, 20, 0.75);
+  color: #eee;
+  border: 1px solid #444;
+  border-radius: 4px;
+}
+
+.view-mode-controls button:disabled {
+  color: #666;
+  cursor: not-allowed;
+}
+
+.view-mode-controls button.active {
+  border-color: #6cf;
+  color: #6cf;
+}

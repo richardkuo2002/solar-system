@@ -6,6 +6,9 @@ import { PLANETS, PLANET_ORDER } from '../src/data/planets.js';
 import {
   createTimeController, tick, play, pause, setSpeed, reverse, jumpToDate,
 } from '../src/core/time-controller.js';
+import {
+  createCameraState, setMode, setFocusBody, moveFreeFlight, computePose, CAMERA_MODES,
+} from '../src/core/camera-modes.js';
 
 // kepler: eccentric anomaly solver satisfies Kepler's equation
 {
@@ -77,6 +80,44 @@ import {
   s = jumpToDate(s, new Date('2000-01-01T00:00:00Z'));
   assert.equal(s.currentDate.getUTCFullYear(), 2000);
   assert.equal(s.speedDaysPerSecond, 2, 'jumpToDate must not disturb speed');
+}
+
+// camera-modes: default mode + pose shape for heliocentric top-down
+{
+  const state = createCameraState();
+  assert.equal(state.mode, CAMERA_MODES.HELIOCENTRIC_TOPDOWN);
+  const bodyPositions = { sun: { x: 0, y: 0, z: 0 }, earth: { x: 20, y: 0, z: 0 } };
+  const pose = computePose(state, bodyPositions);
+  assert.ok('position' in pose && 'target' in pose && 'up' in pose);
+  assert.deepEqual(pose.target, bodyPositions.sun);
+}
+
+// camera-modes: setFocusBody changes the top-down target
+{
+  let state = createCameraState();
+  state = setFocusBody(state, 'earth');
+  const bodyPositions = { sun: { x: 0, y: 0, z: 0 }, earth: { x: 20, y: 0, z: 0 } };
+  const pose = computePose(state, bodyPositions);
+  assert.deepEqual(pose.target, bodyPositions.earth);
+}
+
+// camera-modes: free-flight movement is pure and moves along facing direction
+{
+  let state = setMode(createCameraState(), CAMERA_MODES.FREE_FLIGHT);
+  const before = state.freeFlight.position;
+  state = moveFreeFlight(state, { forward: 5, strafe: 0, vertical: 0, dYaw: 0, dPitch: 0 });
+  const after = state.freeFlight.position;
+  assert.notDeepEqual(before, after, 'forward movement should change position');
+  const pose = computePose(state, {});
+  assert.deepEqual(pose.position, after);
+}
+
+// camera-modes: unimplemented modes fail loudly instead of returning a bogus pose
+{
+  const surfaceState = setMode(createCameraState(), CAMERA_MODES.SURFACE_FIRST_PERSON);
+  assert.throws(() => computePose(surfaceState, {}));
+  const geoState = setMode(createCameraState(), CAMERA_MODES.GEOCENTRIC);
+  assert.throws(() => computePose(geoState, {}));
 }
 
 console.log('PASS: smoke-test.js all assertions passed');

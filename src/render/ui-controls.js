@@ -63,3 +63,46 @@ export function createTimeControlsUI(container, callbacks) {
     },
   };
 }
+
+const VIEW_MODE_LABELS = [
+  { mode: 'heliocentric_topdown', label: 'Top-Down' },
+  { mode: 'surface_first_person', label: 'Surface' },
+  { mode: 'free_flight', label: 'Free Flight' },
+  { mode: 'geocentric', label: 'Geocentric' },
+];
+
+/**
+ * View-mode button group. `enabledModes` restricts which buttons are
+ * clickable — modes not yet implemented (per the build order) render as
+ * disabled rather than being wired to a pose that would throw.
+ *
+ * @param {HTMLElement} container
+ * @param {(mode: string) => void} onModeChange
+ * @param {string[]} enabledModes
+ */
+export function createViewModeUI(container, onModeChange, enabledModes) {
+  const panel = document.createElement('div');
+  panel.className = 'view-mode-controls';
+
+  const buttons = {};
+  for (const { mode, label } of VIEW_MODE_LABELS) {
+    const btn = document.createElement('button');
+    btn.textContent = label;
+    btn.disabled = !enabledModes.includes(mode);
+    btn.addEventListener('click', () => onModeChange(mode));
+    buttons[mode] = btn;
+    panel.appendChild(btn);
+  }
+  container.appendChild(panel);
+
+  return {
+    setActiveMode(mode) {
+      for (const [m, btn] of Object.entries(buttons)) {
+        btn.classList.toggle('active', m === mode);
+      }
+    },
+    setEnabled(mode, enabled) {
+      if (buttons[mode]) buttons[mode].disabled = !enabled;
+    },
+  };
+}
