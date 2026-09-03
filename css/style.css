@@ -79,3 +79,27 @@ html, body {
   border-color: #6cf;
   color: #6cf;
 }
+
+.surface-controls {
+  pointer-events: auto;
+  position: fixed;
+  top: 52px;
+  left: 12px;
+  display: flex;
+  gap: 6px;
+}
+
+.surface-controls select,
+.surface-controls input,
+.surface-controls button {
+  font: 13px system-ui, sans-serif;
+  padding: 6px 8px;
+  background: rgba(10, 10, 20, 0.75);
+  color: #eee;
+  border: 1px solid #444;
+  border-radius: 4px;
+}
+
+.surface-controls input {
+  width: 56px;
+}

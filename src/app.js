@@ -7,7 +7,7 @@ import { createRenderer, createScene, createCamera, createAmbientLight, wireResi
 import {
   buildPlanetMesh, buildOrbitPath, buildSun, buildMoonMesh, toScenePosition,
 } from './render/bodies.js';
-import { createTimeControlsUI, createViewModeUI } from './render/ui-controls.js';
+import { createTimeControlsUI, createViewModeUI, createSurfaceControlsUI } from './render/ui-controls.js';
 import { createCameraRig } from './render/camera-rig.js';
 import {
   createTimeController, tick, togglePlayPause, setSpeed, reverse, jumpToDate,
@@ -112,9 +112,16 @@ const viewModeUI = createViewModeUI(
     cameraRig.applyPose(computePose(cameraState, scenePositions));
     viewModeUI.setActiveMode(cameraState.mode);
   },
-  [CAMERA_MODES.HELIOCENTRIC_TOPDOWN, CAMERA_MODES.FREE_FLIGHT]
+  [CAMERA_MODES.HELIOCENTRIC_TOPDOWN, CAMERA_MODES.FREE_FLIGHT, CAMERA_MODES.SURFACE_FIRST_PERSON]
 );
 viewModeUI.setActiveMode(cameraState.mode);
+
+createSurfaceControlsUI(document.getElementById('ui-root'), PLANET_ORDER, (planet, lat, lon) => {
+  cameraState = setMode(cameraState, CAMERA_MODES.SURFACE_FIRST_PERSON, { planet, lat, lon });
+  cameraRig.setMode(cameraState.mode);
+  cameraRig.applyPose(computePose(cameraState, scenePositions));
+  viewModeUI.setActiveMode(cameraState.mode);
+});
 
 updateBodyPositions(timeState.currentDate);
 cameraRig.applyPose(computePose(cameraState, scenePositions));
@@ -134,6 +141,10 @@ function animate() {
     cameraRig.applyPose(computePose(cameraState, scenePositions));
   } else if (cameraState.mode === CAMERA_MODES.HELIOCENTRIC_TOPDOWN) {
     cameraRig.orbitControls.update();
+  } else if (cameraState.mode === CAMERA_MODES.SURFACE_FIRST_PERSON) {
+    // The planet under our feet keeps moving along its orbit — re-derive
+    // the pose every frame rather than once on mode entry.
+    cameraRig.applyPose(computePose(cameraState, scenePositions));
   }
 
   renderer.render(scene, camera);

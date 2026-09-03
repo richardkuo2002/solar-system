@@ -10,7 +10,8 @@ import {
   createTimeController, tick, play, pause, setSpeed, reverse, jumpToDate,
 } from '../src/core/time-controller.js';
 import {
-  createCameraState, setMode, setFocusBody, moveFreeFlight, computePose, CAMERA_MODES,
+  createCameraState, setMode, setFocusBody, setSurfaceLocation, setSurfacePlanet,
+  moveFreeFlight, computePose, CAMERA_MODES,
 } from '../src/core/camera-modes.js';
 
 // kepler: eccentric anomaly solver satisfies Kepler's equation
@@ -150,10 +151,44 @@ import {
   assert.deepEqual(pose.position, after);
 }
 
-// camera-modes: unimplemented modes fail loudly instead of returning a bogus pose
+// camera-modes: surface first-person places the camera on the sphere at the
+// planet's position + its scene radius, looking straight outward
 {
-  const surfaceState = setMode(createCameraState(), CAMERA_MODES.SURFACE_FIRST_PERSON);
-  assert.throws(() => computePose(surfaceState, {}));
+  let state = setMode(createCameraState(), CAMERA_MODES.SURFACE_FIRST_PERSON, { planet: 'earth' });
+  state = setSurfaceLocation(state, 0, 0); // equator, prime meridian
+  const bodyPositions = { earth: { x: 20, y: 0, z: 0 } };
+  const pose = computePose(state, bodyPositions);
+  const toCamera = {
+    x: pose.position.x - bodyPositions.earth.x,
+    y: pose.position.y - bodyPositions.earth.y,
+    z: pose.position.z - bodyPositions.earth.z,
+  };
+  const distFromCenter = Math.hypot(toCamera.x, toCamera.y, toCamera.z);
+  assert.ok(distFromCenter > 0, 'camera must sit above the planet center, not at it');
+  // target should be farther from the planet center than the camera itself
+  // (looking outward/up, not down at the surface)
+  const targetDist = Math.hypot(
+    pose.target.x - bodyPositions.earth.x,
+    pose.target.y - bodyPositions.earth.y,
+    pose.target.z - bodyPositions.earth.z
+  );
+  assert.ok(targetDist > distFromCenter, 'surface mode should look outward/up, not back at the planet');
+  // up must not be parallel to the view direction (degenerate lookAt)
+  const viewDir = { x: pose.target.x - pose.position.x, y: pose.target.y - pose.position.y, z: pose.target.z - pose.position.z };
+  const viewLen = Math.hypot(viewDir.x, viewDir.y, viewDir.z);
+  const upLen = Math.hypot(pose.up.x, pose.up.y, pose.up.z);
+  const cosAngle = (viewDir.x * pose.up.x + viewDir.y * pose.up.y + viewDir.z * pose.up.z) / (viewLen * upLen);
+  assert.ok(Math.abs(cosAngle) < 0.999, 'up vector must not be parallel to the view direction');
+}
+
+// camera-modes: setSurfacePlanet switches which body surface mode stands on
+{
+  let state = setSurfacePlanet(createCameraState(), 'mars');
+  assert.equal(state.surface.planet, 'mars');
+}
+
+// camera-modes: geocentric (not yet implemented) fails loudly instead of returning a bogus pose
+{
   const geoState = setMode(createCameraState(), CAMERA_MODES.GEOCENTRIC);
   assert.throws(() => computePose(geoState, {}));
 }

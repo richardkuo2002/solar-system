@@ -106,3 +106,49 @@ export function createViewModeUI(container, onModeChange, enabledModes) {
     },
   };
 }
+
+/**
+ * Planet + lat/lon picker for SURFACE_FIRST_PERSON mode. Always visible
+ * (not just while that mode is active) — clicking "Go" both picks the spot
+ * and switches into surface mode.
+ *
+ * @param {HTMLElement} container
+ * @param {string[]} planetKeys
+ * @param {(planet: string, lat: number, lon: number) => void} onGo
+ */
+export function createSurfaceControlsUI(container, planetKeys, onGo) {
+  const panel = document.createElement('div');
+  panel.className = 'surface-controls';
+
+  const planetSelect = document.createElement('select');
+  for (const key of planetKeys) {
+    const option = document.createElement('option');
+    option.value = key;
+    option.textContent = key[0].toUpperCase() + key.slice(1);
+    if (key === 'earth') option.selected = true;
+    planetSelect.appendChild(option);
+  }
+
+  const latInput = document.createElement('input');
+  latInput.type = 'number';
+  latInput.min = '-90';
+  latInput.max = '90';
+  latInput.value = '0';
+  latInput.title = 'Latitude';
+
+  const lonInput = document.createElement('input');
+  lonInput.type = 'number';
+  lonInput.min = '-180';
+  lonInput.max = '180';
+  lonInput.value = '0';
+  lonInput.title = 'Longitude';
+
+  const goBtn = document.createElement('button');
+  goBtn.textContent = 'Stand Here';
+  goBtn.addEventListener('click', () => {
+    onGo(planetSelect.value, parseFloat(latInput.value) || 0, parseFloat(lonInput.value) || 0);
+  });
+
+  panel.append(planetSelect, latInput, lonInput, goBtn);
+  container.appendChild(panel);
+}
