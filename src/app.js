@@ -1,7 +1,6 @@
-// Entry point. Step 5: real textures (solarsystemscope.com) replace flat
-// colors where available, Sun gets a PointLight + ambient fill light, and
-// the 5 v1 moons render orbiting their parent planet via a THREE.Group per
-// planet (so a moon inherits its parent's world position for free).
+// Entry point. Step 7: planet positions now go through core/ephemeris.js
+// (JPL Horizons primary, local Kepler fallback) instead of calling the
+// local math directly — see updateBodyPositions()/localPlanetPosition().
 import * as THREE from 'three';
 import { createRenderer, createScene, createCamera, createAmbientLight, wireResize } from './render/scene-setup.js';
 import {
@@ -16,6 +15,7 @@ import { createCameraState, setMode, computePose, CAMERA_MODES } from './core/ca
 import { elementsAtDate, julianDateFromDate, moonLocalPosition } from './core/orbital-elements.js';
 import { elementsToPosition } from './core/kepler.js';
 import { compressSize } from './core/scale.js';
+import { getPositionSync } from './core/ephemeris.js';
 import { PLANETS, PLANET_ORDER, SUN } from './data/planets.js';
 import { MOONS, MOON_ORDER } from './data/moons.js';
 
@@ -59,12 +59,17 @@ for (const moonKey of MOON_ORDER) {
 // bodyKey — the `bodyPositions` map camera-modes.js#computePose expects.
 const scenePositions = { sun: { x: 0, y: 0, z: 0 } };
 
+/** Local Kepler fallback — also what ephemeris.js uses when Horizons is unavailable. */
+function localPlanetPosition(bodyKey, jsDate) {
+  const els = elementsAtDate(PLANETS[bodyKey].elements, julianDateFromDate(jsDate));
+  return elementsToPosition(els);
+}
+
 function updateBodyPositions(currentDate) {
   const currentJD = julianDateFromDate(currentDate);
   for (const key of PLANET_ORDER) {
     const planetData = PLANETS[key];
-    const els = elementsAtDate(planetData.elements, currentJD);
-    const auPos = elementsToPosition(els);
+    const auPos = getPositionSync(key, currentDate, localPlanetPosition);
     const scenePos = toScenePosition(auPos);
     planetGroups[key].position.set(scenePos.x, scenePos.y, scenePos.z);
     scenePositions[key] = scenePos;

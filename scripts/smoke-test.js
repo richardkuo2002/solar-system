@@ -6,6 +6,8 @@ import {
 import { compressDistance, compressSize, compressPosition, compressMoonOrbit } from '../src/core/scale.js';
 import { PLANETS, PLANET_ORDER } from '../src/data/planets.js';
 import { MOONS, MOON_ORDER } from '../src/data/moons.js';
+import { parseVectorsBlock, HorizonsUnavailableError } from '../src/core/horizons-client.js';
+import { getPositionSync, isHorizonsAvailable, resetCircuitBreaker } from '../src/core/ephemeris.js';
 import {
   createTimeController, tick, play, pause, setSpeed, reverse, jumpToDate,
 } from '../src/core/time-controller.js';
@@ -191,6 +193,52 @@ import {
 {
   const geoState = setMode(createCameraState(), CAMERA_MODES.GEOCENTRIC);
   assert.throws(() => computePose(geoState, {}));
+}
+
+// horizons-client: parses a realistic $$SOE/$$EOE vector-table block,
+// correctly skipping the VX/VY/VZ velocity line (no live network call)
+{
+  const sample = [
+    '$$SOE',
+    '2461104.500000000 = A.D. 2026-Mar-01 00:00:00.0000 TDB ',
+    ' X = 3.050325123456789E-01 Y =-4.031234567890123E-01 Z =-3.123456789012345E-02',
+    ' VX= 1.987654321098765E-02 VY= 1.234567890123456E-02 VZ=-1.234567890123456E-03',
+    '$$EOE',
+  ].join('\n');
+  const pos = parseVectorsBlock(sample);
+  assert.ok(Math.abs(pos.x - 0.3050325123456789) < 1e-9);
+  assert.ok(Math.abs(pos.y - (-0.4031234567890123)) < 1e-9);
+  assert.ok(Math.abs(pos.z - (-0.03123456789012345)) < 1e-9);
+}
+
+// horizons-client: malformed/missing markers throw HorizonsUnavailableError, not a crash
+{
+  assert.throws(() => parseVectorsBlock('no markers here'), HorizonsUnavailableError);
+  assert.throws(() => parseVectorsBlock('$$SOE\nnothing useful\n$$EOE'), HorizonsUnavailableError);
+}
+
+// ephemeris: getPositionSync always returns synchronously (never awaits
+// Horizons in the caller), and falls back to source:'local' when the
+// (stubbed) fetch fails — the render loop must never crash or block on a
+// dead network. No live network calls: global.fetch is stubbed manually.
+{
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = () => Promise.reject(new Error('stubbed: network down'));
+  resetCircuitBreaker();
+
+  const jsDate = new Date('2026-06-15T00:00:00Z');
+  const local = (bodyKey) => ({ x: 1, y: 2, z: 3, __bodyKey: bodyKey });
+  const result = getPositionSync('earth', jsDate, local);
+  assert.equal(result.source, 'local');
+  assert.deepEqual({ x: result.x, y: result.y, z: result.z }, { x: 1, y: 2, z: 3 });
+
+  // let the background fetch attempt settle so the circuit breaker trips
+  // and so there's no unhandled-rejection warning when the process exits
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(isHorizonsAvailable(), false, 'a failed Horizons attempt should open the circuit breaker');
+
+  globalThis.fetch = originalFetch;
+  resetCircuitBreaker();
 }
 
 console.log('PASS: smoke-test.js all assertions passed');
