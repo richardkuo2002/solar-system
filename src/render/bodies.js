@@ -105,7 +105,7 @@ export function buildSaturnRing(planetData) {
  * mean anomalies at the *current* (not time-varying) osculating elements —
  * a display-only approximation of the orbit shape, doesn't itself move.
  */
-export function buildOrbitPath(baseElements, julianDate, segments = 256) {
+export function buildOrbitPath(baseElements, julianDate, segments = 256, color = 0x555566) {
   const els = elementsAtDate(baseElements, julianDate);
   const points = [];
   for (let s = 0; s <= segments; s++) {
@@ -116,7 +116,7 @@ export function buildOrbitPath(baseElements, julianDate, segments = 256) {
     points.push(new THREE.Vector3(scenePos.x, scenePos.z, scenePos.y));
   }
   const geometry = new THREE.BufferGeometry().setFromPoints(points);
-  const material = new THREE.LineBasicMaterial({ color: 0x555566 });
+  const material = new THREE.LineBasicMaterial({ color });
   return new THREE.LineLoop(geometry, material);
 }
 

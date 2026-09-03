@@ -10,6 +10,7 @@ import {
 import { createTimeControlsUI, createViewModeUI, createSurfaceControlsUI } from './render/ui-controls.js';
 import { createHoverLabels } from './render/hover-labels.js';
 import { createCameraRig } from './render/camera-rig.js';
+import { buildAsteroidBelt } from './render/asteroid-belt.js';
 import {
   createTimeController, tick, togglePlayPause, setSpeed, reverse, jumpToDate,
 } from './core/time-controller.js';
@@ -20,6 +21,7 @@ import { compressSize } from './core/scale.js';
 import { getPositionSync } from './core/ephemeris.js';
 import { PLANETS, PLANET_ORDER, SUN } from './data/planets.js';
 import { MOONS, MOON_ORDER } from './data/moons.js';
+import { COMETS, COMET_ORDER } from './data/comets.js';
 
 const canvas = document.getElementById('scene');
 const renderer = createRenderer(canvas);
@@ -62,6 +64,23 @@ for (const moonKey of MOON_ORDER) {
   pickableMeshes.push(mesh);
 }
 
+// Comets — same [value,rate] element shape as planets, so this reuses
+// buildOrbitPath/buildPlanetMesh unchanged (see data/comets.js).
+const cometMeshes = {};
+for (const key of COMET_ORDER) {
+  const cometData = COMETS[key];
+  // More segments than a planet orbit: much larger and far more eccentric,
+  // so the default 256 undersamples the tight turn at perihelion.
+  const orbitLine = buildOrbitPath(cometData.elements, startJD, 512, 0x88aacc);
+  scene.add(orbitLine);
+  const mesh = buildPlanetMesh(cometData);
+  scene.add(mesh);
+  cometMeshes[key] = mesh;
+  pickableMeshes.push(mesh);
+}
+
+scene.add(buildAsteroidBelt());
+
 createHoverLabels(canvas, camera, pickableMeshes);
 
 // Scene-space positions of every body this frame (planets + Sun), keyed by
@@ -91,6 +110,17 @@ function updateBodyPositions(currentDate) {
   }
 }
 
+/** Comets always use local Kepler math directly — no Horizons lookup (out of scope for v1). */
+function updateCometPositions(currentDate) {
+  const currentJD = julianDateFromDate(currentDate);
+  for (const key of COMET_ORDER) {
+    const els = elementsAtDate(COMETS[key].elements, currentJD);
+    const scenePos = toScenePosition(elementsToPosition(els));
+    cometMeshes[key].position.set(scenePos.x, scenePos.y, scenePos.z);
+    scenePositions[key] = scenePos;
+  }
+}
+
 let timeState = createTimeController({ startDate: new Date(), speedDaysPerSecond: 1 });
 timeState.playing = true; // starts running so the "faster inner planets" effect is visible immediately
 
@@ -108,6 +138,7 @@ const timeUI = createTimeControlsUI(document.getElementById('ui-root'), {
   onJumpToDate(date) {
     timeState = jumpToDate(timeState, date);
     updateBodyPositions(timeState.currentDate);
+    updateCometPositions(timeState.currentDate);
     timeUI.setCurrentDateDisplay(timeState.currentDate);
   },
 });
@@ -143,6 +174,7 @@ createSurfaceControlsUI(document.getElementById('ui-root'), PLANET_ORDER, (plane
 });
 
 updateBodyPositions(timeState.currentDate);
+updateCometPositions(timeState.currentDate);
 cameraRig.applyPose(computePose(cameraState, scenePositions));
 
 const clock = new THREE.Clock();
@@ -153,6 +185,7 @@ function animate() {
 
   timeState = tick(timeState, delta);
   updateBodyPositions(timeState.currentDate);
+  updateCometPositions(timeState.currentDate);
   timeUI.setCurrentDateDisplay(timeState.currentDate);
 
   if (cameraState.mode === CAMERA_MODES.FREE_FLIGHT) {

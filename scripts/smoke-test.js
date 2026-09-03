@@ -6,6 +6,7 @@ import {
 import { compressDistance, compressSize, compressPosition, compressMoonOrbit } from '../src/core/scale.js';
 import { PLANETS, PLANET_ORDER } from '../src/data/planets.js';
 import { MOONS, MOON_ORDER } from '../src/data/moons.js';
+import { COMETS, COMET_ORDER } from '../src/data/comets.js';
 import { parseVectorsBlock, HorizonsUnavailableError } from '../src/core/horizons-client.js';
 import { getPositionSync, isHorizonsAvailable, resetCircuitBreaker } from '../src/core/ephemeris.js';
 import {
@@ -40,6 +41,25 @@ import {
       const pos = elementsToPosition(els);
       assert.ok(Number.isFinite(pos.x) && Number.isFinite(pos.y) && Number.isFinite(pos.z), `${key} produced a non-finite position`);
       assert.ok(Math.hypot(pos.x, pos.y, pos.z) > 0, `${key} collapsed to the origin`);
+    }
+  }
+}
+
+// orbital-elements: comets produce a finite, non-degenerate position too —
+// same code path as planets, just with a highly eccentric/inclined orbit,
+// so this is really testing that the shared math doesn't assume e<<1 or i<90°
+{
+  const dates = [julianDateFromDate(new Date('2000-01-01T12:00:00Z')), julianDateFromDate(new Date())];
+  for (const key of COMET_ORDER) {
+    for (const jd of dates) {
+      const els = elementsAtDate(COMETS[key].elements, jd);
+      const pos = elementsToPosition(els);
+      assert.ok(Number.isFinite(pos.x) && Number.isFinite(pos.y) && Number.isFinite(pos.z), `${key} produced a non-finite position`);
+      const r = Math.hypot(pos.x, pos.y, pos.z);
+      assert.ok(r > 0, `${key} collapsed to the origin`);
+      // perihelion/aphelion bounds: a(1-e) <= r <= a(1+e)
+      const { a, e } = COMETS[key].elements;
+      assert.ok(r >= a[0] * (1 - e[0]) - 1e-6 && r <= a[0] * (1 + e[0]) + 1e-6, `${key} distance outside its orbit's perihelion/aphelion bounds`);
     }
   }
 }
