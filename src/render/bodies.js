@@ -1,29 +1,34 @@
 // Builds planet/moon meshes, the Sun, and orbit-path lines from
-// src/data/planets.js / moons.js / textures.js.
+// src/data/planets.js / moons.js / textures.js. Texture loading itself goes
+// through render/texture-loader.js (preview-first, lazy full-res upgrade,
+// procedural fallback for bodies with no real file) — every exported
+// builder here takes the initialized loader as a parameter rather than
+// managing its own texture cache.
 import * as THREE from 'three';
 import { elementsAtDate } from '../core/orbital-elements.js';
 import { elementsToPosition } from '../core/kepler.js';
 import { compressPosition, compressSize, SUN_SIZE_CAP } from '../core/scale.js';
-import { TEXTURES } from '../data/textures.js';
 
-const textureLoader = new THREE.TextureLoader();
-const textureCache = new Map();
-
-function loadTexture(textureKey) {
-  const url = TEXTURES[textureKey];
-  if (!url) return null;
-  if (!textureCache.has(textureKey)) {
-    textureCache.set(textureKey, textureLoader.load(url));
-  }
-  return textureCache.get(textureKey);
-}
-
-/** Sphere mesh for a planet/moon: real texture if one exists for its textureKey, flat color otherwise. */
-function buildBodyMesh(bodyData, { unlit = false } = {}) {
+/**
+ * Sphere mesh for a planet/moon. `textureLoader.getInitial` always returns
+ * a usable Texture now (a real preview, or a procedural one) — `bodyData.
+ * color` is no longer applied as a material tint on top of it (it would
+ * double up with the procedural palette's own coloring, or wash out a real
+ * photo); it stays purely a fallback value for anything that reads
+ * `bodyData.color` directly outside rendering (there isn't one currently).
+ */
+function buildBodyMesh(bodyData, textureLoader, { unlit = false } = {}) {
   const radius = compressSize(bodyData.radiusKm);
   const geometry = new THREE.SphereGeometry(radius, 32, 32);
-  const map = loadTexture(bodyData.textureKey);
-  const materialOptions = map ? { map } : { color: bodyData.color };
+  const map = textureLoader.getInitial(bodyData.name, bodyData.textureKey, { proceduralPalette: bodyData.proceduralPalette });
+  const materialOptions = { map };
+
+  if (bodyData.nightTextureKey) {
+    materialOptions.emissiveMap = textureLoader.getInitial(bodyData.name, bodyData.nightTextureKey, { colorSpace: THREE.SRGBColorSpace });
+    materialOptions.emissive = new THREE.Color(0xffffff);
+    materialOptions.emissiveIntensity = 1.2;
+  }
+
   const material = unlit
     ? new THREE.MeshBasicMaterial(materialOptions)
     : new THREE.MeshStandardMaterial(materialOptions);
@@ -33,8 +38,8 @@ function buildBodyMesh(bodyData, { unlit = false } = {}) {
 }
 
 /** Sphere mesh for one planet, sized via scale.js. Position set per-frame by the caller. */
-export function buildPlanetMesh(planetData) {
-  return buildBodyMesh(planetData);
+export function buildPlanetMesh(planetData, textureLoader) {
+  return buildBodyMesh(planetData, textureLoader);
 }
 
 /**
@@ -43,12 +48,11 @@ export function buildPlanetMesh(planetData) {
  * than going through the same curve as planets: the Sun's true relative
  * size would dominate/obscure the whole scene even after compression.
  */
-export function buildSun(sunData) {
+export function buildSun(sunData, textureLoader) {
   const radius = Math.min(compressSize(sunData.radiusKm), SUN_SIZE_CAP);
   const geometry = new THREE.SphereGeometry(radius, 32, 32);
-  const map = loadTexture(sunData.textureKey);
-  const materialOptions = map ? { map } : { color: sunData.color };
-  const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial(materialOptions));
+  const map = textureLoader.getInitial(sunData.name, sunData.textureKey, {});
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ map }));
   mesh.name = sunData.name;
   const light = new THREE.PointLight(0xffffff, 3, 0, 0); // no distance-based falloff cutoff, kept simple for v1
   return { mesh, light };
@@ -60,8 +64,30 @@ export function buildSun(sunData) {
  * this mesh to the parent planet's THREE.Group, so it inherits the
  * parent's world position for free.
  */
-export function buildMoonMesh(moonData) {
-  return buildBodyMesh(moonData);
+export function buildMoonMesh(moonData, textureLoader) {
+  return buildBodyMesh(moonData, textureLoader);
+}
+
+/**
+ * Translucent shell (~1.01x the body's radius) for a cloud layer (Earth) or
+ * haze layer (Venus) over its surface map — a second sphere with an alpha
+ * map, not baked into the surface material, so it can be lazily upgraded
+ * independently. No independent rotation from the base mesh for v1 — it
+ * tilts/spins with whatever group its caller adds it into alongside the
+ * base mesh, skipped as a deliberate simplification (add a slower/opposite
+ * rotation.y increment on this mesh specifically if independent cloud drift
+ * is wanted later).
+ */
+export function buildAtmosphereShell(bodyData, textureKey, textureLoader, { opacity = 0.55 } = {}) {
+  const radius = compressSize(bodyData.radiusKm) * 1.01;
+  const geometry = new THREE.SphereGeometry(radius, 32, 32);
+  const alphaMap = textureLoader.getInitial(bodyData.name, textureKey, { colorSpace: THREE.NoColorSpace });
+  const material = new THREE.MeshStandardMaterial({
+    color: 0xffffff, alphaMap, transparent: true, depthWrite: false, opacity,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.name = `${bodyData.name} Atmosphere`;
+  return mesh;
 }
 
 // Real-world km, not scaled by compressSize's planet-radius curve tuning —
@@ -78,7 +104,7 @@ const SATURN_RING_OUTER_KM = 136800;
  * radial-gradient texture badly — remapped here so U runs outward from the
  * inner to the outer edge instead.
  */
-export function buildSaturnRing(planetData) {
+export function buildSaturnRing(planetData, textureLoader) {
   const innerRadius = compressSize(SATURN_RING_INNER_KM);
   const outerRadius = compressSize(SATURN_RING_OUTER_KM);
   const geometry = new THREE.RingGeometry(innerRadius, outerRadius, 64, 1);
@@ -90,7 +116,7 @@ export function buildSaturnRing(planetData) {
     const radialT = (v3.length() - innerRadius) / (outerRadius - innerRadius);
     uv.setXY(i, radialT, 1);
   }
-  const map = loadTexture('saturnRing');
+  const map = textureLoader.getInitial('Saturn Ring', 'saturnRing', {});
   const material = new THREE.MeshBasicMaterial({
     map, transparent: true, side: THREE.DoubleSide, depthWrite: false,
   });

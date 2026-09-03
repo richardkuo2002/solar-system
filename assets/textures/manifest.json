@@ -1,0 +1,212 @@
+{
+  "2k_sun.jpg": {
+    "body": "sun",
+    "role": "albedo",
+    "sourceUrl": "https://www.solarsystemscope.com/textures/download/2k_sun.jpg",
+    "source": "Solar System Scope",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "credit": "Solar System Scope (solarsystemscope.com)",
+    "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp."
+  },
+  "2k_mercury.jpg": {
+    "body": "mercury",
+    "role": "albedo",
+    "sourceUrl": "https://www.solarsystemscope.com/textures/download/2k_mercury.jpg",
+    "source": "Solar System Scope",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "credit": "Solar System Scope (solarsystemscope.com)",
+    "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp."
+  },
+  "2k_venus_surface.jpg": {
+    "body": "venus",
+    "role": "albedo",
+    "sourceUrl": "https://www.solarsystemscope.com/textures/download/2k_venus_surface.jpg",
+    "source": "Solar System Scope",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "credit": "Solar System Scope (solarsystemscope.com)",
+    "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp."
+  },
+  "2k_venus_atmosphere.jpg": {
+    "body": "venus",
+    "role": "atmosphere-alpha",
+    "sourceUrl": "https://www.solarsystemscope.com/textures/download/2k_venus_atmosphere.jpg",
+    "source": "Solar System Scope",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "credit": "Solar System Scope (solarsystemscope.com)",
+    "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp."
+  },
+  "2k_earth_daymap.jpg": {
+    "body": "earth",
+    "role": "albedo",
+    "sourceUrl": "https://www.solarsystemscope.com/textures/download/2k_earth_daymap.jpg",
+    "source": "Solar System Scope",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "credit": "Solar System Scope (solarsystemscope.com)",
+    "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp."
+  },
+  "2k_earth_nightmap.jpg": {
+    "body": "earth",
+    "role": "night-emissive",
+    "sourceUrl": "https://www.solarsystemscope.com/textures/download/2k_earth_nightmap.jpg",
+    "source": "Solar System Scope",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "credit": "Solar System Scope (solarsystemscope.com)",
+    "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp."
+  },
+  "2k_earth_clouds.jpg": {
+    "body": "earth",
+    "role": "clouds-alpha",
+    "sourceUrl": "https://www.solarsystemscope.com/textures/download/2k_earth_clouds.jpg",
+    "source": "Solar System Scope",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "credit": "Solar System Scope (solarsystemscope.com)",
+    "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp."
+  },
+  "2k_moon.jpg": {
+    "body": "moon",
+    "role": "albedo",
+    "sourceUrl": "https://www.solarsystemscope.com/textures/download/2k_moon.jpg",
+    "source": "Solar System Scope",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "credit": "Solar System Scope (solarsystemscope.com)",
+    "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp."
+  },
+  "2k_mars.jpg": {
+    "body": "mars",
+    "role": "albedo",
+    "sourceUrl": "https://www.solarsystemscope.com/textures/download/2k_mars.jpg",
+    "source": "Solar System Scope",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "credit": "Solar System Scope (solarsystemscope.com)",
+    "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp."
+  },
+  "2k_jupiter.jpg": {
+    "body": "jupiter",
+    "role": "albedo",
+    "sourceUrl": "https://www.solarsystemscope.com/textures/download/2k_jupiter.jpg",
+    "source": "Solar System Scope",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "credit": "Solar System Scope (solarsystemscope.com)",
+    "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp."
+  },
+  "2k_saturn.jpg": {
+    "body": "saturn",
+    "role": "albedo",
+    "sourceUrl": "https://www.solarsystemscope.com/textures/download/2k_saturn.jpg",
+    "source": "Solar System Scope",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "credit": "Solar System Scope (solarsystemscope.com)",
+    "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp."
+  },
+  "2k_saturn_ring_alpha.png": {
+    "body": "saturn",
+    "role": "ring-alpha",
+    "sourceUrl": "https://www.solarsystemscope.com/textures/download/2k_saturn_ring_alpha.png",
+    "source": "Solar System Scope",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "credit": "Solar System Scope (solarsystemscope.com)",
+    "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp."
+  },
+  "2k_uranus.jpg": {
+    "body": "uranus",
+    "role": "albedo",
+    "sourceUrl": "https://www.solarsystemscope.com/textures/download/2k_uranus.jpg",
+    "source": "Solar System Scope",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "credit": "Solar System Scope (solarsystemscope.com)",
+    "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp."
+  },
+  "2k_neptune.jpg": {
+    "body": "neptune",
+    "role": "albedo",
+    "sourceUrl": "https://www.solarsystemscope.com/textures/download/2k_neptune.jpg",
+    "source": "Solar System Scope",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "credit": "Solar System Scope (solarsystemscope.com)",
+    "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp."
+  },
+  "2k_stars_milky_way.jpg": {
+    "body": "starfield",
+    "role": "skybox",
+    "sourceUrl": "https://www.solarsystemscope.com/textures/download/2k_stars_milky_way.jpg",
+    "source": "Solar System Scope",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "credit": "Solar System Scope (solarsystemscope.com)",
+    "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp."
+  },
+  "io.jpg": {
+    "body": "io",
+    "role": "albedo",
+    "sourceUrl": "https://stevealbers.net/albers/sos/jupiter/io/io_rgb_cyl.jpg",
+    "source": "Steve Albers / NOAA Science On a Sphere",
+    "license": "Public domain (NOAA SOS dataset, compiled from NASA source imagery)",
+    "licenseUrl": "https://stevealbers.net/albers/sos/",
+    "credit": "Steve Albers / NOAA Science On a Sphere, compiled from NASA source imagery",
+    "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp."
+  },
+  "europa.png": {
+    "body": "europa",
+    "role": "albedo",
+    "sourceUrl": "https://stevealbers.net/albers/sos/jupiter/europa/europa_rgb_cyl_juno.png",
+    "source": "Steve Albers / NOAA Science On a Sphere",
+    "license": "Public domain (NOAA SOS dataset, compiled from NASA source imagery)",
+    "licenseUrl": "https://stevealbers.net/albers/sos/",
+    "credit": "Steve Albers / NOAA Science On a Sphere, compiled from NASA source imagery",
+    "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp."
+  },
+  "ganymede.jpg": {
+    "body": "ganymede",
+    "role": "albedo",
+    "sourceUrl": "https://stevealbers.net/albers/sos/jupiter/ganymede/ganymede_4k.jpg",
+    "source": "Steve Albers / NOAA Science On a Sphere",
+    "license": "Public domain (NOAA SOS dataset, compiled from NASA source imagery)",
+    "licenseUrl": "https://stevealbers.net/albers/sos/",
+    "credit": "Steve Albers / NOAA Science On a Sphere, compiled from NASA source imagery",
+    "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp."
+  },
+  "titan.jpg": {
+    "body": "titan",
+    "role": "albedo",
+    "sourceUrl": "https://stevealbers.net/albers/sos/saturn/titan/titan_rgb_cyl_www.jpg",
+    "source": "Steve Albers / NOAA Science On a Sphere",
+    "license": "Public domain (NOAA SOS dataset, compiled from NASA source imagery)",
+    "licenseUrl": "https://stevealbers.net/albers/sos/",
+    "credit": "Steve Albers / NOAA Science On a Sphere, compiled from NASA source imagery",
+    "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp."
+  },
+  "triton.jpg": {
+    "body": "triton",
+    "role": "albedo",
+    "sourceUrl": "https://stevealbers.net/albers/sos/neptune/triton/triton_rgb_cyl_www.jpg",
+    "source": "Steve Albers / NOAA Science On a Sphere",
+    "license": "Public domain (NOAA SOS dataset, compiled from NASA source imagery)",
+    "licenseUrl": "https://stevealbers.net/albers/sos/",
+    "credit": "Steve Albers / NOAA Science On a Sphere, compiled from NASA source imagery",
+    "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp."
+  },
+  "charon.jpg": {
+    "body": "charon",
+    "role": "albedo",
+    "sourceUrl": "https://stevealbers.net/albers/sos/pluto/charon/charon_rgb_cyl.jpg",
+    "source": "Steve Albers / NOAA Science On a Sphere",
+    "license": "Public domain (NOAA SOS dataset, compiled from NASA source imagery)",
+    "licenseUrl": "https://stevealbers.net/albers/sos/",
+    "credit": "Steve Albers / NOAA Science On a Sphere, compiled from NASA source imagery",
+    "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp."
+  }
+}

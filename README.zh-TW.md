@@ -8,7 +8,8 @@
 
 ## 功能
 
-- **8 大行星**（水星至海王星）+ **5 顆主要衛星**（月球、木衛一 Io、木衛二 Europa、木衛三 Ganymede、木衛四 Callisto),位置皆以真實的低精度克卜勒軌道要素計算(Standish 1992 / JPL SSD)。
+- **8 大行星**(水星至海王星)+ **冥王星** + **7 顆衛星**(月球、木衛一 Io、木衛二 Europa、木衛三 Ganymede、木衛四 Callisto、土衛六 Titan、海衛一 Triton)+ **冥衛一 Charon** + **哈雷彗星** + 靜態小行星帶,位置皆以真實的低精度克卜勒軌道要素計算(Standish 1992 / JPL SSD)。
+- 每顆行星都有真實的自轉與自轉傾角(NASA 行星資料表數值),包含金星、天王星真實的逆向自轉。
 - **即時位置資料**取自 [NASA JPL Horizons](https://ssd.jpl.nasa.gov/horizons/) API,離線或 API 無法連線時會自動、無感切換回本地端的克卜勒方程式計算——渲染迴圈不會因網路請求而卡頓。
 - **4 種攝影機模式**:
   - **日心俯瞰(Heliocentric top-down)**——經典的太陽系示意圖視角,可用滑鼠拖曳環繞。
@@ -56,12 +57,18 @@ npm test
 
 - 軌道要素:JPL Solar System Dynamics 低精度克卜勒軌道要素表(Standish 1992),適用約 1800–2050 年。
 - 即時位置:[JPL Horizons API](https://ssd-api.jpl.nasa.gov/doc/horizons.html)(不需 API key)。
-- 貼圖:[solarsystemscope.com](https://www.solarsystemscope.com/textures/) 的 2k 解析度貼圖,CC BY 4.0 授權。因對方 CDN 沒有回傳 CORS 標頭,WebGL 無法直接跨網域讀取,故將貼圖下載後放在 `assets/textures/` 自行託管。
+- 貼圖:詳見下方[資產授權](#資產授權)。
 
 ## 目前狀態
 
-v1 版本——桌面應用程式打包(Tauri/Electron)是未來可能的階段,目前尚未著手。土星環與物件的懸浮標籤是已知的加分項目,目前刻意先不做。
+v1 版本——桌面應用程式打包(Tauri/Electron)是未來可能的階段,目前尚未著手。
+
+## 資產授權
+
+程式碼採 MIT 授權(見下方[授權](#授權)),但 `assets/textures/` 底下的第三方行星/衛星貼圖各自保留原始授權——MIT 不會改變它們的授權條款。完整的逐檔案清單、來源與 credit,請見:**[ATTRIBUTION.md](ATTRIBUTION.md)**。
+
+行星貼圖主要基於 [Solar System Scope](https://www.solarsystemscope.com/textures/) 的素材,採 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 授權,並依網頁渲染需求做過修改。部分衛星貼圖(木衛一 Io、木衛二 Europa、木衛三 Ganymede、土衛六 Titan、海衛一 Triton、冥衛一 Charon)則來自 Steve Albers / NOAA Science On a Sphere,以 NASA 原始影像整理而成。貼圖由 `scripts/fetch-textures.mjs`(`npm run fetch-textures`)下載,不是手動 commit 上去的——之後隨時可以重跑這個腳本來更新,或補上目前還沒找到穩定來源的天體(清單見 `ATTRIBUTION.md` 的 TODO 區塊)。
 
 ## 授權
 
-MIT
+MIT(僅限程式碼——第三方貼圖授權見上方[資產授權](#資產授權))
