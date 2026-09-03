@@ -6,7 +6,10 @@
 //
 // Source: JPL Solar System Dynamics low-precision element tables.
 // radiusKm: mean equatorial radius. color: fallback flat color before
-// textures land (step 5).
+// textures land (step 5). rotationPeriodDays: sidereal axial rotation
+// period (NASA planetary fact sheet); negative = retrograde spin (Venus,
+// Uranus) — reuses core/orbital-elements.js#circularOrbitAngle unchanged,
+// same math as an orbit angle, just applied to the body's own spin instead.
 
 export const PLANETS = {
   mercury: {
@@ -14,6 +17,7 @@ export const PLANETS = {
     radiusKm: 2439.7,
     color: 0x8c7853,
     textureKey: 'mercury',
+    rotationPeriodDays: 58.646,
     elements: {
       a: [0.38709927, 0.00000037],
       e: [0.20563593, 0.00001906],
@@ -28,6 +32,7 @@ export const PLANETS = {
     radiusKm: 6051.8,
     color: 0xe8cda2,
     textureKey: 'venus',
+    rotationPeriodDays: -243.025,
     elements: {
       a: [0.72333566, 0.00000390],
       e: [0.00677672, -0.00004107],
@@ -42,6 +47,7 @@ export const PLANETS = {
     radiusKm: 6371.0,
     color: 0x2a6ebb,
     textureKey: 'earth',
+    rotationPeriodDays: 0.99727,
     elements: {
       a: [1.00000261, 0.00000562],
       e: [0.01671123, -0.00004392],
@@ -56,6 +62,7 @@ export const PLANETS = {
     radiusKm: 3389.5,
     color: 0xc1440e,
     textureKey: 'mars',
+    rotationPeriodDays: 1.025957,
     elements: {
       a: [1.52371034, 0.00001847],
       e: [0.09339410, 0.00007882],
@@ -70,6 +77,7 @@ export const PLANETS = {
     radiusKm: 69911,
     color: 0xd8ca9d,
     textureKey: 'jupiter',
+    rotationPeriodDays: 0.41354,
     elements: {
       a: [5.20288700, -0.00011607],
       e: [0.04838624, -0.00013253],
@@ -84,6 +92,7 @@ export const PLANETS = {
     radiusKm: 58232,
     color: 0xead6b8,
     textureKey: 'saturn',
+    rotationPeriodDays: 0.44401,
     elements: {
       a: [9.53667594, -0.00125060],
       e: [0.05386179, -0.00050991],
@@ -98,6 +107,7 @@ export const PLANETS = {
     radiusKm: 25362,
     color: 0xace5ee,
     textureKey: 'uranus',
+    rotationPeriodDays: -0.71833,
     elements: {
       a: [19.18916464, -0.00196176],
       e: [0.04725744, -0.00004397],
@@ -112,6 +122,7 @@ export const PLANETS = {
     radiusKm: 24622,
     color: 0x3f54ba,
     textureKey: 'neptune',
+    rotationPeriodDays: 0.67125,
     elements: {
       a: [30.06992276, 0.00026291],
       e: [0.00859048, 0.00005105],
@@ -132,4 +143,5 @@ export const SUN = {
   radiusKm: 696000,
   color: 0xffdd88,
   textureKey: 'sun',
+  rotationPeriodDays: 25.05, // equatorial sidereal rotation
 };
