@@ -3,7 +3,7 @@
 // for the whole project (a real retrograde-motion loop should be visible
 // for Mars if steps 2-7's orbital math is right).
 import * as THREE from 'three';
-import { createRenderer, createScene, createCamera, createAmbientLight, wireResize } from './render/scene-setup.js';
+import { createRenderer, createScene, createCamera, createAmbientLight, wireResize, applyStarfield } from './render/scene-setup.js';
 import {
   buildPlanetMesh, buildOrbitPath, buildSun, buildMoonMesh, toScenePosition,
 } from './render/bodies.js';
@@ -25,6 +25,7 @@ const renderer = createRenderer(canvas);
 const scene = createScene();
 const camera = createCamera();
 wireResize(camera, renderer);
+applyStarfield(scene);
 
 scene.add(createAmbientLight());
 

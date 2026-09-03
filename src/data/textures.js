@@ -23,4 +23,5 @@ export const TEXTURES = {
   uranus: `${BASE}/2k_uranus.jpg`,
   neptune: `${BASE}/2k_neptune.jpg`,
   moon: `${BASE}/2k_moon.jpg`,
+  stars: `${BASE}/2k_stars_milky_way.jpg`,
 };
