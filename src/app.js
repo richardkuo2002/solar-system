@@ -22,6 +22,7 @@ import { getPositionSync } from './core/ephemeris.js';
 import { PLANETS, PLANET_ORDER, SUN } from './data/planets.js';
 import { MOONS, MOON_ORDER } from './data/moons.js';
 import { COMETS, COMET_ORDER } from './data/comets.js';
+import { DWARF_PLANETS, DWARF_PLANET_ORDER } from './data/dwarf-planets.js';
 
 const canvas = document.getElementById('scene');
 const renderer = createRenderer(canvas);
@@ -79,6 +80,21 @@ for (const key of COMET_ORDER) {
   pickableMeshes.push(mesh);
 }
 
+// Dwarf planets — same element shape as planets, reusing buildOrbitPath/
+// buildPlanetMesh unchanged. Distinct orbit-line color: the point of adding
+// Pluto is to make its ~17° inclination visually pop against the major
+// planets' near-coplanar orbits.
+const dwarfPlanetMeshes = {};
+for (const key of DWARF_PLANET_ORDER) {
+  const dwarfData = DWARF_PLANETS[key];
+  const orbitLine = buildOrbitPath(dwarfData.elements, startJD, 256, 0x996644);
+  scene.add(orbitLine);
+  const mesh = buildPlanetMesh(dwarfData);
+  scene.add(mesh);
+  dwarfPlanetMeshes[key] = mesh;
+  pickableMeshes.push(mesh);
+}
+
 scene.add(buildAsteroidBelt());
 
 createHoverLabels(canvas, camera, pickableMeshes);
@@ -121,6 +137,17 @@ function updateCometPositions(currentDate) {
   }
 }
 
+/** Dwarf planets, same treatment as comets — local Kepler math, no Horizons lookup. */
+function updateDwarfPlanetPositions(currentDate) {
+  const currentJD = julianDateFromDate(currentDate);
+  for (const key of DWARF_PLANET_ORDER) {
+    const els = elementsAtDate(DWARF_PLANETS[key].elements, currentJD);
+    const scenePos = toScenePosition(elementsToPosition(els));
+    dwarfPlanetMeshes[key].position.set(scenePos.x, scenePos.y, scenePos.z);
+    scenePositions[key] = scenePos;
+  }
+}
+
 let timeState = createTimeController({ startDate: new Date(), speedDaysPerSecond: 1 });
 timeState.playing = true; // starts running so the "faster inner planets" effect is visible immediately
 
@@ -139,6 +166,7 @@ const timeUI = createTimeControlsUI(document.getElementById('ui-root'), {
     timeState = jumpToDate(timeState, date);
     updateBodyPositions(timeState.currentDate);
     updateCometPositions(timeState.currentDate);
+    updateDwarfPlanetPositions(timeState.currentDate);
     timeUI.setCurrentDateDisplay(timeState.currentDate);
   },
 });
@@ -175,6 +203,7 @@ createSurfaceControlsUI(document.getElementById('ui-root'), PLANET_ORDER, (plane
 
 updateBodyPositions(timeState.currentDate);
 updateCometPositions(timeState.currentDate);
+updateDwarfPlanetPositions(timeState.currentDate);
 cameraRig.applyPose(computePose(cameraState, scenePositions));
 
 const clock = new THREE.Clock();
