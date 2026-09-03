@@ -135,7 +135,10 @@ export function moveFreeFlight(state, { forward = 0, strafe = 0, vertical = 0, d
   const pitch = Math.max(-maxPitch, Math.min(maxPitch, state.freeFlight.pitch + dPitch));
 
   const forwardVec = facingVector(yaw, pitch);
-  const rightVec = { x: Math.cos(yaw), y: 0, z: -Math.sin(yaw) };
+  // Screen-right for THREE's lookAt (right = forward × up, since the camera
+  // looks along -Z locally and target = position + forwardVec) — NOT
+  // up × forward, which points the opposite way and was swapping A/D.
+  const rightVec = { x: -Math.cos(yaw), y: 0, z: Math.sin(yaw) };
 
   const position = {
     x: state.freeFlight.position.x + forwardVec.x * forward + rightVec.x * strafe,
