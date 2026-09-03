@@ -3,8 +3,9 @@
 // file is, where it came from, and under what license (src/data/textures.js
 // stays a plain textureKey->filename lookup; it does not duplicate any of
 // this). Safe to re-run: skips files that already exist and pass the size
-// sanity check. Never aborts the whole run for one failed body — logs which
-// body, which URL(s), and the HTTP status, then moves on.
+// sanity check, unless --force is passed. Never aborts the whole run for
+// one failed body — logs which body, which URL(s), and the HTTP status,
+// then moves on.
 //
 // Two sources, each tried in order per target until one works:
 //   SSS = solarsystemscope.com (CC BY 4.0)
@@ -21,11 +22,17 @@
 // with no working candidate URL gets neither file — src/render/procedural-
 // textures.js covers it at runtime instead; this script never substitutes
 // an unlicensed image.
+//
+// Usage: node scripts/fetch-textures.mjs [--force]
+//   --force  re-download and re-validate every target, even ones already
+//            on disk (normally those are skipped).
 
 import { writeFileSync, readFileSync, mkdirSync, existsSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
+
+const FORCE = process.argv.includes('--force');
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'assets', 'textures');
@@ -51,6 +58,10 @@ const SA_LICENSE = {
 };
 
 // filename -> { body, role, candidates: [url,...], ...license fields }
+// role is one of the roadmap's canonical values (albedo/night/clouds/
+// atmosphere/ring/normal/roughness/displacement/emissive) except 'skybox',
+// which has no matching value in that set — the starfield background isn't
+// a body texture, so it's kept as a deliberate, documented extension.
 // SSS-sourced filenames keep the "2k_" prefix SSS itself uses (and this
 // project already had committed before this script existed) — not a new
 // convention, just staying consistent with the 12 files already on disk.
@@ -58,15 +69,15 @@ const TARGETS = {
   '2k_sun.jpg': { body: 'sun', role: 'albedo', candidates: [SSS + '2k_sun.jpg'], ...SSS_LICENSE },
   '2k_mercury.jpg': { body: 'mercury', role: 'albedo', candidates: [SSS + '2k_mercury.jpg'], ...SSS_LICENSE },
   '2k_venus_surface.jpg': { body: 'venus', role: 'albedo', candidates: [SSS + '2k_venus_surface.jpg'], ...SSS_LICENSE },
-  '2k_venus_atmosphere.jpg': { body: 'venus', role: 'atmosphere-alpha', candidates: [SSS + '2k_venus_atmosphere.jpg'], ...SSS_LICENSE },
+  '2k_venus_atmosphere.jpg': { body: 'venus', role: 'atmosphere', candidates: [SSS + '2k_venus_atmosphere.jpg'], ...SSS_LICENSE },
   '2k_earth_daymap.jpg': { body: 'earth', role: 'albedo', candidates: [SSS + '2k_earth_daymap.jpg'], ...SSS_LICENSE },
-  '2k_earth_nightmap.jpg': { body: 'earth', role: 'night-emissive', candidates: [SSS + '2k_earth_nightmap.jpg'], ...SSS_LICENSE },
-  '2k_earth_clouds.jpg': { body: 'earth', role: 'clouds-alpha', candidates: [SSS + '2k_earth_clouds.jpg'], ...SSS_LICENSE },
+  '2k_earth_nightmap.jpg': { body: 'earth', role: 'night', candidates: [SSS + '2k_earth_nightmap.jpg'], ...SSS_LICENSE },
+  '2k_earth_clouds.jpg': { body: 'earth', role: 'clouds', candidates: [SSS + '2k_earth_clouds.jpg'], ...SSS_LICENSE },
   '2k_moon.jpg': { body: 'moon', role: 'albedo', candidates: [SSS + '2k_moon.jpg'], ...SSS_LICENSE },
   '2k_mars.jpg': { body: 'mars', role: 'albedo', candidates: [SSS + '2k_mars.jpg'], ...SSS_LICENSE },
   '2k_jupiter.jpg': { body: 'jupiter', role: 'albedo', candidates: [SSS + '2k_jupiter.jpg'], ...SSS_LICENSE },
   '2k_saturn.jpg': { body: 'saturn', role: 'albedo', candidates: [SSS + '2k_saturn.jpg'], ...SSS_LICENSE },
-  '2k_saturn_ring_alpha.png': { body: 'saturn', role: 'ring-alpha', candidates: [SSS + '2k_saturn_ring_alpha.png'], ...SSS_LICENSE },
+  '2k_saturn_ring_alpha.png': { body: 'saturn', role: 'ring', candidates: [SSS + '2k_saturn_ring_alpha.png'], ...SSS_LICENSE },
   '2k_uranus.jpg': { body: 'uranus', role: 'albedo', candidates: [SSS + '2k_uranus.jpg'], ...SSS_LICENSE },
   '2k_neptune.jpg': { body: 'neptune', role: 'albedo', candidates: [SSS + '2k_neptune.jpg'], ...SSS_LICENSE },
   '2k_stars_milky_way.jpg': { body: 'starfield', role: 'skybox', candidates: [SSS + '2k_stars_milky_way.jpg'], ...SSS_LICENSE },
@@ -99,11 +110,24 @@ async function writePreview(dest, previewDest) {
   await sharp(dest).resize({ width: 512 }).toFile(previewDest);
 }
 
+function urlBasename(url) {
+  return url.slice(url.lastIndexOf('/') + 1);
+}
+
+// One line per target, always the same shape, whatever the outcome —
+// body/role/source/URL/output path/result, so a log scroll-back can answer
+// "where did this file actually come from" without opening manifest.json.
+function logItem({ result, body, role, source, url, dest }) {
+  console.log(`[${result}] body=${body} role=${role} source="${source}" url=${url ?? '-'} out=${dest}`);
+}
+
 const manifestPath = join(OUT, 'manifest.json');
 const previousManifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : {};
 
 const manifest = {};
-let ok = 0;
+let downloaded = 0;
+let skipped = 0;
+let failed = 0;
 const total = Object.keys(TARGETS).length;
 
 for (const [file, target] of Object.entries(TARGETS)) {
@@ -111,14 +135,16 @@ for (const [file, target] of Object.entries(TARGETS)) {
   const dest = join(OUT, file);
   const previewDest = join(PREVIEW_OUT, file);
 
-  if (existsSync(dest) && statSync(dest).size > 10000) {
-    console.log(`⏭  ${file} already present, skipping`);
+  if (!FORCE && existsSync(dest) && statSync(dest).size > 10000) {
+    const sourceUrl = previousManifest[file]?.sourceUrl ?? candidates[0];
+    logItem({ result: 'SKIP', body, role, source: license.source, url: sourceUrl, dest });
     if (!existsSync(previewDest)) await writePreview(dest, previewDest).catch(() => {});
     manifest[file] = {
-      body, role, sourceUrl: previousManifest[file]?.sourceUrl ?? candidates[0], ...license,
+      body, role, sourceUrl, ...license,
+      originalFilename: previousManifest[file]?.originalFilename ?? urlBasename(sourceUrl),
       modified: 'Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp.',
     };
-    ok++;
+    skipped++;
     continue;
   }
 
@@ -126,11 +152,11 @@ for (const [file, target] of Object.entries(TARGETS)) {
   for (const url of candidates) {
     try {
       const size = await download(url, dest);
-      console.log(`✅ ${file}  ${(size / 1e6).toFixed(1)}MB  ← ${url}`);
+      logItem({ result: `OK ${(size / 1e6).toFixed(1)}MB`, body, role, source: license.source, url, dest });
       succeededUrl = url;
       break;
     } catch (e) {
-      console.log(`   ✗ ${body}: ${url} — ${e.message}`);
+      logItem({ result: `FAIL (${e.message})`, body, role, source: license.source, url, dest });
     }
   }
 
@@ -138,13 +164,15 @@ for (const [file, target] of Object.entries(TARGETS)) {
     await writePreview(dest, previewDest).catch((e) => console.log(`   ⚠ preview generation failed for ${file}: ${e.message}`));
     manifest[file] = {
       body, role, sourceUrl: succeededUrl, ...license,
+      originalFilename: urlBasename(succeededUrl),
       modified: 'Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp.',
     };
-    ok++;
+    downloaded++;
   } else {
-    console.log(`⚠️  ${body} (${file}): all candidate URLs failed — falling back to procedural texture, no file written`);
+    logItem({ result: 'ALL CANDIDATES FAILED — procedural fallback, no file written', body, role, source: license.source, url: null, dest });
+    failed++;
   }
 }
 
 writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
-console.log(`\nDone: ${ok}/${total} textures ready, manifest.json written.`);
+console.log(`\nDone: downloaded=${downloaded} skipped=${skipped} failed=${failed} total=${total}. manifest.json written.`);

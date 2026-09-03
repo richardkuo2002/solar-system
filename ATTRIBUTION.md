@@ -68,3 +68,31 @@ used.
 Re-running `node scripts/fetch-textures.mjs` (see `README.md`) will pick
 these up automatically the moment a working URL exists, without any other
 code changes.
+
+## Payload size
+
+Measured directly from file sizes on disk (`stat`/`ls`), not estimated:
+
+| | Bytes | MB |
+|---|---:|---:|
+| All full-resolution textures (`assets/textures/*.jpg`/`*.png`, 21 files) | 22,064,130 | 22.06 |
+| All previews (`assets/textures/preview/*`, 21 files) | 642,827 | 0.64 |
+
+What actually loads on first page view — everything else is deferred until
+a body is hovered, focused, or selected (see `src/render/texture-loader.js`
+for the lazy-load/LRU logic; unchanged by this pass):
+
+| | Bytes | MB |
+|---|---:|---:|
+| Starfield skybox (loads full-res directly — see `scene-setup.js`; the only body that skips the preview step, since a background sphere has no "focus" trigger to upgrade later) | 251,454 | 0.25 |
+| Preview for every other body (20 files — everything except the starfield) | 639,821 | 0.64 |
+| Full-resolution, eager: Sun, Earth (day + night + clouds), Moon | 3,560,346 | 3.56 |
+| **Total first-load texture payload** | **4,451,621** | **4.45** |
+
+That's ~20% of the full 22.7 MB texture set. Methodology: this is the sum
+of the exact files `src/app.js`'s startup path requests (every body's mesh
+is built once at scene setup, which calls `textureLoader.getInitial()` and
+loads that body's preview; only Sun/Earth/Moon additionally call
+`ensureFull()` immediately) — a byte-for-byte figure for what ships, not a
+network trace, so it doesn't include HTTP/TLS overhead or `index.html`/
+`app.js`/manifest.json themselves.
