@@ -1,10 +1,12 @@
-// Entry point. Step 2: static/animated correct orbits, hardcoded top-down
-// camera. No time-controller UI yet (that's step 3) — planets are driven by
-// a simple local "simulated day" counter just to visually confirm relative
-// orbital speeds (Kepler's third law: inner planets sweep faster).
+// Entry point. Step 3: real time-controller + UI drive the simulated date
+// (replaces step 2's placeholder local day counter).
 import * as THREE from 'three';
 import { createRenderer, createScene, createCamera, wireResize } from './render/scene-setup.js';
 import { buildPlanetMesh, buildOrbitPath, toScenePosition } from './render/bodies.js';
+import { createTimeControlsUI } from './render/ui-controls.js';
+import {
+  createTimeController, tick, togglePlayPause, setSpeed, reverse, jumpToDate,
+} from './core/time-controller.js';
 import { elementsAtDate, julianDateFromDate } from './core/orbital-elements.js';
 import { elementsToPosition } from './core/kepler.js';
 import { PLANETS, PLANET_ORDER } from './data/planets.js';
@@ -40,14 +42,8 @@ for (const key of PLANET_ORDER) {
   planetMeshes[key] = mesh;
 }
 
-// Simple local time driver (placeholder for step 3's time-controller.js):
-// simDays advances at a fixed rate so relative orbital speeds are visible.
-let simDays = 0;
-const SIM_DAYS_PER_SECOND = 20;
-const clock = new THREE.Clock();
-
-function updatePlanetPositions() {
-  const currentJD = startJD + simDays;
+function updatePlanetPositions(currentDate) {
+  const currentJD = julianDateFromDate(currentDate);
   for (const key of PLANET_ORDER) {
     const planetData = PLANETS[key];
     const els = elementsAtDate(planetData.elements, currentJD);
@@ -57,12 +53,38 @@ function updatePlanetPositions() {
   }
 }
 
+let timeState = createTimeController({ startDate: new Date(), speedDaysPerSecond: 1 });
+timeState.playing = true; // starts running so the "faster inner planets" effect is visible immediately
+
+const ui = createTimeControlsUI(document.getElementById('ui-root'), {
+  onTogglePlayPause() {
+    timeState = togglePlayPause(timeState);
+    ui.setPlayPauseLabel(timeState.playing);
+  },
+  onSpeedChange(daysPerSecond) {
+    timeState = setSpeed(timeState, daysPerSecond);
+  },
+  onReverse() {
+    timeState = reverse(timeState);
+  },
+  onJumpToDate(date) {
+    timeState = jumpToDate(timeState, date);
+    updatePlanetPositions(timeState.currentDate);
+    ui.setCurrentDateDisplay(timeState.currentDate);
+  },
+});
+ui.setPlayPauseLabel(timeState.playing);
+ui.setCurrentDateDisplay(timeState.currentDate);
+
+const clock = new THREE.Clock();
+
 function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
-  simDays += delta * SIM_DAYS_PER_SECOND;
-  updatePlanetPositions();
+  timeState = tick(timeState, delta);
+  updatePlanetPositions(timeState.currentDate);
+  ui.setCurrentDateDisplay(timeState.currentDate);
   renderer.render(scene, camera);
 }
-updatePlanetPositions();
+updatePlanetPositions(timeState.currentDate);
 animate();
