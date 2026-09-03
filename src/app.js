@@ -1,6 +1,7 @@
-// Entry point. Step 7: planet positions now go through core/ephemeris.js
-// (JPL Horizons primary, local Kepler fallback) instead of calling the
-// local math directly — see updateBodyPositions()/localPlanetPosition().
+// Entry point. Step 8: geocentric (Earth-centered) view — the last and
+// hardest of the 4 camera modes, and the best end-to-end correctness check
+// for the whole project (a real retrograde-motion loop should be visible
+// for Mars if steps 2-7's orbital math is right).
 import * as THREE from 'three';
 import { createRenderer, createScene, createCamera, createAmbientLight, wireResize } from './render/scene-setup.js';
 import {
@@ -11,7 +12,7 @@ import { createCameraRig } from './render/camera-rig.js';
 import {
   createTimeController, tick, togglePlayPause, setSpeed, reverse, jumpToDate,
 } from './core/time-controller.js';
-import { createCameraState, setMode, computePose, CAMERA_MODES } from './core/camera-modes.js';
+import { createCameraState, setMode, enterGeocentric, computePose, CAMERA_MODES } from './core/camera-modes.js';
 import { elementsAtDate, julianDateFromDate, moonLocalPosition } from './core/orbital-elements.js';
 import { elementsToPosition } from './core/kepler.js';
 import { compressSize } from './core/scale.js';
@@ -112,12 +113,17 @@ cameraRig.setMode(cameraState.mode);
 const viewModeUI = createViewModeUI(
   document.getElementById('ui-root'),
   (mode) => {
-    cameraState = setMode(cameraState, mode);
+    // Geocentric needs bodyPositions to snapshot its initial look direction
+    // (see enterGeocentric's docstring) — every other mode is a plain
+    // mode switch.
+    cameraState = mode === CAMERA_MODES.GEOCENTRIC
+      ? enterGeocentric(cameraState, scenePositions, 'mars') // Mars: the classic retrograde-motion example
+      : setMode(cameraState, mode);
     cameraRig.setMode(cameraState.mode);
     cameraRig.applyPose(computePose(cameraState, scenePositions));
     viewModeUI.setActiveMode(cameraState.mode);
   },
-  [CAMERA_MODES.HELIOCENTRIC_TOPDOWN, CAMERA_MODES.FREE_FLIGHT, CAMERA_MODES.SURFACE_FIRST_PERSON]
+  [CAMERA_MODES.HELIOCENTRIC_TOPDOWN, CAMERA_MODES.FREE_FLIGHT, CAMERA_MODES.SURFACE_FIRST_PERSON, CAMERA_MODES.GEOCENTRIC]
 );
 viewModeUI.setActiveMode(cameraState.mode);
 
@@ -149,6 +155,9 @@ function animate() {
   } else if (cameraState.mode === CAMERA_MODES.SURFACE_FIRST_PERSON) {
     // The planet under our feet keeps moving along its orbit — re-derive
     // the pose every frame rather than once on mode entry.
+    cameraRig.applyPose(computePose(cameraState, scenePositions));
+  } else if (cameraState.mode === CAMERA_MODES.GEOCENTRIC) {
+    cameraState = cameraRig.updateGeocentricLook(cameraState);
     cameraRig.applyPose(computePose(cameraState, scenePositions));
   }
 

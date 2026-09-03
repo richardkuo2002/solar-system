@@ -6,7 +6,7 @@
 // core/ because it's inherently DOM/browser-specific; it just calls the
 // pure core/camera-modes.js#moveFreeFlight with pre-computed deltas.
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { CAMERA_MODES, moveFreeFlight } from '../core/camera-modes.js';
+import { CAMERA_MODES, moveFreeFlight, rotateGeocentricView } from '../core/camera-modes.js';
 
 const MOVE_SPEED = 15; // scene units / second
 const MOUSE_SENSITIVITY = 0.0025;
@@ -63,6 +63,15 @@ export function createCameraRig(camera, domElement) {
       pendingYaw = 0;
       pendingPitch = 0;
       return moveFreeFlight(cameraState, { forward, strafe, vertical, dYaw, dPitch });
+    },
+
+    /** Reads accumulated mouse-drag input (position is not user-controlled — it always tracks Earth) and returns the next cameraState. */
+    updateGeocentricLook(cameraState) {
+      const dYaw = pendingYaw;
+      const dPitch = pendingPitch;
+      pendingYaw = 0;
+      pendingPitch = 0;
+      return rotateGeocentricView(cameraState, dYaw, dPitch);
     },
   };
 }

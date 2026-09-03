@@ -1,13 +1,11 @@
 // Camera/viewpoint state machine. Pure — no THREE/DOM imports. Computes a
 // camera *pose* (position + look-at target + up, all plain {x,y,z}) from
 // app state; render/camera-rig.js is the only file that applies this to an
-// actual THREE.Camera.
-//
-// Step 4 implements HELIOCENTRIC_TOPDOWN and FREE_FLIGHT. SURFACE_FIRST_PERSON
-// (step 6) and GEOCENTRIC (step 8) throw a clear "not implemented yet" error
-// so a mistaken early wire-up fails loudly instead of returning a bogus pose.
+// actual THREE.Camera. All 4 modes (HELIOCENTRIC_TOPDOWN, FREE_FLIGHT,
+// SURFACE_FIRST_PERSON, GEOCENTRIC) are implemented.
 
 import { compressSize } from './scale.js';
+import { sub, normalize } from './vector3.js';
 import { PLANETS } from '../data/planets.js';
 
 export const CAMERA_MODES = Object.freeze({
@@ -25,6 +23,7 @@ export function createCameraState(initialMode = CAMERA_MODES.HELIOCENTRIC_TOPDOW
     focusBody: 'sun',
     freeFlight: { position: { x: 0, y: 20, z: 60 }, yaw: Math.PI, pitch: -0.2 },
     surface: { planet: 'earth', lat: 0, lon: 0 },
+    geocentric: { focusBody: 'mars', yaw: 0, pitch: 0 },
   };
 }
 
@@ -49,6 +48,43 @@ export function setSurfaceLocation(state, lat, lon) {
 
 export function setSurfacePlanet(state, planetKey) {
   return { ...state, surface: { ...state.surface, planet: planetKey } };
+}
+
+/**
+ * Switches into GEOCENTRIC mode, snapshotting the look direction toward
+ * `focusBody` (as seen from Earth) *at this moment* into yaw/pitch. The
+ * camera then tracks Earth's position every frame (see computePose) but
+ * keeps looking in that same fixed world-space direction rather than
+ * re-aiming at the target every frame — if the camera re-aimed continuously,
+ * the target would always sit dead-center and could never visibly trace a
+ * retrograde loop. With a fixed look direction, Earth's own motion plus the
+ * target's motion make it drift across the view over the following months —
+ * that drift, forward/pause/backward/forward, *is* the retrograde motion,
+ * and it falls entirely out of the real orbital math already in this
+ * project (no separate retrograde model). The user can also mouse-look
+ * around from this fixed base direction (see camera-rig.js) to track it if
+ * it drifts out of frame.
+ */
+export function enterGeocentric(state, bodyPositions, focusBody = 'mars') {
+  const earthPos = bodyPositions.earth ?? { x: 0, y: 0, z: 0 };
+  const targetPos = bodyPositions[focusBody] ?? bodyPositions.sun ?? { x: 0, y: 0, z: 0 };
+  const dir = normalize(sub(targetPos, earthPos));
+  const yaw = Math.atan2(dir.x, dir.z);
+  const pitch = Math.asin(Math.max(-1, Math.min(1, dir.y)));
+  return { ...state, mode: CAMERA_MODES.GEOCENTRIC, geocentric: { focusBody, yaw, pitch } };
+}
+
+/** Pure — adjusts the geocentric look direction by mouse-drag deltas (no positional movement; position always tracks Earth). */
+export function rotateGeocentricView(state, dYaw, dPitch) {
+  const maxPitch = Math.PI / 2 - 0.01;
+  return {
+    ...state,
+    geocentric: {
+      ...state.geocentric,
+      yaw: state.geocentric.yaw + dYaw,
+      pitch: Math.max(-maxPitch, Math.min(maxPitch, state.geocentric.pitch + dPitch)),
+    },
+  };
 }
 
 const DEG_TO_RAD = Math.PI / 180;
@@ -148,8 +184,16 @@ export function computePose(state, bodyPositions) {
       const sceneRadius = compressSize(PLANETS[planet].radiusKm);
       return surfacePose(planetPos, sceneRadius, lat, lon);
     }
-    case CAMERA_MODES.GEOCENTRIC:
-      throw new Error('GEOCENTRIC pose is not implemented until build step 8');
+    case CAMERA_MODES.GEOCENTRIC: {
+      const earthPos = bodyPositions.earth ?? { x: 0, y: 0, z: 0 };
+      const { yaw, pitch } = state.geocentric;
+      const dir = facingVector(yaw, pitch);
+      return {
+        position: earthPos,
+        target: { x: earthPos.x + dir.x, y: earthPos.y + dir.y, z: earthPos.z + dir.z },
+        up: { x: 0, y: 1, z: 0 },
+      };
+    }
     default:
       throw new Error(`Unknown camera mode: ${state.mode}`);
   }

@@ -13,7 +13,7 @@ import {
 } from '../src/core/time-controller.js';
 import {
   createCameraState, setMode, setFocusBody, setSurfaceLocation, setSurfacePlanet,
-  moveFreeFlight, computePose, CAMERA_MODES,
+  moveFreeFlight, enterGeocentric, rotateGeocentricView, computePose, CAMERA_MODES,
 } from '../src/core/camera-modes.js';
 
 // kepler: eccentric anomaly solver satisfies Kepler's equation
@@ -189,10 +189,51 @@ import {
   assert.equal(state.surface.planet, 'mars');
 }
 
-// camera-modes: geocentric (not yet implemented) fails loudly instead of returning a bogus pose
+// camera-modes: geocentric camera always tracks Earth's position, and the
+// initial look direction (from enterGeocentric) points at the chosen body
 {
-  const geoState = setMode(createCameraState(), CAMERA_MODES.GEOCENTRIC);
-  assert.throws(() => computePose(geoState, {}));
+  const bodyPositions = { earth: { x: 20, y: 0, z: 0 }, mars: { x: 30, y: 0, z: 0 } };
+  let state = enterGeocentric(createCameraState(), bodyPositions, 'mars');
+  assert.equal(state.geocentric.focusBody, 'mars');
+
+  const pose = computePose(state, bodyPositions);
+  assert.deepEqual(pose.position, bodyPositions.earth, 'geocentric camera position must be exactly Earth');
+
+  // Mars is due +x from Earth here, so the initial look direction should
+  // point mostly along +x too (dot product with (1,0,0) close to 1).
+  const dir = { x: pose.target.x - pose.position.x, y: pose.target.y - pose.position.y, z: pose.target.z - pose.position.z };
+  const dirLen = Math.hypot(dir.x, dir.y, dir.z);
+  assert.ok(dir.x / dirLen > 0.99, 'initial geocentric look direction should point toward the focus body');
+}
+
+// camera-modes: geocentric look direction is fixed across a position update
+// (doesn't re-aim at the target every frame) but does respond to explicit
+// mouse-look deltas — this fixed-direction behavior is *the* mechanism that
+// lets retrograde motion show up as real drift instead of the camera
+// tracking the target and hiding it dead-center every frame
+{
+  const bodyPositions = { earth: { x: 20, y: 0, z: 0 }, mars: { x: 30, y: 0, z: 0 } };
+  let state = enterGeocentric(createCameraState(), bodyPositions, 'mars');
+  const poseBefore = computePose(state, bodyPositions);
+
+  // Earth moves (simulating a later frame); mars stays put; no explicit rotate call.
+  const laterBodyPositions = { earth: { x: 20, y: 0, z: 5 }, mars: { x: 30, y: 0, z: 0 } };
+  const poseAfterMove = computePose(state, laterBodyPositions);
+  const dirBefore = { x: poseBefore.target.x - poseBefore.position.x, y: poseBefore.target.y - poseBefore.position.y, z: poseBefore.target.z - poseBefore.position.z };
+  const dirAfterMove = { x: poseAfterMove.target.x - poseAfterMove.position.x, y: poseAfterMove.target.y - poseAfterMove.position.y, z: poseAfterMove.target.z - poseAfterMove.position.z };
+  assert.ok(
+    Math.abs(dirBefore.x - dirAfterMove.x) < 1e-9 &&
+    Math.abs(dirBefore.y - dirAfterMove.y) < 1e-9 &&
+    Math.abs(dirBefore.z - dirAfterMove.z) < 1e-9,
+    'look direction must not change just because bodies moved'
+  );
+  assert.deepEqual(poseAfterMove.position, laterBodyPositions.earth, 'position must still track the new Earth position');
+
+  // Now an explicit mouse-look delta should change the direction.
+  state = rotateGeocentricView(state, 0.3, 0.1);
+  const poseAfterRotate = computePose(state, bodyPositions);
+  const dirAfterRotate = { x: poseAfterRotate.target.x - poseAfterRotate.position.x, y: poseAfterRotate.target.y - poseAfterRotate.position.y, z: poseAfterRotate.target.z - poseAfterRotate.position.z };
+  assert.notDeepEqual(dirAfterRotate, dirBefore, 'explicit rotateGeocentricView should change the look direction');
 }
 
 // horizons-client: parses a realistic $$SOE/$$EOE vector-table block,
