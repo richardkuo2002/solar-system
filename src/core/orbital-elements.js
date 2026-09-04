@@ -4,6 +4,7 @@
 
 import { normalizeAngle, elementsToPosition } from './kepler.js';
 import { compressMoonOrbit } from './scale.js';
+import { AU_PER_KM } from './units.js';
 
 const VELOCITY_HALF_DT_DAYS = 1 / 48; // ±30 min — small vs. the fastest
   // period in this dataset (Mercury, ~88d), large enough that float
@@ -114,4 +115,33 @@ export function moonLocalPosition(moonData, parentRadiusKm, parentSceneRadius, c
   const angle = circularOrbitAngle(currentJD - epochJD, moonData.periodDays);
   const r = compressMoonOrbit(moonData.orbitKm, parentRadiusKm, parentSceneRadius);
   return { x: r * Math.cos(angle), y: 0, z: r * Math.sin(angle) };
+}
+
+// Fixed, deterministic epoch for moonHeliocentricPositionAu — Node-testable
+// and reproducible. Deliberately NOT the same epoch app.js's live 3D scene
+// uses for moonLocalPosition (that one is "page load time", different every
+// session). This means the Moon's analysis position and its live rendered
+// position can show it at different orbital angles for the same calendar
+// date — both are equally uncalibrated to the Moon's real phase (the
+// circular-orbit model was never anchored to reality, see docs/accuracy.md),
+// so this is a second independent approximation, not a "more wrong" one,
+// but it must be documented as such rather than silently assumed identical.
+const MOON_ANALYSIS_EPOCH_JD = J2000_JD;
+
+/**
+ * Approximate heliocentric AU position of a moon: circular orbit (real
+ * orbitKm/periodDays, via circularOrbitAngle — NOT the display-compressed
+ * compressMoonOrbit path moonLocalPosition uses), zero inclination, zero
+ * eccentricity, added onto the parent's real heliocentric AU position.
+ * Good enough for phase-angle/illumination (insensitive to these small
+ * effects); not for anything precision-sensitive. See docs/accuracy.md.
+ */
+export function moonHeliocentricPositionAu(moonData, parentPositionAu, currentJD) {
+  const angle = circularOrbitAngle(currentJD - MOON_ANALYSIS_EPOCH_JD, moonData.periodDays);
+  const rAu = moonData.orbitKm * AU_PER_KM;
+  return {
+    x: parentPositionAu.x + rAu * Math.cos(angle),
+    y: parentPositionAu.y + rAu * Math.sin(angle),
+    z: parentPositionAu.z,
+  };
 }

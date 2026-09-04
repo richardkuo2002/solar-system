@@ -37,12 +37,13 @@ export function geocentricEclipticLongitudeRad(targetState, observerState) {
 }
 
 /**
- * Samples Mars's geocentric ecliptic longitude across [startUtc, endUtc] at
- * intervalHours, returning parallel arrays ready for unwrap/velocity/
- * solver use. `forceSource` is forwarded to getBodyState for every sample
- * — see analysis/retrograde.js for why dense scans always force 'kepler'.
+ * Samples targetKey's geocentric ecliptic longitude, as seen from
+ * observerKey, across [startUtc, endUtc] at intervalHours, returning
+ * parallel arrays ready for unwrap/velocity/solver use. `forceSource` is
+ * forwarded to getBodyState for every sample — see analysis/retrograde.js
+ * (and analysis/opposition.js) for why dense scans always force 'kepler'.
  */
-export function sampleGeocentricLongitudeSeries(startUtc, endUtc, intervalHours, { forceSource } = {}) {
+export function sampleGeocentricLongitudeSeries(targetKey, observerKey, startUtc, endUtc, intervalHours, { forceSource } = {}) {
   const startMs = new Date(startUtc).getTime();
   const endMs = new Date(endUtc).getTime();
   const stepMs = intervalHours * MS_PER_HOUR;
@@ -52,17 +53,17 @@ export function sampleGeocentricLongitudeSeries(startUtc, endUtc, intervalHours,
 
   const timesJd = [];
   const lambdaRad = [];
-  const xAu = []; // rMarsEarth.x — also handed to the apparent-path chart (visual block 2)
-  const yAu = []; // rMarsEarth.y — so it doesn't need a second sampling pass
+  const xAu = []; // (target - observer).x — also handed to the apparent-path chart (visual block 2)
+  const yAu = []; // (target - observer).y — so it doesn't need a second sampling pass
   for (let ms = startMs; ms <= endMs; ms += stepMs) {
     const jsDate = new Date(ms);
-    const earthState = getBodyState('earth', jsDate, PLANETS.earth.elements, { forceSource });
-    const marsState = getBodyState('mars', jsDate, PLANETS.mars.elements, { forceSource });
-    const rMarsEarth = sub(marsState.positionAu, earthState.positionAu);
+    const observerState = getBodyState(observerKey, jsDate, PLANETS[observerKey].elements, { forceSource });
+    const targetState = getBodyState(targetKey, jsDate, PLANETS[targetKey].elements, { forceSource });
+    const rTargetObserver = sub(targetState.positionAu, observerState.positionAu);
     timesJd.push(julianDateFromDate(jsDate));
-    lambdaRad.push(Math.atan2(rMarsEarth.y, rMarsEarth.x));
-    xAu.push(rMarsEarth.x);
-    yAu.push(rMarsEarth.y);
+    lambdaRad.push(Math.atan2(rTargetObserver.y, rTargetObserver.x));
+    xAu.push(rTargetObserver.x);
+    yAu.push(rTargetObserver.y);
   }
   return { timesJd, lambdaRad, xAu, yAu };
 }

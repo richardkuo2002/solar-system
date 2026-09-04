@@ -37,22 +37,38 @@ function angularVelocityAtJd(jd, halfStepDays, forceSource) {
   return delta / (2 * halfStepDays);
 }
 
+// Default label matches v0.4's original retrograde-only vocabulary — kept
+// as the default so analyzeMarsRetrograde (which doesn't pass `labelFor`)
+// is unaffected. Other event types (opposition/conjunction, greatest
+// elongation, ...) pass their own `labelFor` rather than string-matching
+// on retrograde vocabulary after the fact — see src/analysis/opposition.js
+// and elongation-events.js.
+const DEFAULT_LABEL_FOR = (sign) => (sign > 0 ? 'direct-to-retrograde' : 'retrograde-to-direct');
+
 /**
- * Coarse-scan the already-sampled (timesJd, lambdaDotRadPerDay) series for
- * dλ/dt sign flips, then bisects `evalLambdaDotAt(jd)` (a callback that can
- * re-evaluate dλ/dt at any Julian Date, not just the coarse grid) down to
- * `toleranceSeconds`. Never returns a raw coarse-sample time — every result
- * comes out of the refinement loop.
+ * Coarse-scan the already-sampled (timesJd, valuesAtSamples) series for
+ * sign flips, then bisects `evalFnAtJd(jd)` (a callback that can
+ * re-evaluate the same quantity at any Julian Date, not just the coarse
+ * grid) down to `toleranceSeconds`. Never returns a raw coarse-sample
+ * time — every result comes out of the refinement loop.
+ *
+ * Generic zero-crossing finder — built for retrograde's dλ/dt, but equally
+ * usable for any series: feed it elongation's derivative to find
+ * opposition/conjunction extrema, or raw signed elongation to find
+ * conjunction zero-crossings directly. `labelFor(signOfBracketStart)`
+ * lets each caller supply its own event vocabulary instead of inheriting
+ * retrograde's.
  */
-export function findStationaryPoints(timesJd, lambdaDotRadPerDay, evalLambdaDotAt, {
+export function findStationaryPoints(timesJd, valuesAtSamples, evalFnAtJd, {
   toleranceSeconds = DEFAULT_TOLERANCE_SECONDS,
+  labelFor = DEFAULT_LABEL_FOR,
 } = {}) {
   const toleranceDays = toleranceSeconds / 86400;
   const results = [];
 
   for (let i = 0; i < timesJd.length - 1; i += 1) {
-    const a = lambdaDotRadPerDay[i];
-    const b = lambdaDotRadPerDay[i + 1];
+    const a = valuesAtSamples[i];
+    const b = valuesAtSamples[i + 1];
     if (a === 0 || b === 0 || Math.sign(a) === Math.sign(b)) continue; // no sign flip in this bracket
 
     let lo = timesJd[i];
@@ -64,7 +80,7 @@ export function findStationaryPoints(timesJd, lambdaDotRadPerDay, evalLambdaDotA
     let iterations = 0;
     while ((hi - lo) > toleranceDays && iterations < MAX_BISECTION_ITERATIONS) {
       const mid = (lo + hi) / 2;
-      const midVal = evalLambdaDotAt(mid);
+      const midVal = evalFnAtJd(mid);
       if (Math.sign(midVal) === startingSign || Math.sign(midVal) === 0) {
         lo = mid;
       } else {
@@ -74,7 +90,7 @@ export function findStationaryPoints(timesJd, lambdaDotRadPerDay, evalLambdaDotA
     }
 
     const epochJd = (lo + hi) / 2;
-    const transition = a < 0 ? 'retrograde-to-direct' : 'direct-to-retrograde';
+    const transition = labelFor(startingSign);
     results.push({ epochJd, method: 'bisection', toleranceSeconds, transition });
   }
 
@@ -116,7 +132,8 @@ function eventAt(epochJd, transition, forceSource) {
  * display metadata.
  */
 export function analyzeMarsRetrograde({ startUtc, endUtc, intervalHours = 6, ephemerisSource = 'kepler' }) {
-  const { timesJd, lambdaRad } = sampleGeocentricLongitudeSeries(startUtc, endUtc, intervalHours, { forceSource: 'kepler' });
+  const series = sampleGeocentricLongitudeSeries('mars', 'earth', startUtc, endUtc, intervalHours, { forceSource: 'kepler' });
+  const { timesJd, lambdaRad } = series;
   if (timesJd.length < 3) {
     throw new Error('analyzeMarsRetrograde: date range too short to sample — need at least 3 points');
   }
@@ -125,12 +142,25 @@ export function analyzeMarsRetrograde({ startUtc, endUtc, intervalHours = 6, eph
   const lambdaDotRadPerDay = centralDiffAngularVelocityRadPerDay(lambdaUnwrapped, timesJd);
   const evalLambdaDotAt = (jd) => angularVelocityAtJd(jd, REFINE_HALF_STEP_DAYS, 'kepler');
   const stationary = findStationaryPoints(timesJd, lambdaDotRadPerDay, evalLambdaDotAt);
+  // Pre-unwrapped, degree-valued series for the chart layer — same
+  // `valueDeg` field name analysis/opposition.js's series uses, so
+  // render/event-charts.js and the lab-panel builder stay event-type-agnostic.
+  const chartSeries = { ...series, valueDeg: lambdaUnwrapped.map((v) => v * RAD_TO_DEG) };
 
   const base = {
+    // id/input added for v0.5's export.js — additive only, doesn't touch
+    // any of this result's existing fields/shape (observer stays the
+    // string 'earth-geocenter', frame/source stay top-level, not nested
+    // under `reference`) so v0.4's own tests and panel formatter are
+    // unaffected. export.js reads both this legacy shape and the newer
+    // nested one via small accessor helpers rather than forcing a shape
+    // migration here.
+    id: `mars-retrograde-${startUtc.slice(0, 4)}`,
     type: 'retrograde-interval',
     target: 'mars',
     observer: 'earth-geocenter',
     frame: 'GEOCENTRIC_ECLIPJ2000',
+    input: { startUtc, endUtc, intervalHours },
     samples: { intervalHours, count: timesJd.length },
     solver: { method: 'bisection', toleranceSeconds: DEFAULT_TOLERANCE_SECONDS },
     opposition: null, // not computed this version — see v0.5 (Event Toolkit)
@@ -148,6 +178,7 @@ export function analyzeMarsRetrograde({ startUtc, endUtc, intervalHours = 6, eph
       start: null,
       end: null,
       note: 'No stationary points found in range — this window likely contains no Mars retrograde interval.',
+      series: chartSeries,
     };
   }
 
@@ -159,5 +190,6 @@ export function analyzeMarsRetrograde({ startUtc, endUtc, intervalHours = 6, eph
     source: displayMarsState.source,
     start: eventAt(firstPoint.epochJd, firstPoint.transition, 'kepler'),
     end: eventAt(secondPoint.epochJd, secondPoint.transition, 'kepler'),
+    series: chartSeries,
   };
 }
