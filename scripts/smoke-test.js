@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { solveEccentricAnomaly, elementsToPosition, normalizeAngle } from '../src/core/kepler.js';
 import {
-  elementsAtDate, julianDateFromDate, circularOrbitAngle, moonLocalPosition,
+  elementsAtDate, julianDateFromDate, dateFromJulianDate, circularOrbitAngle, moonLocalPosition,
   elementsVelocity, sampleOrbitPath,
 } from '../src/core/orbital-elements.js';
 import { compressDistance, compressSize, compressPosition, compressMoonOrbit } from '../src/core/scale.js';
@@ -20,6 +20,8 @@ import {
   createCameraState, setMode, setFocusBody, setSurfaceLocation, setSurfacePlanet,
   moveFreeFlight, enterGeocentric, rotateGeocentricView, computePose, CAMERA_MODES,
 } from '../src/core/camera-modes.js';
+import { unwrapAnglesRad, centralDiffAngularVelocityRadPerDay } from '../src/analysis/longitude.js';
+import { classifyMotion, findStationaryPoints, analyzeMarsRetrograde } from '../src/analysis/retrograde.js';
 
 // kepler: eccentric anomaly solver satisfies Kepler's equation
 {
@@ -470,6 +472,128 @@ import {
   assert.equal(state.center, 'SUN');
   assert.equal(state.frame, 'ECLIPJ2000');
   assert.deepEqual(state.validity, { startUtc: null, endUtc: null, note: null });
+}
+
+// orbital-elements: dateFromJulianDate is the exact inverse of julianDateFromDate
+{
+  const original = new Date('2026-09-04T12:34:56.789Z');
+  const jd = julianDateFromDate(original);
+  const roundTripped = dateFromJulianDate(jd);
+  // float64 round-trip through a /86400000 and *86400000 pair loses a
+  // sub-millisecond amount of precision at this epoch's magnitude — a few
+  // ms tolerance still catches any real bug (wrong constant, sign flip,
+  // unit mismatch) while not failing on ordinary float noise.
+  assert.ok(Math.abs(roundTripped.getTime() - original.getTime()) < 5);
+}
+
+// analysis/longitude: unwrapAnglesRad turns a 359°->0° crossing into
+// continuous progress, not a -359° jump (the acceptance criterion this
+// exists for; also fixes a bug in the roadmap's own example code, which
+// pushed the whole input array as element 0 instead of values[0])
+{
+  const deg = (d) => (d * Math.PI) / 180;
+  const wrapped = [deg(350), deg(355), deg(359), deg(1), deg(5)]; // crosses 360->0
+  const unwrapped = unwrapAnglesRad(wrapped);
+  assert.ok(Math.abs(unwrapped[0] - deg(350)) < 1e-9);
+  for (let i = 1; i < unwrapped.length; i += 1) {
+    assert.ok(unwrapped[i] > unwrapped[i - 1], 'unwrapped sequence must keep increasing across the 360deg crossing');
+  }
+  assert.ok(Math.abs(unwrapped[unwrapped.length - 1] - deg(365)) < 1e-9);
+}
+
+// analysis/longitude: centralDiffAngularVelocityRadPerDay recovers a
+// constant rate from a synthetic linear lambda(t), including at the array
+// edges (one-sided difference there, not NaN)
+{
+  const timesJd = [0, 1, 2, 3, 4];
+  const rateRadPerDay = 0.5;
+  const unwrapped = timesJd.map((t) => rateRadPerDay * t);
+  const velocity = centralDiffAngularVelocityRadPerDay(unwrapped, timesJd);
+  for (const v of velocity) {
+    assert.ok(Math.abs(v - rateRadPerDay) < 1e-9);
+  }
+}
+
+// analysis/retrograde: classifyMotion follows the roadmap's sign convention
+{
+  assert.equal(classifyMotion(-0.1), 'retrograde');
+  assert.equal(classifyMotion(0.1), 'direct');
+}
+
+// analysis/retrograde: findStationaryPoints refines a synthetic sin(t)
+// zero-crossing to within tolerance, and the refined epoch is NOT one of
+// the coarse sample times — the "not an unrefined sample time" acceptance
+// criterion, checked directly rather than just hoped for
+{
+  const periodDays = 10;
+  const omega = (2 * Math.PI) / periodDays;
+  const lambdaDot = (t) => Math.sin(omega * t); // analytic zero-crossing at t = periodDays/2 = 5
+  const timesJd = [0, 2, 4, 6, 8, 10];
+  const coarseValues = timesJd.map(lambdaDot);
+  const toleranceSeconds = 60;
+  const stationary = findStationaryPoints(timesJd, coarseValues, lambdaDot, { toleranceSeconds });
+
+  assert.equal(stationary.length, 1);
+  const [point] = stationary;
+  assert.ok(Math.abs(point.epochJd - 5) < toleranceSeconds / 86400);
+  assert.equal(point.method, 'bisection');
+  assert.equal(point.toleranceSeconds, toleranceSeconds);
+  // The refined epoch must not equal either raw coarse-grid bracket
+  // endpoint (4 or 6) — the "not an unrefined sample time" acceptance
+  // criterion, checked directly.
+  assert.notEqual(point.epochJd, 4);
+  assert.notEqual(point.epochJd, 6);
+}
+
+// analysis/retrograde: analyzeMarsRetrograde offline reference case — a
+// real historical Mars retrograde window (Nov 2007-Jan 2008), forced to
+// ephemerisSource:'kepler' so this is fully deterministic and needs no
+// network (see docs/ROADMAP.md's v0.4 acceptance criterion re: an offline
+// reference dataset). Dates below were captured by actually running this
+// implementation against the window, not assumed in advance — they land
+// within a few days of the real astronomical stationary points for this
+// well-documented 2007-2008 retrograde, which is the point of the test.
+{
+  const result = analyzeMarsRetrograde({
+    startUtc: '2007-09-01T00:00:00Z', endUtc: '2008-03-01T00:00:00Z',
+    intervalHours: 6, ephemerisSource: 'kepler',
+  });
+
+  assert.equal(result.type, 'retrograde-interval');
+  assert.equal(result.target, 'mars');
+  assert.equal(result.observer, 'earth-geocenter');
+  assert.equal(result.frame, 'GEOCENTRIC_ECLIPJ2000');
+  assert.equal(result.source, 'kepler', 'never horizons-live — see docs/accuracy.md, structurally unreachable here');
+  assert.equal(result.samples.intervalHours, 6);
+  assert.ok(result.samples.count > 0);
+  assert.equal(result.solver.method, 'bisection');
+  assert.equal(result.solver.toleranceSeconds, 60);
+  assert.equal(result.opposition, null);
+
+  assert.ok(result.start, 'expected a first stationary point in this known-retrograde window');
+  assert.ok(result.end, 'expected a second stationary point in this known-retrograde window');
+  assert.equal(result.start.event, 'stationary-direct-to-retrograde');
+  assert.equal(result.end.event, 'stationary-retrograde-to-direct');
+  assert.ok(result.end.epochJd > result.start.epochJd);
+
+  const firstDate = new Date(result.start.epochUtc);
+  const secondDate = new Date(result.end.epochUtc);
+  assert.ok(firstDate >= new Date('2007-11-01T00:00:00Z') && firstDate <= new Date('2007-11-30T00:00:00Z'),
+    `first stationary point ${result.start.epochUtc} expected in Nov 2007`);
+  assert.ok(secondDate >= new Date('2008-01-15T00:00:00Z') && secondDate <= new Date('2008-02-15T00:00:00Z'),
+    `second stationary point ${result.end.epochUtc} expected in Jan-Feb 2008`);
+}
+
+// analysis/retrograde: a short window with no retrograde interval reports
+// "no stationary points found" rather than crashing or fabricating a result
+{
+  const result = analyzeMarsRetrograde({
+    startUtc: '2007-09-01T00:00:00Z', endUtc: '2007-09-10T00:00:00Z',
+    intervalHours: 6, ephemerisSource: 'kepler',
+  });
+  assert.equal(result.start, null);
+  assert.equal(result.end, null);
+  assert.ok(result.note && result.note.length > 0);
 }
 
 console.log('PASS: smoke-test.js all assertions passed');

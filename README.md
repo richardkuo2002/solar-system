@@ -78,6 +78,31 @@ Horizons parsing/fallback logic directly under Node:
 npm test
 ```
 
+## Mars Retrograde Lab (v0.4)
+
+A new "Retrograde Lab" panel (top-left) is the app's first real
+astronomical-phenomenon analysis tool: pick a date range and it finds
+Mars's apparent retrograde loop as seen from Earth's geocenter.
+
+- **Method** — computes Mars's geocentric ecliptic longitude
+  (`λ = atan2(Δy, Δx)` of the heliocentric Mars-minus-Earth AU vector) at
+  each sample point, unwraps it for continuity across the 0°/360°
+  boundary, takes its rate of change via central difference, then finds
+  the two zero-crossings (stationary points) via a coarse scan + bisection
+  refinement — never reporting a raw sample time as the answer.
+- **Visuals** — three synchronized views: the Earth-to-Mars line-of-sight
+  drawn into the main 3D scene (best viewed in Heliocentric or Free-flight
+  camera mode), Mars's apparent path plotted against a reference grid, and
+  a λ(t) timeline with both stationary points and the retrograde interval
+  marked. A scrub slider moves all three together.
+- **Limitations** — geometric longitude only, no light-time correction; the
+  apparent-path view plots raw AU coordinates, not a sky-projected RA/Dec
+  view; opposition isn't computed this version (planned for a future
+  Event Toolkit release); results outside the Standish table's ~1800–2050
+  validity window are increasingly approximate; the dense scan always uses
+  Kepler propagation internally regardless of the source dropdown (see
+  [docs/accuracy.md](docs/accuracy.md) for why).
+
 ## Data sources
 
 - Orbital elements: JPL Solar System Dynamics low-precision Keplerian

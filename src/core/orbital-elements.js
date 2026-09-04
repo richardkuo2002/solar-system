@@ -18,6 +18,11 @@ export function julianDateFromDate(jsDate) {
   return jsDate.getTime() / MS_PER_DAY + 2440587.5;
 }
 
+/** Inverse of julianDateFromDate — JS Date (UTC) for a Julian Date. */
+export function dateFromJulianDate(julianDate) {
+  return new Date((julianDate - 2440587.5) * MS_PER_DAY);
+}
+
 function at(pair, T) {
   const [value, ratePerCentury] = pair;
   return value + ratePerCentury * T;

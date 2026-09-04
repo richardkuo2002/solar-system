@@ -134,6 +134,77 @@ html, body {
   color: #99b8d6;
 }
 
+.retrograde-lab {
+  pointer-events: auto;
+  position: fixed;
+  top: 96px;
+  left: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  width: 340px;
+  background: rgba(10, 10, 20, 0.75);
+  color: #eee;
+  border: 1px solid #444;
+  border-radius: 4px;
+  font: 13px system-ui, sans-serif;
+}
+
+.retrograde-lab-title {
+  font-weight: 600;
+}
+
+.retrograde-lab-fixed {
+  font-size: 11px;
+  color: #888;
+}
+
+.retrograde-lab-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.retrograde-lab-form input,
+.retrograde-lab-form select,
+.retrograde-lab-form button {
+  font: 13px system-ui, sans-serif;
+  padding: 4px 6px;
+  background: #222;
+  color: #eee;
+  border: 1px solid #444;
+  border-radius: 4px;
+}
+
+.retrograde-lab-form input[type='date'] {
+  width: 130px;
+}
+
+.retrograde-lab-form input[type='number'] {
+  width: 56px;
+}
+
+.retrograde-lab-results {
+  margin: 0;
+  padding: 6px 0;
+  white-space: pre-wrap;
+  font: 12px system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  color: #eee;
+}
+
+.retrograde-lab-canvas {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid #444;
+  border-radius: 4px;
+  align-self: center;
+}
+
+.retrograde-lab-scrub {
+  width: 100%;
+}
+
 .hover-label {
   position: fixed;
   pointer-events: none;
