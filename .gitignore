@@ -22,5 +22,9 @@ logs/
 *.log
 .codegraph/
 
-# Local-only docs (not tracked)
-docs/
+# Local-only docs (not tracked) — specific files, not the whole directory,
+# so docs/accuracy.md (a real shipped deliverable, linked from README) stays
+# trackable. A blanket `docs/` line would also block re-including it: git
+# won't look inside an excluded directory even with a `!` negation.
+docs/ROADMAP.md
+docs/NOTES.md

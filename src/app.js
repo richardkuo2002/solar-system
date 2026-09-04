@@ -11,16 +11,16 @@ import { initTextureLoader } from './render/texture-loader.js';
 import { createTimeControlsUI, createViewModeUI, createSurfaceControlsUI } from './render/ui-controls.js';
 import { createHoverLabels } from './render/hover-labels.js';
 import { createAttributionFooter } from './render/attribution-footer.js';
+import { createEphemerisHud } from './render/ephemeris-hud.js';
 import { createCameraRig } from './render/camera-rig.js';
 import { buildAsteroidBelt } from './render/asteroid-belt.js';
 import {
   createTimeController, tick, togglePlayPause, setSpeed, reverse, jumpToDate,
 } from './core/time-controller.js';
-import { createCameraState, setMode, enterGeocentric, computePose, CAMERA_MODES } from './core/camera-modes.js';
-import { elementsAtDate, julianDateFromDate, moonLocalPosition, circularOrbitAngle } from './core/orbital-elements.js';
-import { elementsToPosition } from './core/kepler.js';
+import { createCameraState, setMode, setFocusBody, enterGeocentric, computePose, CAMERA_MODES } from './core/camera-modes.js';
+import { julianDateFromDate, moonLocalPosition, circularOrbitAngle } from './core/orbital-elements.js';
 import { compressSize } from './core/scale.js';
-import { getPositionSync } from './core/ephemeris.js';
+import { getBodyState, sunBodyState } from './core/ephemeris.js';
 import { PLANETS, PLANET_ORDER, SUN } from './data/planets.js';
 import { MOONS, MOON_ORDER } from './data/moons.js';
 import { COMETS, COMET_ORDER } from './data/comets.js';
@@ -169,8 +169,27 @@ registerLazy(charonMesh, [{ textureKey: CHARON.textureKey, material: charonMesh.
 
 scene.add(buildAsteroidBelt());
 
-createHoverLabels(canvas, camera, pickableMeshes, loadFullFor);
+// Display name (mesh.name, already set to bodyData.name by the builders in
+// render/bodies.js) -> bodyKey, for click-to-select. Built from every data
+// table a mesh can come from — Sun and Charon aren't in the four PLANET/
+// MOON/COMET/DWARF_PLANET tables the rest come from, so they're added
+// explicitly rather than silently missing from a naive four-table loop.
+const nameToKey = new Map([[SUN.name, 'sun'], [CHARON.name, 'charon']]);
+for (const key of PLANET_ORDER) nameToKey.set(PLANETS[key].name, key);
+for (const key of MOON_ORDER) nameToKey.set(MOONS[key].name, key);
+for (const key of COMET_ORDER) nameToKey.set(COMETS[key].name, key);
+for (const key of DWARF_PLANET_ORDER) nameToKey.set(DWARF_PLANETS[key].name, key);
+
+let selectedBodyKey = 'sun';
+
+createHoverLabels(canvas, camera, pickableMeshes, loadFullFor, (mesh) => {
+  const key = nameToKey.get(mesh.name);
+  if (!key) return;
+  selectedBodyKey = key;
+  cameraState = setFocusBody(cameraState, key);
+});
 createAttributionFooter(document.getElementById('ui-root'));
+const ephemerisHud = createEphemerisHud(document.getElementById('ui-root'));
 
 // Background idle queue — everything not already eager-loaded (Sun/Earth/
 // Moon) or triggered by user interaction eventually loads full-res anyway,
@@ -190,59 +209,68 @@ createAttributionFooter(document.getElementById('ui-root'));
 
 // Scene-space positions of every body this frame (planets + Sun), keyed by
 // bodyKey — the `bodyPositions` map camera-modes.js#computePose expects.
+// Unchanged shape/consumer: camera-rig.js/computePose don't know or care
+// this now comes from a normalized body-state instead of a raw {x,y,z}.
 const scenePositions = { sun: { x: 0, y: 0, z: 0 } };
 
-/** Local Kepler fallback — also what ephemeris.js uses when Horizons is unavailable. */
-function localPlanetPosition(bodyKey, jsDate) {
-  const els = elementsAtDate(PLANETS[bodyKey].elements, julianDateFromDate(jsDate));
-  return elementsToPosition(els);
-}
+// Every body with real heliocentric `elements` — everything getBodyState
+// can produce a normalized AU body-state for (planets go through Horizons
+// when available; comets/dwarf-planets fall through to Kepler for free
+// since they have no HORIZONS_CODES entry — see core/ephemeris.js).
+const BODY_REGISTRY = [
+  ...PLANET_ORDER.map((key) => ({ key, elements: PLANETS[key].elements, object3d: planetGroups[key] })),
+  ...COMET_ORDER.map((key) => ({ key, elements: COMETS[key].elements, object3d: cometMeshes[key] })),
+  ...DWARF_PLANET_ORDER.map((key) => ({ key, elements: DWARF_PLANETS[key].elements, object3d: dwarfPlanetGroups[key] })),
+];
 
-function updateBodyPositions(currentDate) {
+// bodyKey -> latest body-state (see core/body-state.js) — read by the HUD.
+// Moons/Charon are intentionally absent (see plan/docs/accuracy.md: they
+// stay outside the AU contract, parent-relative scene units only).
+let bodyStates = { sun: sunBodyState(new Date()) };
+
+function updateAllPositions(currentDate) {
   const currentJD = julianDateFromDate(currentDate);
   sunMesh.rotation.y = circularOrbitAngle(currentJD - startJD, SUN.rotationPeriodDays);
+  bodyStates.sun = sunBodyState(currentDate);
+
+  for (const { key, elements, object3d } of BODY_REGISTRY) {
+    const state = getBodyState(key, currentDate, elements);
+    const scenePos = toScenePosition(state.positionAu);
+    object3d.position.set(scenePos.x, scenePos.y, scenePos.z);
+    scenePositions[key] = scenePos;
+    bodyStates[key] = state;
+  }
+
+  // Axial spin + moons: parent-relative, out of the AU contract (see
+  // docs/accuracy.md) — kept as its own loop rather than forced through
+  // getBodyState.
   for (const key of PLANET_ORDER) {
     const planetData = PLANETS[key];
-    const auPos = getPositionSync(key, currentDate, localPlanetPosition);
-    const scenePos = toScenePosition(auPos);
-    planetGroups[key].position.set(scenePos.x, scenePos.y, scenePos.z);
-    scenePositions[key] = scenePos;
-    // Axial spin — on the planet mesh itself, not the group, so Saturn's
-    // ring doesn't spin along with it.
     planetMeshes[key].rotation.y = circularOrbitAngle(currentJD - startJD, planetData.rotationPeriodDays);
-
     const parentSceneRadius = compressSize(planetData.radiusKm);
     for (const { mesh, moonData } of moonMeshesByParent[key]) {
       const localPos = moonLocalPosition(moonData, planetData.radiusKm, parentSceneRadius, currentJD, startJD);
       mesh.position.set(localPos.x, localPos.y, localPos.z);
     }
   }
-}
-
-/** Comets always use local Kepler math directly — no Horizons lookup (out of scope for v1). */
-function updateCometPositions(currentDate) {
-  const currentJD = julianDateFromDate(currentDate);
-  for (const key of COMET_ORDER) {
-    const els = elementsAtDate(COMETS[key].elements, currentJD);
-    const scenePos = toScenePosition(elementsToPosition(els));
-    cometMeshes[key].position.set(scenePos.x, scenePos.y, scenePos.z);
-    scenePositions[key] = scenePos;
-  }
-}
-
-/** Dwarf planets, same treatment as comets — local Kepler math, no Horizons lookup. Charon orbits Pluto locally, same helper moons use. */
-function updateDwarfPlanetPositions(currentDate) {
-  const currentJD = julianDateFromDate(currentDate);
-  for (const key of DWARF_PLANET_ORDER) {
-    const els = elementsAtDate(DWARF_PLANETS[key].elements, currentJD);
-    const scenePos = toScenePosition(elementsToPosition(els));
-    dwarfPlanetGroups[key].position.set(scenePos.x, scenePos.y, scenePos.z);
-    scenePositions[key] = scenePos;
-  }
   const plutoData = DWARF_PLANETS.pluto;
   const plutoSceneRadius = compressSize(plutoData.radiusKm);
   const charonLocalPos = moonLocalPosition(CHARON, plutoData.radiusKm, plutoSceneRadius, currentJD, startJD);
   charonMesh.position.set(charonLocalPos.x, charonLocalPos.y, charonLocalPos.z);
+}
+
+/** MOONS/CHARON keyed lookup + display name + parent name for the HUD's
+ *  moon branch — the only place moon-vs-AU-body branching logic lives. */
+function moonHudInfo(bodyKey) {
+  const moonData = MOONS[bodyKey] ?? (bodyKey === 'charon' ? CHARON : null);
+  if (!moonData) return null;
+  const parentName = moonData.parent === 'pluto' ? DWARF_PLANETS.pluto.name : PLANETS[moonData.parent].name;
+  return { name: moonData.name, parentName };
+}
+
+function bodyDisplayName(bodyKey) {
+  return PLANETS[bodyKey]?.name ?? COMETS[bodyKey]?.name ?? DWARF_PLANETS[bodyKey]?.name
+    ?? MOONS[bodyKey]?.name ?? (bodyKey === 'charon' ? CHARON.name : null) ?? SUN.name;
 }
 
 let timeState = createTimeController({ startDate: new Date(), speedDaysPerSecond: 1 });
@@ -261,9 +289,7 @@ const timeUI = createTimeControlsUI(document.getElementById('ui-root'), {
   },
   onJumpToDate(date) {
     timeState = jumpToDate(timeState, date);
-    updateBodyPositions(timeState.currentDate);
-    updateCometPositions(timeState.currentDate);
-    updateDwarfPlanetPositions(timeState.currentDate);
+    updateAllPositions(timeState.currentDate);
     timeUI.setCurrentDateDisplay(timeState.currentDate);
   },
 });
@@ -300,10 +326,9 @@ createSurfaceControlsUI(document.getElementById('ui-root'), PLANET_ORDER, (plane
   loadFullFor(planetMeshes[planet]);
 });
 
-updateBodyPositions(timeState.currentDate);
-updateCometPositions(timeState.currentDate);
-updateDwarfPlanetPositions(timeState.currentDate);
+updateAllPositions(timeState.currentDate);
 cameraRig.applyPose(computePose(cameraState, scenePositions));
+ephemerisHud.update(timeState.currentDate, bodyDisplayName(selectedBodyKey), bodyStates[selectedBodyKey] ?? null, moonHudInfo(selectedBodyKey)?.parentName ?? null);
 
 const clock = new THREE.Clock();
 
@@ -312,10 +337,9 @@ function animate() {
   const delta = clock.getDelta();
 
   timeState = tick(timeState, delta);
-  updateBodyPositions(timeState.currentDate);
-  updateCometPositions(timeState.currentDate);
-  updateDwarfPlanetPositions(timeState.currentDate);
+  updateAllPositions(timeState.currentDate);
   timeUI.setCurrentDateDisplay(timeState.currentDate);
+  ephemerisHud.update(timeState.currentDate, bodyDisplayName(selectedBodyKey), bodyStates[selectedBodyKey] ?? null, moonHudInfo(selectedBodyKey)?.parentName ?? null);
 
   if (cameraState.mode === CAMERA_MODES.FREE_FLIGHT) {
     cameraState = cameraRig.updateFreeFlight(cameraState, delta);

@@ -10,7 +10,7 @@
 
 - **8 大行星**(水星至海王星)+ **冥王星** + **7 顆衛星**(月球、木衛一 Io、木衛二 Europa、木衛三 Ganymede、木衛四 Callisto、土衛六 Titan、海衛一 Triton)+ **冥衛一 Charon** + **哈雷彗星** + 靜態小行星帶,位置皆以真實的低精度克卜勒軌道要素計算(Standish 1992 / JPL SSD)。
 - 每顆行星都有真實的自轉與自轉傾角(NASA 行星資料表數值),包含金星、天王星真實的逆向自轉。
-- **即時位置資料**取自 [NASA JPL Horizons](https://ssd.jpl.nasa.gov/horizons/) API,離線或 API 無法連線時會自動、無感切換回本地端的克卜勒方程式計算——渲染迴圈不會因網路請求而卡頓。
+- **即時位置資料**取自 [NASA JPL Horizons](https://ssd.jpl.nasa.gov/horizons/) API,離線或 API 無法連線時會自動、無感切換回本地端的克卜勒方程式計算——渲染迴圈不會因網路請求而卡頓。畫面上的 HUD 會即時顯示目前實際使用的資料來源、參考中心與座標系,詳細模型與已知限制見 [docs/accuracy.md](docs/accuracy.md)(英文)。
 - **4 種攝影機模式**:
   - **日心俯瞰(Heliocentric top-down)**——經典的太陽系示意圖視角,可用滑鼠拖曳環繞。
   - **自由飛行(Free-flight)**——WASD + 滑鼠視角,可自由飛到場景中任何位置。

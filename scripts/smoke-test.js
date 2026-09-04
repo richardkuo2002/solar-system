@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
-import { solveEccentricAnomaly, elementsToPosition } from '../src/core/kepler.js';
+import { solveEccentricAnomaly, elementsToPosition, normalizeAngle } from '../src/core/kepler.js';
 import {
   elementsAtDate, julianDateFromDate, circularOrbitAngle, moonLocalPosition,
+  elementsVelocity, sampleOrbitPath,
 } from '../src/core/orbital-elements.js';
 import { compressDistance, compressSize, compressPosition, compressMoonOrbit } from '../src/core/scale.js';
 import { PLANETS, PLANET_ORDER } from '../src/data/planets.js';
@@ -10,7 +11,8 @@ import { COMETS, COMET_ORDER } from '../src/data/comets.js';
 import { DWARF_PLANETS, DWARF_PLANET_ORDER, CHARON } from '../src/data/dwarf-planets.js';
 import { hasRealTextureFile } from '../src/core/texture-resolution.js';
 import { parseVectorsBlock, HorizonsUnavailableError } from '../src/core/horizons-client.js';
-import { getPositionSync, isHorizonsAvailable, resetCircuitBreaker } from '../src/core/ephemeris.js';
+import { getBodyState, sunBodyState, isHorizonsAvailable, resetCircuitBreaker } from '../src/core/ephemeris.js';
+import { createBodyState } from '../src/core/body-state.js';
 import {
   createTimeController, tick, play, pause, setSpeed, reverse, jumpToDate,
 } from '../src/core/time-controller.js';
@@ -33,6 +35,24 @@ import {
   assert.ok(Math.abs(r - 1) < 1e-6);
 }
 
+// kepler: high-eccentricity mean anomaly converges too (comet-like orbits,
+// not just the near-circular planet case above)
+{
+  const M = 1.0, e = 0.9;
+  const E = solveEccentricAnomaly(M, e);
+  assert.ok(Math.abs((E - e * Math.sin(E)) - M) < 1e-5);
+}
+
+// kepler: normalizeAngle wraps negative/large input into [0, 2*PI)
+{
+  const a = normalizeAngle(-Math.PI / 2);
+  assert.ok(a >= 0 && a < 2 * Math.PI);
+  assert.ok(Math.abs(a - (3 * Math.PI / 2)) < 1e-9);
+  const b = normalizeAngle(5 * Math.PI);
+  assert.ok(b >= 0 && b < 2 * Math.PI);
+  assert.ok(Math.abs(b - Math.PI) < 1e-9);
+}
+
 // orbital-elements: every v1 planet produces a finite, non-degenerate
 // position at both J2000 and today
 {
@@ -45,6 +65,37 @@ import {
       assert.ok(Math.hypot(pos.x, pos.y, pos.z) > 0, `${key} collapsed to the origin`);
     }
   }
+}
+
+// orbital-elements: julianDateFromDate is a correct J2000 epoch anchor —
+// the one numeric-correctness check (vs. finiteness) on this function
+{
+  const jd = julianDateFromDate(new Date('2000-01-01T12:00:00Z'));
+  assert.equal(jd, 2451545.0, 'J2000.0 must map to exactly JD 2451545.0');
+}
+
+// orbital-elements: elementsVelocity is finite and non-degenerate for
+// every planet — mirrors the position-finiteness block above, new function
+{
+  const jd = julianDateFromDate(new Date());
+  for (const key of PLANET_ORDER) {
+    const v = elementsVelocity(PLANETS[key].elements, jd);
+    assert.ok(Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z), `${key} produced a non-finite velocity`);
+    assert.ok(Math.hypot(v.x, v.y, v.z) > 0, `${key} has zero velocity`);
+  }
+}
+
+// orbital-elements: sampleOrbitPath returns a finite, closed loop —
+// segments+1 points, first and last coincide (mean anomaly 0 and 2*PI)
+{
+  const jd = julianDateFromDate(new Date());
+  const points = sampleOrbitPath(PLANETS.earth.elements, jd, 8);
+  assert.equal(points.length, 9);
+  for (const p of points) {
+    assert.ok(Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z));
+  }
+  const first = points[0], last = points[points.length - 1];
+  assert.ok(Math.abs(first.x - last.x) < 1e-6 && Math.abs(first.y - last.y) < 1e-6 && Math.abs(first.z - last.z) < 1e-6, 'orbit loop must close');
 }
 
 // orbital-elements: comets produce a finite, non-degenerate position too —
@@ -297,7 +348,8 @@ import {
 }
 
 // horizons-client: parses a realistic $$SOE/$$EOE vector-table block,
-// correctly skipping the VX/VY/VZ velocity line (no live network call)
+// including the VX/VY/VZ velocity line (VEC_TABLE='2' — position and
+// velocity in the same response, no live network call)
 {
   const sample = [
     '$$SOE',
@@ -310,6 +362,22 @@ import {
   assert.ok(Math.abs(pos.x - 0.3050325123456789) < 1e-9);
   assert.ok(Math.abs(pos.y - (-0.4031234567890123)) < 1e-9);
   assert.ok(Math.abs(pos.z - (-0.03123456789012345)) < 1e-9);
+  assert.ok(Math.abs(pos.vx - 0.01987654321098765) < 1e-9);
+  assert.ok(Math.abs(pos.vy - 0.01234567890123456) < 1e-9);
+  assert.ok(Math.abs(pos.vz - (-0.001234567890123456)) < 1e-9);
+}
+
+// horizons-client: parseVectorsBlock tolerates a response with no velocity
+// line (VEC_TABLE='1'-style) — velocity defaults to zero, not a crash
+{
+  const sample = [
+    '$$SOE',
+    '2461104.500000000 = A.D. 2026-Mar-01 00:00:00.0000 TDB ',
+    ' X = 1.0E+00 Y = 0.0E+00 Z = 0.0E+00',
+    '$$EOE',
+  ].join('\n');
+  const pos = parseVectorsBlock(sample);
+  assert.deepEqual({ vx: pos.vx, vy: pos.vy, vz: pos.vz }, { vx: 0, vy: 0, vz: 0 });
 }
 
 // horizons-client: malformed/missing markers throw HorizonsUnavailableError, not a crash
@@ -318,20 +386,23 @@ import {
   assert.throws(() => parseVectorsBlock('$$SOE\nnothing useful\n$$EOE'), HorizonsUnavailableError);
 }
 
-// ephemeris: getPositionSync always returns synchronously (never awaits
-// Horizons in the caller), and falls back to source:'local' when the
-// (stubbed) fetch fails — the render loop must never crash or block on a
-// dead network. No live network calls: global.fetch is stubbed manually.
+// ephemeris: getBodyState always returns synchronously (never awaits
+// Horizons in the caller), and falls back to source:'kepler',
+// quality:'approximate' with a finite position+velocity when the (stubbed)
+// fetch fails — the render loop must never crash or block on a dead
+// network. No live network calls: global.fetch is stubbed manually.
 {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = () => Promise.reject(new Error('stubbed: network down'));
   resetCircuitBreaker();
 
   const jsDate = new Date('2026-06-15T00:00:00Z');
-  const local = (bodyKey) => ({ x: 1, y: 2, z: 3, __bodyKey: bodyKey });
-  const result = getPositionSync('earth', jsDate, local);
-  assert.equal(result.source, 'local');
-  assert.deepEqual({ x: result.x, y: result.y, z: result.z }, { x: 1, y: 2, z: 3 });
+  const result = getBodyState('mars', jsDate, PLANETS.mars.elements);
+  assert.equal(result.source, 'kepler');
+  assert.equal(result.quality, 'approximate');
+  assert.equal(result.bodyId, 'mars');
+  assert.ok(Number.isFinite(result.positionAu.x) && Number.isFinite(result.positionAu.y) && Number.isFinite(result.positionAu.z));
+  assert.ok(Number.isFinite(result.velocityAuPerDay.x) && Number.isFinite(result.velocityAuPerDay.y) && Number.isFinite(result.velocityAuPerDay.z));
 
   // let the background fetch attempt settle so the circuit breaker trips
   // and so there's no unhandled-rejection warning when the process exits
@@ -340,6 +411,65 @@ import {
 
   globalThis.fetch = originalFetch;
   resetCircuitBreaker();
+}
+
+// ephemeris: a populated Horizons cache entry is reported as
+// source:'horizons-cache', quality:'authoritative' on the next lookup for
+// the same body/date bucket — the cache-hit path, not previously covered
+{
+  const originalFetch = globalThis.fetch;
+  const fixtureResult = [
+    '$$SOE',
+    '2461104.500000000 = A.D. 2026-Mar-01 00:00:00.0000 TDB ',
+    ' X = 1.234567890123456E+00 Y = 2.345678901234567E-01 Z =-3.456789012345678E-02',
+    ' VX=-4.567890123456789E-03 VY= 5.678901234567890E-03 VZ= 6.789012345678901E-04',
+    '$$EOE',
+  ].join('\n');
+  globalThis.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ result: fixtureResult }) });
+  resetCircuitBreaker();
+
+  const jsDate = new Date('2026-03-01T00:00:00Z');
+  const first = getBodyState('mars', jsDate, PLANETS.mars.elements);
+  assert.equal(first.source, 'kepler', 'first lookup (no cache yet) still falls back to kepler this frame');
+
+  // let the background fetch resolve and populate the cache
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  const second = getBodyState('mars', jsDate, PLANETS.mars.elements);
+  assert.equal(second.source, 'horizons-cache');
+  assert.equal(second.quality, 'authoritative');
+  assert.ok(Math.abs(second.positionAu.x - 1.234567890123456) < 1e-9);
+  assert.ok(Math.abs(second.positionAu.y - 0.2345678901234567) < 1e-9);
+  assert.ok(Math.abs(second.positionAu.z - (-0.03456789012345678)) < 1e-9);
+  assert.ok(Math.abs(second.velocityAuPerDay.x - (-0.004567890123456789)) < 1e-9);
+  assert.ok(second.validity.note.includes('fetched'), 'cache-hit validity.note should record fetch time + source URL');
+
+  globalThis.fetch = originalFetch;
+  resetCircuitBreaker();
+}
+
+// ephemeris: sunBodyState is always the exact origin, authoritative — the
+// Sun has no `elements`/Horizons code, doesn't go through getBodyState
+{
+  const state = sunBodyState(new Date());
+  assert.deepEqual(state.positionAu, { x: 0, y: 0, z: 0 });
+  assert.deepEqual(state.velocityAuPerDay, { x: 0, y: 0, z: 0 });
+  assert.equal(state.quality, 'authoritative');
+  assert.equal(state.bodyId, 'sun');
+}
+
+// body-state: createBodyState round-trips every field it's given, and
+// fills the default `validity` shape when omitted
+{
+  const state = createBodyState({
+    bodyId: 'x', epochJd: 1, epochUtc: '2026-01-01T00:00:00Z',
+    source: 'kepler', sourceDetail: 'test', quality: 'approximate',
+    positionAu: { x: 1, y: 2, z: 3 }, velocityAuPerDay: { x: 4, y: 5, z: 6 },
+  });
+  assert.equal(state.bodyId, 'x');
+  assert.equal(state.center, 'SUN');
+  assert.equal(state.frame, 'ECLIPJ2000');
+  assert.deepEqual(state.validity, { startUtc: null, endUtc: null, note: null });
 }
 
 console.log('PASS: smoke-test.js all assertions passed');
