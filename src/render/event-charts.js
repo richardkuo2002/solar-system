@@ -1,14 +1,19 @@
-// Hand-rolled Canvas 2D drawing for the Event Toolkit's chart blocks:
-// a two-body apparent-path plot and a value-vs-time timeline. Originally
-// built for the Mars Retrograde Lab (v0.4, retrograde-charts.js) and
-// generalized here for v0.5's other event types (opposition/conjunction,
-// elongation, phase/illumination) — both functions were already
+// Hand-rolled Canvas 2D drawing for analysis-panel chart blocks: a
+// two-body apparent-path plot, a value-vs-time timeline, and (v0.6) a
+// fixed-axis altitude-vs-time-of-day curve. Originally built for the Mars
+// Retrograde Lab (v0.4, retrograde-charts.js) and generalized here for
+// v0.5's other Event Toolkit event types (opposition/conjunction,
+// elongation, phase/illumination) — both original functions were already
 // mathematically generic on their input series; only field names and
-// retrograde-flavored naming needed generalizing. No charting dependency:
-// this codebase has zero browser-facing npm dependencies and the actual
-// drawing need (grid + polyline + a few markers) is well within plain
-// <canvas> 2D — adding a library for this would be new, unrequested
-// complexity.
+// retrograde-flavored naming needed generalizing. v0.6's Observer Mode
+// panel (src/render/observer-panel.js) is a second, independent consumer
+// of this file, using only drawAltitudeCurveCanvas — its chart needs a
+// FIXED 0°-referenced axis and a horizon line, which the autoscaled
+// drawLongitudeTimelineCanvas can't give it, hence the new function rather
+// than reusing that one. No charting dependency: this codebase has zero
+// browser-facing npm dependencies and the actual drawing need (grid +
+// polyline + a few markers) is well within plain <canvas> 2D — adding a
+// library for this would be new, unrequested complexity.
 
 const GRID_COLOR = '#333';
 const AXIS_COLOR = '#555';
@@ -16,6 +21,8 @@ const PATH_COLOR = '#6cf';
 const MARKER_COLOR = '#f80';
 const CURSOR_COLOR = '#fff';
 const HIGHLIGHT_BAND_COLOR = 'rgba(255,140,0,0.18)';
+const HORIZON_COLOR = '#f66';
+const TICK_LABEL_COLOR = '#888';
 
 function clearCanvas(ctx, canvasEl) {
   ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
@@ -195,4 +202,79 @@ export function highlightCursorOnCharts(canvasEl2, canvasEl3, series, cursorJd) 
     ctx.fillStyle = CURSOR_COLOR;
     ctx.beginPath(); ctx.arc(px, py, 3, 0, Math.PI * 2); ctx.fill();
   }
+}
+
+/**
+ * Altitude-vs-time-of-day chart for v0.6 Observer Mode. FIXED y-axis
+ * [-90, 90] (NOT autoscaled like drawLongitudeTimelineCanvas) so the
+ * horizon (altDeg=0) always sits at a meaningful, comparable height across
+ * different targets/dates; x-axis is UTC hour-of-day (0,3,...,24h), not
+ * raw JD. `series` needs `{timesJd, altDeg}`; `events` (optional,
+ * analyzeObserver's `result.events`) get markers labeled by their event
+ * type (rise/transit/set/lower-transit).
+ */
+export function drawAltitudeCurveCanvas(canvasEl, series, events = []) {
+  const ctx = canvasEl.getContext('2d');
+  const { timesJd, altDeg } = series;
+  clearCanvas(ctx, canvasEl);
+  if (!timesJd || timesJd.length === 0) return;
+
+  const minT = timesJd[0];
+  const maxT = timesJd[timesJd.length - 1];
+  const spanT = maxT - minT || 1;
+  const pad = 24;
+  const w = canvasEl.width - pad * 2;
+  const h = canvasEl.height - pad * 2;
+
+  const toPx = (t, alt) => ({
+    px: pad + ((t - minT) / spanT) * w,
+    py: canvasEl.height - pad - ((alt - -90) / 180) * h, // fixed [-90,90] range
+  });
+
+  // horizon line (altDeg = 0) — the whole point of this chart, drawn
+  // before the grid/axis so the data polyline stays on top.
+  const horizonY = toPx(minT, 0).py;
+  ctx.strokeStyle = HORIZON_COLOR;
+  ctx.setLineDash([4, 3]);
+  ctx.beginPath(); ctx.moveTo(pad, horizonY); ctx.lineTo(canvasEl.width - pad, horizonY); ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.strokeStyle = AXIS_COLOR;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(pad, pad, w, h);
+
+  // UTC hour-of-day x-axis ticks, every 3 hours.
+  ctx.fillStyle = TICK_LABEL_COLOR;
+  ctx.font = '9px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  for (let hour = 0; hour <= 24; hour += 3) {
+    const t = minT + (hour / 24) * spanT;
+    const { px } = toPx(t, -90);
+    ctx.fillText(String(hour), px, canvasEl.height - pad + 10);
+  }
+  ctx.textAlign = 'left';
+  ctx.fillText('-90°', 2, canvasEl.height - pad + 3);
+  ctx.fillText('90°', 2, pad + 3);
+
+  ctx.strokeStyle = PATH_COLOR;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  timesJd.forEach((t, i) => {
+    const { px, py } = toPx(t, altDeg[i]);
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  });
+  ctx.stroke();
+
+  ctx.fillStyle = MARKER_COLOR;
+  ctx.font = '9px system-ui, sans-serif';
+  for (const event of events) {
+    const idx = nearestIndex(timesJd, event.epochJd);
+    const { px, py } = toPx(timesJd[idx], altDeg[idx]);
+    ctx.beginPath();
+    ctx.arc(px, py, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillText(event.event, px + 5, py - 5);
+  }
+
+  canvasEl.__labChart = { kind: 'altitude-curve', series, events, toPx };
 }

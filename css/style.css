@@ -121,6 +121,94 @@ html, body {
   width: 56px;
 }
 
+.observer-panel {
+  pointer-events: auto;
+  position: fixed;
+  top: 96px;
+  left: 12px;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  background: rgba(10, 10, 20, 0.75);
+  color: #eee;
+  border: 1px solid #444;
+  border-radius: 4px;
+  font: 13px system-ui, sans-serif;
+}
+
+.observer-panel-title {
+  font-weight: 600;
+}
+
+.observer-panel-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.observer-panel-field {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.observer-panel-field span {
+  font-size: 12px;
+  color: #aaa;
+}
+
+.observer-panel-field input,
+.observer-panel-field select {
+  font: 13px system-ui, sans-serif;
+  padding: 4px 6px;
+  background: #222;
+  color: #eee;
+  border: 1px solid #444;
+  border-radius: 4px;
+  width: 130px;
+}
+
+.observer-panel-form button {
+  font: 13px system-ui, sans-serif;
+  padding: 4px 6px;
+  background: #222;
+  color: #eee;
+  border: 1px solid #444;
+  border-radius: 4px;
+}
+
+.observer-panel-hint {
+  font-size: 11px;
+  color: #888;
+}
+
+.observer-panel-error {
+  margin: 0;
+  padding: 4px 0;
+  white-space: pre-wrap;
+  font: 12px system-ui, sans-serif;
+  color: #f66;
+}
+
+.observer-panel-results {
+  margin: 0;
+  padding: 6px 0;
+  white-space: pre-wrap;
+  font: 12px system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  color: #eee;
+}
+
+.observer-panel-canvas {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid #444;
+  border-radius: 4px;
+  align-self: center;
+}
+
 .attribution-footer {
   pointer-events: auto;
   position: fixed;

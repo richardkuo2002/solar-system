@@ -186,6 +186,50 @@ array the charts are drawn from; that's chart-only data, not part of what
 event type, with multi-event results (opposition/conjunction, greatest
 elongation, inferior/superior conjunction) flattened to one row per event.
 
+## Observer Mode (v0.6)
+
+Observer Mode adds a **topocentric** view — observation from a specific
+point on Earth's surface (latitude/longitude/elevation), not Earth's
+geocenter — on top of the existing geocentric position math above. Every
+simplification below is deliberate and matches the roadmap's explicit
+requirement to state the topocentric model's scope.
+
+- **Model**: start from the existing geocentric position (heliocentric
+  target-minus-Earth AU vector), rotate it from the ecliptic plane into the
+  equatorial plane by Earth's **fixed** obliquity
+  (`PLANETS.earth.axialTiltDeg`, 23.44°), then subtract the observer's own
+  geocentric position (derived from lat/lon/elevation + sidereal time) —
+  exactly the roadmap's "geocentric position, then subtract the observer's
+  position relative to Earth's center."
+- **Obliquity is treated as a constant**, not the real, slowly-varying
+  value — no precession, no nutation. Over civil timescales this is a
+  small effect, but it means Observer Mode's RA/Dec should not be compared
+  digit-for-digit against a planetarium app that models precession.
+- **Sidereal time**: Greenwich Mean Sidereal Time via a low-precision
+  IAU-1982-style polynomial (`src/core/topocentric.js#gmstDeg`) — adequate
+  to sub-arcminute accuracy for civil dates, not observatory-grade.
+- **Observer position**: spherical Earth (the app's real mean radius +
+  the entered elevation) — **no oblateness**. Geodetic and geocentric
+  latitude are not distinguished; the difference between them (up to
+  ~0.2° at mid-latitudes on the real, oblate Earth) is within this mode's
+  stated approximation scope, not a bug.
+- **No aberration, no atmospheric refraction.** Altitude/azimuth near the
+  horizon can differ from what's visually observed by roughly the classical
+  ~34 arcminute refraction figure; reported rise/set times can be off by a
+  few minutes as a result.
+- **Rise/transit/set** reuses the exact same `findStationaryPoints`
+  coarse-scan-then-bisect solver v0.4/v0.5 already use (10-minute coarse
+  sampling across the UTC calendar day, 60-second bisection tolerance) —
+  not a closed-form or observatory-grade algorithm. A circumpolar target
+  (never sets) or one that never rises above the horizon that UTC day is
+  reported via a `note` field, never a fabricated crossing.
+- The altitude-curve window is always the **UTC calendar day** (00:00Z-
+  24:00Z) containing the entered observation time, not a ±12h window
+  centered on it — a local evening near UTC midnight can therefore show
+  its rise/set split across two different queries.
+- Do not use Observer Mode to plan an actual observation, imaging session,
+  or eclipse/occultation timing.
+
 ## Known limitations (plain language)
 
 - "Live" Horizons data is best-effort and cache-first — a page load can go
