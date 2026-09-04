@@ -124,6 +124,29 @@ type, and one shared results/chart layout renders whichever is selected.
   propagation internally regardless of the source dropdown (see
   [docs/accuracy.md](docs/accuracy.md) for why).
 
+## Observer Mode (v0.6)
+
+The "Observer Mode" panel (left column, below the surface controls) adds
+a **topocentric** view — observation from a specific point on Earth's
+surface, not the geocenter. Enter a latitude/longitude/elevation (default:
+Kaohsiung, Taiwan — 22.6273°N, 120.3014°E, 0m — but freely editable) and
+an observation time, pick a target (Sun, Moon, or any of the 8 planets),
+and click Observe:
+
+- **RA/Dec** and **Alt/Az** for that instant, with an above/below-horizon
+  flag.
+- **Rise / transit / set** for the UTC calendar day containing the entered
+  time, plus an altitude-vs-time-of-day chart with a horizon line. A
+  circumpolar target (never sets) or one that never rises that day is
+  reported as such, not faked.
+- **Topocentric correction** — starts from the existing geocentric
+  position, then subtracts the observer's own position (derived from
+  lat/lon/elevation and sidereal time). Uses a **fixed** obliquity (no
+  precession/nutation), a **spherical** Earth (no oblateness), and **no**
+  aberration or atmospheric refraction — every one of those approximations
+  is documented in
+  [docs/accuracy.md](docs/accuracy.md#observer-mode-v06).
+
 ## Data sources
 
 - Orbital elements: JPL Solar System Dynamics low-precision Keplerian

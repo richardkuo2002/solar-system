@@ -15,7 +15,9 @@ import { createEphemerisHud } from './render/ephemeris-hud.js';
 import { createCameraRig } from './render/camera-rig.js';
 import { buildAsteroidBelt } from './render/asteroid-belt.js';
 import { createEventToolkitPanel } from './render/event-toolkit-panel.js';
+import { createObserverPanel } from './render/observer-panel.js';
 import { createLineOfSightLine } from './render/retrograde-los-line.js';
+import { analyzeObserver } from './analysis/observer.js';
 import {
   createTimeController, tick, togglePlayPause, setSpeed, reverse, jumpToDate,
 } from './core/time-controller.js';
@@ -326,6 +328,22 @@ createSurfaceControlsUI(document.getElementById('ui-root'), PLANET_ORDER, (plane
   cameraRig.applyPose(computePose(cameraState, scenePositions));
   viewModeUI.setActiveMode(cameraState.mode);
   loadFullFor(planetMeshes[planet]);
+});
+
+// Observer Mode (v0.6) — pure 2D-panel feature, no 3D-scene visual
+// (unlike the Event Toolkit's line-of-sight line): RA/Dec, Alt/Az,
+// above/below-horizon, and rise/transit/set are all panel-only outputs.
+// Sits in the same left-column region createSurfaceControlsUI occupies,
+// just below it (see css/style.css's .observer-panel top:96px).
+const observerPanel = createObserverPanel(document.getElementById('ui-root'), {
+  onObserve(params) {
+    try {
+      const result = analyzeObserver(params);
+      observerPanel.renderResult(result);
+    } catch (err) {
+      observerPanel.setError(err.message);
+    }
+  },
 });
 
 // Event Toolkit (v0.5, replaces v0.4's single-purpose Retrograde Lab) —

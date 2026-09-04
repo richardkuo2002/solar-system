@@ -28,6 +28,12 @@ import { analyzeGreatestElongation, analyzeInnerConjunction, INNER_TARGETS } fro
 import { phaseAngleRad, illuminatedFraction, analyzePhaseIllumination, PHASE_TARGETS } from '../src/analysis/phase.js';
 import { moonHeliocentricPositionAu } from '../src/core/orbital-elements.js';
 import { toExportableJson, toExportableCsv } from '../src/analysis/export.js';
+import {
+  gmstDeg, eclipticToEquatorial, raDecFromEquatorial, observerGeocentricPositionAu,
+  hourAngleDeg, altAzFromDecHa, OBLIQUITY_DEG,
+} from '../src/core/topocentric.js';
+import { J2000_JD } from '../src/core/orbital-elements.js';
+import { analyzeObserver, observeAt, OBSERVER_TARGETS } from '../src/analysis/observer.js';
 
 // kepler: eccentric anomaly solver satisfies Kepler's equation
 {
@@ -909,6 +915,125 @@ import { toExportableJson, toExportableCsv } from '../src/analysis/export.js';
   assert.equal(csvLines.length, 3, 'header + start + end rows');
   assert.ok(csvLines[1].includes('stationary-direct-to-retrograde'));
   assert.ok(csvLines[2].includes('stationary-retrograde-to-direct'));
+}
+
+// core/topocentric: gmstDeg at the exact J2000.0 epoch (T=0) collapses to
+// its own polynomial constant term — also validates wrap360 is a no-op here
+{
+  assert.ok(Math.abs(gmstDeg(J2000_JD) - 280.46061837) < 1e-6);
+}
+
+// core/topocentric: eclipticToEquatorial is invariant on the rotation axis
+// (the equinox direction, {1,0,0}) — round-trips through raDecFromEquatorial
+// to RA=0/Dec=0
+{
+  const eq = eclipticToEquatorial({ x: 1, y: 0, z: 0 });
+  assert.ok(Math.abs(eq.x - 1) < 1e-9 && Math.abs(eq.y) < 1e-9 && Math.abs(eq.z) < 1e-9);
+  const { raDeg, decDeg } = raDecFromEquatorial(eq);
+  assert.ok(Math.abs(raDeg) < 1e-6);
+  assert.ok(Math.abs(decDeg) < 1e-6);
+}
+
+// core/topocentric: observerGeocentricPositionAu at the equator, sea
+// level, LST=0 gives exactly {earthRadiusKm*AU_PER_KM, 0, 0}
+{
+  const pos = observerGeocentricPositionAu({ latDeg: 0, elevationM: 0 }, 0);
+  const expectedRAu = PLANETS.earth.radiusKm / 149597870.7;
+  assert.ok(Math.abs(pos.x - expectedRAu) < 1e-12);
+  assert.ok(Math.abs(pos.y) < 1e-12 && Math.abs(pos.z) < 1e-12);
+}
+
+// core/topocentric: hourAngleDeg wraps correctly
+{
+  assert.equal(hourAngleDeg(100, 40), 60);
+  assert.equal(hourAngleDeg(10, 350), 20, 'must wrap into [0,360)');
+}
+
+// core/topocentric: altAzFromDecHa at the zenith (dec=lat=ha=0, observer
+// on the equator looking straight up along the celestial equator/meridian
+// intersection) gives alt~90deg and exercises the azimuth zenith-guard
+// (must not throw/NaN, falls back to the documented azDeg:0)
+{
+  const { altDeg, azDeg } = altAzFromDecHa({ decDeg: 0, latDeg: 0, haDeg: 0 });
+  assert.ok(Math.abs(altDeg - 90) < 1e-6);
+  assert.equal(azDeg, 0);
+}
+
+// core/topocentric: altAzFromDecHa at ha=90deg (6h west of the meridian,
+// on the celestial equator, observer on the equator) sits exactly on the
+// horizon — the boundary condition the rise/set solver depends on — and
+// its azimuth (West, under the North-clockwise convention) is 270deg
+{
+  const { altDeg, azDeg } = altAzFromDecHa({ decDeg: 0, latDeg: 0, haDeg: 90 });
+  assert.ok(Math.abs(altDeg) < 1e-6, `expected ~0deg altitude at the horizon, got ${altDeg}`);
+  assert.ok(Math.abs(azDeg - 270) < 1e-6, `expected West (270deg), got ${azDeg}`);
+}
+
+// core/topocentric: OBLIQUITY_DEG reuses PLANETS.earth.axialTiltDeg, not a
+// separately hardcoded value — keeps the Tropic-of-Cancer reference test
+// below correct even if that constant ever changes
+{
+  assert.equal(OBLIQUITY_DEG, PLANETS.earth.axialTiltDeg);
+}
+
+// analysis/observer: self-consistency check — at the Sun's transit event
+// on an arbitrary date, altDeg must equal the exact spherical-trig
+// identity 90 - |lat - dec| (transit = hour angle 0, this is not an
+// approximation, it's what the Alt/Az formula reduces to at H=0) — this
+// verifies Alt/Az, RA/Dec, and the transit-finder all agree internally,
+// independent of any external ground truth. Checked at 4 latitudes.
+{
+  for (const latDeg of [0, 22.6273, -30, 60]) {
+    const result = analyzeObserver({ target: 'sun', atUtc: '2026-03-15T00:00:00Z', latDeg, lonDeg: 0, elevationM: 0 });
+    const transit = result.result.events.find((e) => e.event === 'transit');
+    assert.ok(transit, `expected a transit event at lat ${latDeg}`);
+    const o = observeAt({ target: 'sun', jsDate: new Date(transit.epochUtc), latDeg, lonDeg: 0, elevationM: 0 });
+    const expectedAltDeg = 90 - Math.abs(latDeg - o.decDeg);
+    assert.ok(Math.abs(transit.altDeg - expectedAltDeg) < 0.01,
+      `lat ${latDeg}: transit altDeg ${transit.altDeg} should match the 90-|lat-dec| identity (expected ${expectedAltDeg})`);
+  }
+}
+
+// analysis/observer: circumpolar and never-rises days report a note
+// instead of a fabricated rise/set, matching analyzeMarsRetrograde's
+// existing "no stationary points found" pattern
+{
+  const circumpolar = analyzeObserver({ target: 'sun', atUtc: '2026-06-21T12:00:00Z', latDeg: 80, lonDeg: 0, elevationM: 0 });
+  assert.ok(circumpolar.result.note && /circumpolar/i.test(circumpolar.result.note), 'expected a circumpolar note at lat 80 on the June solstice');
+  assert.ok(!circumpolar.result.events.some((e) => e.event === 'rise' || e.event === 'set'));
+
+  const neverRises = analyzeObserver({ target: 'sun', atUtc: '2026-12-21T12:00:00Z', latDeg: 80, lonDeg: 0, elevationM: 0 });
+  assert.ok(neverRises.result.note && /does not rise/i.test(neverRises.result.note), 'expected a never-rises note at lat 80 on the December solstice');
+  assert.ok(!neverRises.result.events.some((e) => e.event === 'rise' || e.event === 'set'));
+}
+
+// analysis/observer: invalid inputs throw rather than silently misbehaving
+{
+  assert.throws(() => analyzeObserver({ target: 'earth', atUtc: '2026-01-01T00:00:00Z', latDeg: 0, lonDeg: 0 }));
+  assert.throws(() => analyzeObserver({ target: 'sun', atUtc: '2026-01-01T00:00:00Z', latDeg: 95, lonDeg: 0 }));
+  assert.throws(() => analyzeObserver({ target: 'sun', atUtc: '2026-01-01T00:00:00Z', latDeg: 0, lonDeg: 200 }));
+  assert.throws(() => analyzeObserver({ target: 'sun', atUtc: 'not-a-date', latDeg: 0, lonDeg: 0 }));
+  assert.deepEqual(OBSERVER_TARGETS, ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune']);
+}
+
+// analysis/observer: real reference case — the Sun at the Tropic of
+// Cancer (latDeg = this app's own OBLIQUITY_DEG constant, not a
+// separately hardcoded 23.44 — by definition the same value in this
+// implementation's fixed-obliquity model) on the June solstice should
+// transit almost exactly at the zenith (altDeg ~90) — an independently
+// verifiable real fact, additionally guaranteed structurally by this
+// app's own constant-obliquity model. Tolerance set by actually running
+// this implementation (got 89.98deg, i.e. ~0.02deg off zenith) — 0.1deg
+// comfortably covers that with margin for the Kepler-propagated Sun-Earth
+// geometry's own small two-body error, not hand-assumed.
+{
+  const result = analyzeObserver({ target: 'sun', atUtc: '2026-06-21T12:00:00Z', latDeg: OBLIQUITY_DEG, lonDeg: 0, elevationM: 0 });
+  const transit = result.result.events.find((e) => e.event === 'transit');
+  assert.ok(transit, 'expected a transit event on the June solstice at the Tropic of Cancer');
+  assert.ok(Math.abs(transit.altDeg - 90) < 0.1,
+    `Sun transit at the Tropic of Cancer on the June solstice should be ~90deg (zenith), got ${transit.altDeg}`);
+  assert.equal(result.reference.source, 'kepler', 'never horizons-live — see docs/accuracy.md, structurally unreachable here');
+  assert.equal(result.solver.method, 'bisection');
 }
 
 console.log('PASS: smoke-test.js all assertions passed');

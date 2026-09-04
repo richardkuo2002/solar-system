@@ -10,7 +10,7 @@ const VELOCITY_HALF_DT_DAYS = 1 / 48; // ±30 min — small vs. the fastest
   // period in this dataset (Mercury, ~88d), large enough that float
   // subtraction noise in elementsToPosition doesn't dominate.
 
-const J2000_JD = 2451545.0;
+export const J2000_JD = 2451545.0;
 const MS_PER_DAY = 86400000;
 const DEG_TO_RAD = Math.PI / 180;
 
