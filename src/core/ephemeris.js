@@ -68,14 +68,22 @@ export function resetCircuitBreaker() {
  * @param {Date} jsDate
  * @param {object} baseElements  raw [value,rate] Standish-table shape
  *   (PLANETS[key].elements / COMETS[key].elements / DWARF_PLANETS[key].elements)
+ * @param {object} [options]
+ * @param {'kepler'|'cache'} [options.forceSource]  bypass the normal
+ *   cache-or-fetch resolution: 'kepler' skips the cache lookup and the
+ *   background fetch entirely (used by analysis/retrograde.js's dense
+ *   multi-month scans, which would otherwise fire hundreds of Horizons
+ *   requests); 'cache' reads the cache if present but never triggers a
+ *   fetch on a miss (falls back to Kepler instead). Omitted (or any other
+ *   value) keeps today's default cache-or-fetch-in-background behavior.
  * @returns {object} body-state (see core/body-state.js) — every field
  *   populated, never null/undefined, for every body this supports.
  */
-export function getBodyState(bodyKey, jsDate, baseElements) {
+export function getBodyState(bodyKey, jsDate, baseElements, { forceSource } = {}) {
   const epochJd = julianDateFromDate(jsDate);
   const epochUtc = jsDate.toISOString();
   const key = bucketKey(bodyKey, jsDate);
-  const cached = cache.get(key);
+  const cached = forceSource === 'kepler' ? undefined : cache.get(key);
   if (cached) {
     return createBodyState({
       bodyId: bodyKey, epochJd, epochUtc,
@@ -91,7 +99,8 @@ export function getBodyState(bodyKey, jsDate, baseElements) {
   }
 
   const bodyCode = HORIZONS_CODES[bodyKey];
-  if (bodyCode && isHorizonsAvailable() && !inFlight.has(key)) {
+  const allowFetch = forceSource !== 'kepler' && forceSource !== 'cache';
+  if (allowFetch && bodyCode && isHorizonsAvailable() && !inFlight.has(key)) {
     inFlight.add(key);
     fetchHeliocentricPosition(bodyCode, jsDate)
       .then((pos) => {

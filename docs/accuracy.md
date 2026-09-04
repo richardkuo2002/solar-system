@@ -101,6 +101,27 @@ characteristics. Re-run periodically — the linear-rate propagation drifts
 further from truth the further the date is from J2000, especially past
 2050, when the table is no longer valid at all.
 
+## Mars Retrograde Lab (v0.4)
+
+The Retrograde Lab panel computes Mars's **geocentric ecliptic longitude**
+(`λ = atan2(Δy, Δx)` of the heliocentric Mars-minus-Earth AU vector) over a
+user-chosen date range, and finds where its rate of change crosses zero
+(stationary points) to locate the retrograde interval between them. This is
+a **geometric** longitude, not a light-time-corrected apparent/visual
+position — consistent with the "no light-time correction" limitation
+already noted above, so it should not be read as exactly what an observer
+would see through a telescope at that instant, though the offset is small
+relative to the multi-week timescale of a retrograde loop.
+
+The dense scan this requires (hundreds of body-state lookups across a
+multi-month range) always uses Kepler propagation internally, regardless of
+the panel's "Ephemeris source" dropdown — letting that many lookups each
+fire a background Horizons request would be an unbounded, unwanted side
+effect. The dropdown only selects the source used for one extra lookup that
+labels the result's displayed `source` field; as documented above, that
+value is realistically `'kepler'` or `'horizons-cache'`, never
+`'horizons-live'`.
+
 ## Known limitations (plain language)
 
 - "Live" Horizons data is best-effort and cache-first — a page load can go
