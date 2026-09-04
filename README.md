@@ -78,29 +78,50 @@ Horizons parsing/fallback logic directly under Node:
 npm test
 ```
 
-## Mars Retrograde Lab (v0.4)
+## Event Toolkit (v0.5)
 
-A new "Retrograde Lab" panel (top-left) is the app's first real
-astronomical-phenomenon analysis tool: pick a date range and it finds
-Mars's apparent retrograde loop as seen from Earth's geocenter.
+The "Event Toolkit" panel (right column, below the ephemeris HUD) is the
+app's astronomical-phenomenon analysis tool — a dropdown picks the event
+type, and one shared results/chart layout renders whichever is selected.
 
-- **Method** — computes Mars's geocentric ecliptic longitude
-  (`λ = atan2(Δy, Δx)` of the heliocentric Mars-minus-Earth AU vector) at
-  each sample point, unwraps it for continuity across the 0°/360°
-  boundary, takes its rate of change via central difference, then finds
-  the two zero-crossings (stationary points) via a coarse scan + bisection
-  refinement — never reporting a raw sample time as the answer.
-- **Visuals** — three synchronized views: the Earth-to-Mars line-of-sight
-  drawn into the main 3D scene (best viewed in Heliocentric or Free-flight
-  camera mode), Mars's apparent path plotted against a reference grid, and
-  a λ(t) timeline with both stationary points and the retrograde interval
-  marked. A scrub slider moves all three together.
-- **Limitations** — geometric longitude only, no light-time correction; the
-  apparent-path view plots raw AU coordinates, not a sky-projected RA/Dec
-  view; opposition isn't computed this version (planned for a future
-  Event Toolkit release); results outside the Standish table's ~1800–2050
-  validity window are increasingly approximate; the dense scan always uses
-  Kepler propagation internally regardless of the source dropdown (see
+- **Retrograde (Mars)** (v0.4) — computes Mars's geocentric ecliptic
+  longitude (`λ = atan2(Δy, Δx)` of the heliocentric Mars-minus-Earth AU
+  vector) at each sample point, unwraps it for continuity across the
+  0°/360° boundary, takes its rate of change via central difference, then
+  finds the two zero-crossings (stationary points) via a coarse scan +
+  bisection refinement — never reporting a raw sample time as the answer.
+  Visuals: the Earth-to-Mars line-of-sight drawn into the main 3D scene
+  (best viewed in Heliocentric or Free-flight camera mode), Mars's
+  apparent path plotted against a reference grid, and a λ(t) timeline with
+  both stationary points and the retrograde interval marked.
+- **Opposition / Conjunction** (Mars, Jupiter, Saturn) — same
+  coarse-scan-then-bisect solver, fed elongation's (Sun-Earth-planet
+  angle) rate of change instead: a rising-to-falling flip is opposition, a
+  falling-to-rising flip is conjunction.
+- **Greatest Elongation** (Mercury, Venus) — the same solver again, fed
+  *signed* elongation's rate of change (positive = east of the Sun/evening
+  sky, negative = west/morning sky); extrema instead of zero-crossings.
+- **Inferior / Superior Conjunction** (Mercury, Venus) — feeds the solver
+  the raw signed-elongation *values* directly (no derivative); each
+  zero-crossing is classified inferior vs. superior by comparing
+  Earth-distances.
+- **Phase / Illumination** (Moon, Mercury, Venus, Mars) — a single-epoch
+  calculation (no solver): phase angle α (Sun-target-observer angle) and
+  illuminated fraction `k = (1 + cos(α)) / 2`. The Moon's phase uses a
+  second, independent circular-orbit approximation from the live 3D
+  scene's Moon animation — see
+  [docs/accuracy.md](docs/accuracy.md#the-moons-second-independent-circular-orbit-approximation)
+  for why they can show the Moon at different orbital angles for the same
+  date, and why neither is calibrated to the real Moon's actual phase.
+- **Export** — every event result can be saved as JSON or CSV via the
+  panel's Export buttons, with full reproducibility metadata (event type,
+  target, observer, frame/center/source, inputs, solver method/tolerance);
+  the dense per-sample chart data is intentionally not included.
+- **Limitations** — geometric quantities only, no light-time correction;
+  the apparent-path view plots raw AU coordinates, not a sky-projected
+  RA/Dec view; results outside the Standish table's ~1800–2050 validity
+  window are increasingly approximate; every dense scan always uses Kepler
+  propagation internally regardless of the source dropdown (see
   [docs/accuracy.md](docs/accuracy.md) for why).
 
 ## Data sources

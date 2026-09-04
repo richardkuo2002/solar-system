@@ -122,6 +122,70 @@ labels the result's displayed `source` field; as documented above, that
 value is realistically `'kepler'` or `'horizons-cache'`, never
 `'horizons-live'`.
 
+## Event Toolkit (v0.5)
+
+v0.5 generalizes the Retrograde Lab into a consolidated **Event Toolkit**
+panel with several event types, all built on the same
+"coarse-scan-then-bisect a sign-flip" solver v0.4's Retrograde Lab
+introduced (`findStationaryPoints`) — no new root-finding code, just
+different physical quantities fed into it. Every dense scan below shares
+the Retrograde Lab's dense-scan-forces-Kepler guardrail: internally always
+`'kepler'`, regardless of the panel's "Ephemeris source" dropdown, which
+only labels one extra display lookup.
+
+- **Opposition / conjunction** (Mars, Jupiter, Saturn): elongation (the
+  Sun-Earth-planet angle, via a dot-product formula) oscillates smoothly
+  between 0° and 180° over the synodic period. A `+ → −` sign flip of
+  d(elongation)/dt is opposition (a local maximum, not always exactly
+  180° — orbital inclination means it can fall a few degrees short); a
+  `− → +` flip is conjunction (a local minimum, near 0°).
+- **Greatest elongation** (Mercury, Venus): *signed* elongation (positive
+  = east of the Sun/evening sky, negative = west/morning sky — sign from
+  a cross-product) oscillates between a positive and a negative extreme.
+  Feed its derivative into the same solver; extrema instead of
+  zero-crossings.
+- **Inferior / superior conjunction** (Mercury, Venus): the raw *signed*
+  elongation values themselves (not a derivative) cross zero twice per
+  synodic cycle. Each crossing is classified inferior (target closer to
+  Earth than the Sun at that epoch) vs. superior (target beyond the Sun)
+  by comparing Earth-distances directly — the crossing direction alone
+  can't tell the two apart.
+- **Phase angle / illuminated fraction** (Moon, Mercury, Venus, Mars): a
+  single-epoch evaluation, not an interval search — no solver involved.
+  Phase angle α is the Sun-target-observer angle (vertex at the target);
+  illuminated fraction is `k = (1 + cos(α)) / 2`.
+
+### The Moon's second, independent circular-orbit approximation
+
+Phase/illumination analysis needs a heliocentric AU position for the Moon,
+which the live 3D scene has never had (`moonLocalPosition` only produces a
+parent-relative *scene*-unit position via a nonlinear display-compression
+curve — see "What is NOT modeled" above). `moonHeliocentricPositionAu`
+adds one: the same circular-orbit shape (real `orbitKm`/`periodDays`, zero
+inclination/eccentricity) as `moonLocalPosition`, but anchored to a fixed,
+deterministic epoch (J2000, for Node-testability) instead of the live
+scene's "page load time" epoch. **This means the Event Toolkit's Moon
+phase and the live 3D scene's Moon position can show the Moon at different
+orbital angles for the same calendar date** — two independent
+approximations, not one shared source of truth. Neither is calibrated to
+the real Moon's actual phase (confirmed by running the implementation
+against real recent full-moon dates: it reports illuminated fractions
+around 0.08–0.14, not near 1) — this was already true before v0.5 (the
+circular-orbit model was never anchored to reality), so this doesn't make
+anything "more wrong," but the dual-epoch split itself is new and worth
+knowing about if the two ever seem to disagree.
+
+### Export (JSON / CSV)
+
+Any event result can be exported via the panel's "Export JSON"/"Export
+CSV" buttons. Both formats carry full reproducibility metadata (event
+type, target, observer, frame/center/source, input parameters, solver
+method/tolerance, result) — but **not** the dense per-sample `series`
+array the charts are drawn from; that's chart-only data, not part of what
+"reproducible" means here. CSV uses one shared column set across every
+event type, with multi-event results (opposition/conjunction, greatest
+elongation, inferior/superior conjunction) flattened to one row per event.
+
 ## Known limitations (plain language)
 
 - "Live" Horizons data is best-effort and cache-first — a page load can go

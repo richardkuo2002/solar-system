@@ -1,16 +1,21 @@
-// Hand-rolled Canvas 2D drawing for visual blocks 2 (apparent-path) and 3
-// (longitude timeline) of the Retrograde Lab — see docs/ROADMAP.md's v0.4
-// spec. No charting dependency: this codebase has zero browser-facing npm
-// dependencies and the actual drawing need (grid + polyline + a few
-// markers) is well within plain <canvas> 2D — adding a library for this
-// would be new, unrequested complexity.
+// Hand-rolled Canvas 2D drawing for the Event Toolkit's chart blocks:
+// a two-body apparent-path plot and a value-vs-time timeline. Originally
+// built for the Mars Retrograde Lab (v0.4, retrograde-charts.js) and
+// generalized here for v0.5's other event types (opposition/conjunction,
+// elongation, phase/illumination) — both functions were already
+// mathematically generic on their input series; only field names and
+// retrograde-flavored naming needed generalizing. No charting dependency:
+// this codebase has zero browser-facing npm dependencies and the actual
+// drawing need (grid + polyline + a few markers) is well within plain
+// <canvas> 2D — adding a library for this would be new, unrequested
+// complexity.
 
 const GRID_COLOR = '#333';
 const AXIS_COLOR = '#555';
 const PATH_COLOR = '#6cf';
-const STATIONARY_COLOR = '#f80';
+const MARKER_COLOR = '#f80';
 const CURSOR_COLOR = '#fff';
-const RETROGRADE_BAND_COLOR = 'rgba(255,140,0,0.18)';
+const HIGHLIGHT_BAND_COLOR = 'rgba(255,140,0,0.18)';
 
 function clearCanvas(ctx, canvasEl) {
   ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
@@ -32,13 +37,13 @@ function nearestIndex(timesJd, jd) {
 }
 
 /**
- * Visual block 2 — Mars's apparent path relative to Earth, plotted as the
- * raw AU (rMarsEarth.x, rMarsEarth.y) difference vector against a
- * reference grid, with direction arrows along the path. This is a
- * geometric plot, not a sky-projected RA/Dec view — no such transform
- * exists in this codebase; documented in README as a known simplification.
+ * Apparent-path chart — a two-body difference vector (e.g. target-minus-
+ * observer, AU) plotted against a reference grid with direction arrows
+ * along the path. This is a geometric plot, not a sky-projected RA/Dec
+ * view — no such transform exists in this codebase; documented in README
+ * as a known simplification. `series` needs `{xAu, yAu, timesJd}`.
  */
-export function drawApparentPathCanvas(canvasEl, series, stationaryEpochsJd = []) {
+export function drawApparentPathCanvas(canvasEl, series, markerEpochsJd = []) {
   const ctx = canvasEl.getContext('2d');
   const { xAu, yAu, timesJd } = series;
   clearCanvas(ctx, canvasEl);
@@ -95,8 +100,8 @@ export function drawApparentPathCanvas(canvasEl, series, stationaryEpochsJd = []
     ctx.restore();
   }
 
-  ctx.fillStyle = STATIONARY_COLOR;
-  for (const jd of stationaryEpochsJd) {
+  ctx.fillStyle = MARKER_COLOR;
+  for (const jd of markerEpochsJd) {
     const idx = nearestIndex(timesJd, jd);
     const { px, py } = toPx(xAu[idx], yAu[idx]);
     ctx.beginPath();
@@ -104,23 +109,25 @@ export function drawApparentPathCanvas(canvasEl, series, stationaryEpochsJd = []
     ctx.fill();
   }
 
-  canvasEl.__retrogradeChart = { kind: 'apparent-path', series, stationaryEpochsJd, toPx };
+  canvasEl.__labChart = { kind: 'apparent-path', series, markerEpochsJd, toPx };
 }
 
 /**
- * Visual block 3 — unwrapped geocentric longitude λ(t) in degrees, with
- * both stationary points marked and the retrograde interval shaded.
+ * Value-vs-time timeline — unwrapped longitude, elongation, or any other
+ * degree-valued series, with marker points and an optional shaded
+ * highlight interval (retrograde interval, opposition-to-conjunction
+ * span, etc). `series` needs `{timesJd, valueDeg}`.
  */
-export function drawLongitudeTimelineCanvas(canvasEl, series, stationaryEpochsJd = [], retrogradeIntervalJd = null) {
+export function drawLongitudeTimelineCanvas(canvasEl, series, markerEpochsJd = [], highlightIntervalJd = null) {
   const ctx = canvasEl.getContext('2d');
-  const { timesJd, lambdaDeg } = series;
+  const { timesJd, valueDeg } = series;
   clearCanvas(ctx, canvasEl);
 
   const minT = timesJd[0];
   const maxT = timesJd[timesJd.length - 1];
   const spanT = maxT - minT || 1;
-  const minL = Math.min(...lambdaDeg);
-  const maxL = Math.max(...lambdaDeg);
+  const minL = Math.min(...valueDeg);
+  const maxL = Math.max(...valueDeg);
   const spanL = maxL - minL || 1;
   const pad = 24;
   const w = canvasEl.width - pad * 2;
@@ -131,11 +138,11 @@ export function drawLongitudeTimelineCanvas(canvasEl, series, stationaryEpochsJd
     py: canvasEl.height - pad - ((l - minL) / spanL) * h,
   });
 
-  if (retrogradeIntervalJd) {
-    const { startJd, endJd } = retrogradeIntervalJd;
+  if (highlightIntervalJd) {
+    const { startJd, endJd } = highlightIntervalJd;
     const a = toPx(startJd, minL).px;
     const b = toPx(endJd, minL).px;
-    ctx.fillStyle = RETROGRADE_BAND_COLOR;
+    ctx.fillStyle = HIGHLIGHT_BAND_COLOR;
     ctx.fillRect(Math.min(a, b), pad, Math.abs(b - a), h);
   }
 
@@ -146,46 +153,44 @@ export function drawLongitudeTimelineCanvas(canvasEl, series, stationaryEpochsJd
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   timesJd.forEach((t, i) => {
-    const { px, py } = toPx(t, lambdaDeg[i]);
+    const { px, py } = toPx(t, valueDeg[i]);
     if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
   });
   ctx.stroke();
 
-  ctx.fillStyle = STATIONARY_COLOR;
-  for (const jd of stationaryEpochsJd) {
+  ctx.fillStyle = MARKER_COLOR;
+  for (const jd of markerEpochsJd) {
     const idx = nearestIndex(timesJd, jd);
-    const { px, py } = toPx(timesJd[idx], lambdaDeg[idx]);
+    const { px, py } = toPx(timesJd[idx], valueDeg[idx]);
     ctx.beginPath();
     ctx.arc(px, py, 4, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  canvasEl.__retrogradeChart = { kind: 'timeline', series, stationaryEpochsJd, retrogradeIntervalJd, toPx };
+  canvasEl.__labChart = { kind: 'timeline', series, markerEpochsJd, highlightIntervalJd, toPx };
 }
 
 /**
- * Scrub-slider sync: redraws both charts from their last-drawn state (cached
- * on the canvas element by the two functions above) plus a cursor marker at
- * the sample nearest `cursorJd`. Kept as a simple element-attached cache
- * rather than a separate store — matches this codebase's no-framework,
- * vanilla-DOM style.
+ * Scrub-slider sync: redraws both charts from their last-drawn state
+ * (cached on the canvas element by the two functions above) plus a cursor
+ * marker at the sample nearest `cursorJd`.
  */
 export function highlightCursorOnCharts(canvasEl2, canvasEl3, series, cursorJd) {
   const idx = nearestIndex(series.timesJd, cursorJd);
 
-  const path = canvasEl2.__retrogradeChart;
+  const path = canvasEl2?.__labChart;
   if (path) {
-    drawApparentPathCanvas(canvasEl2, path.series, path.stationaryEpochsJd);
+    drawApparentPathCanvas(canvasEl2, path.series, path.markerEpochsJd);
     const { px, py } = path.toPx(path.series.xAu[idx], path.series.yAu[idx]);
     const ctx = canvasEl2.getContext('2d');
     ctx.fillStyle = CURSOR_COLOR;
     ctx.beginPath(); ctx.arc(px, py, 3, 0, Math.PI * 2); ctx.fill();
   }
 
-  const timeline = canvasEl3.__retrogradeChart;
+  const timeline = canvasEl3?.__labChart;
   if (timeline) {
-    drawLongitudeTimelineCanvas(canvasEl3, timeline.series, timeline.stationaryEpochsJd, timeline.retrogradeIntervalJd);
-    const { px, py } = timeline.toPx(timeline.series.timesJd[idx], timeline.series.lambdaDeg[idx]);
+    drawLongitudeTimelineCanvas(canvasEl3, timeline.series, timeline.markerEpochsJd, timeline.highlightIntervalJd);
+    const { px, py } = timeline.toPx(timeline.series.timesJd[idx], timeline.series.valueDeg[idx]);
     const ctx = canvasEl3.getContext('2d');
     ctx.fillStyle = CURSOR_COLOR;
     ctx.beginPath(); ctx.arc(px, py, 3, 0, Math.PI * 2); ctx.fill();

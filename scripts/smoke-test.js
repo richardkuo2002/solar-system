@@ -22,6 +22,12 @@ import {
 } from '../src/core/camera-modes.js';
 import { unwrapAnglesRad, centralDiffAngularVelocityRadPerDay } from '../src/analysis/longitude.js';
 import { classifyMotion, findStationaryPoints, analyzeMarsRetrograde } from '../src/analysis/retrograde.js';
+import { elongationRad, signedElongationRad } from '../src/analysis/elongation.js';
+import { analyzeOppositionConjunction, OUTER_TARGETS } from '../src/analysis/opposition.js';
+import { analyzeGreatestElongation, analyzeInnerConjunction, INNER_TARGETS } from '../src/analysis/elongation-events.js';
+import { phaseAngleRad, illuminatedFraction, analyzePhaseIllumination, PHASE_TARGETS } from '../src/analysis/phase.js';
+import { moonHeliocentricPositionAu } from '../src/core/orbital-elements.js';
+import { toExportableJson, toExportableCsv } from '../src/analysis/export.js';
 
 // kepler: eccentric anomaly solver satisfies Kepler's equation
 {
@@ -594,6 +600,315 @@ import { classifyMotion, findStationaryPoints, analyzeMarsRetrograde } from '../
   assert.equal(result.start, null);
   assert.equal(result.end, null);
   assert.ok(result.note && result.note.length > 0);
+}
+
+// analysis/elongation: elongationRad on hand-built synthetic geometries —
+// observer at the origin, so `positionAu` doubles as a pure direction
+{
+  const observer = { positionAu: { x: 0, y: 0, z: 0 } };
+  const sun = { positionAu: { x: 1, y: 0, z: 0 } };
+  const perpendicular = { positionAu: { x: 0, y: 1, z: 0 } };
+  const same = { positionAu: { x: 2, y: 0, z: 0 } };
+  const opposite = { positionAu: { x: -1, y: 0, z: 0 } };
+  assert.ok(Math.abs(elongationRad(perpendicular, observer, sun) - Math.PI / 2) < 1e-9, 'perpendicular target should be 90deg elongation');
+  assert.ok(Math.abs(elongationRad(same, observer, sun)) < 1e-9, 'target along the same ray as the Sun should be 0deg elongation');
+  assert.ok(Math.abs(elongationRad(opposite, observer, sun) - Math.PI) < 1e-9, 'target opposite the Sun should be 180deg elongation');
+}
+
+// analysis/elongation: signedElongationRad — east (+) vs west (-) of the
+// Sun, same synthetic setup, target rotated to either side of the Sun
+// direction
+{
+  const observer = { positionAu: { x: 0, y: 0, z: 0 } };
+  const sun = { positionAu: { x: 1, y: 0, z: 0 } };
+  const east = { positionAu: { x: 1, y: 1, z: 0 } }; // rotated toward +y
+  const west = { positionAu: { x: 1, y: -1, z: 0 } }; // rotated toward -y
+  assert.ok(signedElongationRad(east, observer, sun) > 0, 'east of the Sun should be a positive signed elongation');
+  assert.ok(signedElongationRad(west, observer, sun) < 0, 'west of the Sun should be a negative signed elongation');
+  assert.ok(Math.abs(signedElongationRad(east, observer, sun) + signedElongationRad(west, observer, sun)) < 1e-9, 'symmetric rotation should give opposite-sign, equal-magnitude elongations');
+}
+
+// analysis/opposition: analyzeOppositionConjunction offline reference case
+// for all 3 supported outer planets — real, independently-known 2022
+// opposition dates (Mars 2022-12-08, Jupiter 2022-09-26, Saturn
+// 2022-08-14). Forced to ephemerisSource:'kepler' internally regardless of
+// the argument, so this is fully deterministic and needs no network. Dates
+// captured by actually running this implementation first, not hand-invented
+// — same discipline as the Mars retrograde reference test above. This is
+// also the test that confirms the opposition/conjunction labelFor mapping
+// (+ -> opposition, - -> conjunction) is the right way round, not backwards.
+{
+  const cases = [
+    { target: 'mars', startUtc: '2022-06-01T00:00:00Z', endUtc: '2023-03-01T00:00:00Z', expected: '2022-12-08' },
+    { target: 'jupiter', startUtc: '2022-06-01T00:00:00Z', endUtc: '2022-12-01T00:00:00Z', expected: '2022-09-26' },
+    { target: 'saturn', startUtc: '2022-05-01T00:00:00Z', endUtc: '2022-11-01T00:00:00Z', expected: '2022-08-14' },
+  ];
+  for (const { target, startUtc, endUtc, expected } of cases) {
+    const result = analyzeOppositionConjunction({ target, startUtc, endUtc, intervalHours: 24, ephemerisSource: 'kepler' });
+
+    assert.equal(result.type, 'opposition-conjunction');
+    assert.equal(result.target, target);
+    assert.equal(result.observer.bodyId, 'earth');
+    assert.equal(result.reference.frame, 'GEOCENTRIC_ECLIPJ2000');
+    assert.equal(result.reference.source, 'kepler', 'never horizons-live — see docs/accuracy.md, structurally unreachable here');
+    assert.equal(result.solver.method, 'bisection');
+    assert.equal(result.solver.toleranceSeconds, 60);
+
+    const oppositions = result.result.events.filter((e) => e.event === 'opposition');
+    assert.equal(oppositions.length, 1, `expected exactly one opposition for ${target} in range`);
+    const oppositionDate = new Date(oppositions[0].epochUtc);
+    const expectedDate = new Date(`${expected}T00:00:00Z`);
+    const deltaDays = Math.abs(oppositionDate.getTime() - expectedDate.getTime()) / 86400000;
+    assert.ok(deltaDays < 14, `${target} opposition ${oppositions[0].epochUtc} expected within 2 weeks of ${expected}`);
+    // Not exactly 180deg — orbital inclination (Mars ~1.85deg, etc.) means
+    // opposition is the elongation-derivative zero-crossing, not a perfect
+    // Sun-Earth-planet line; a generous band still catches a wrong-body or
+    // wrong-formula bug.
+    assert.ok(Math.abs(oppositions[0].elongationDeg - 180) < 5, `${target} opposition should be ~180deg elongation, got ${oppositions[0].elongationDeg}`);
+  }
+  assert.deepEqual(OUTER_TARGETS, ['mars', 'jupiter', 'saturn']);
+}
+
+// analysis/opposition: an invalid target throws rather than silently
+// misbehaving
+{
+  assert.throws(() => analyzeOppositionConjunction({ target: 'earth', startUtc: '2022-01-01T00:00:00Z', endUtc: '2022-06-01T00:00:00Z' }));
+}
+
+// analysis/elongation-events: analyzeGreatestElongation offline reference
+// case — Venus's real, independently-known 2023 greatest elongations
+// (eastern ~2023-06-04 at ~45deg, western ~2023-10-23 at ~46deg). Dates
+// captured by actually running this implementation first, not hand-invented
+// — same discipline as the opposition/conjunction reference test above.
+{
+  const result = analyzeGreatestElongation({
+    target: 'venus', startUtc: '2023-01-01T00:00:00Z', endUtc: '2023-12-31T00:00:00Z', intervalHours: 12, ephemerisSource: 'kepler',
+  });
+
+  assert.equal(result.type, 'greatest-elongation');
+  assert.equal(result.target, 'venus');
+  assert.equal(result.reference.source, 'kepler', 'never horizons-live — see docs/accuracy.md, structurally unreachable here');
+  assert.equal(result.result.events.length, 2, 'expected exactly one eastern and one western elongation for Venus in 2023');
+
+  const eastern = result.result.events.find((e) => e.event === 'greatest-eastern-elongation');
+  const western = result.result.events.find((e) => e.event === 'greatest-western-elongation');
+  assert.ok(eastern, 'expected a greatest-eastern-elongation event');
+  assert.ok(western, 'expected a greatest-western-elongation event');
+  assert.ok(eastern.signedElongationDeg > 0, 'eastern elongation must be positive-signed');
+  assert.ok(western.signedElongationDeg < 0, 'western elongation must be negative-signed');
+  assert.ok(Math.abs(eastern.signedElongationDeg) > 40 && Math.abs(eastern.signedElongationDeg) < 50, `Venus eastern elongation magnitude expected ~45deg, got ${eastern.signedElongationDeg}`);
+  assert.ok(Math.abs(western.signedElongationDeg) > 40 && Math.abs(western.signedElongationDeg) < 50, `Venus western elongation magnitude expected ~46deg, got ${western.signedElongationDeg}`);
+
+  const easternDate = new Date(eastern.epochUtc);
+  assert.ok(easternDate >= new Date('2023-05-21T00:00:00Z') && easternDate <= new Date('2023-06-18T00:00:00Z'),
+    `Venus greatest eastern elongation ${eastern.epochUtc} expected within 2 weeks of 2023-06-04`);
+  const westernDate = new Date(western.epochUtc);
+  assert.ok(westernDate >= new Date('2023-10-09T00:00:00Z') && westernDate <= new Date('2023-11-06T00:00:00Z'),
+    `Venus greatest western elongation ${western.epochUtc} expected within 2 weeks of 2023-10-23`);
+}
+
+// analysis/elongation-events: analyzeInnerConjunction offline reference
+// case — Venus's real, independently-known 2023 inferior conjunction
+// (~2023-08-13), which must classify as 'inferior-conjunction' (target
+// closer to Earth than the Sun), not 'superior-conjunction'.
+{
+  const result = analyzeInnerConjunction({
+    target: 'venus', startUtc: '2023-01-01T00:00:00Z', endUtc: '2023-12-31T00:00:00Z', intervalHours: 12, ephemerisSource: 'kepler',
+  });
+
+  assert.equal(result.type, 'inner-conjunction');
+  assert.equal(result.result.events.length, 1, 'expected exactly one Venus conjunction crossing in 2023');
+  const [event] = result.result.events;
+  assert.equal(event.event, 'inferior-conjunction');
+  assert.ok(Math.abs(event.signedElongationDeg) < 15, 'a conjunction crossing should be near-zero elongation');
+
+  const eventDate = new Date(event.epochUtc);
+  assert.ok(eventDate >= new Date('2023-07-30T00:00:00Z') && eventDate <= new Date('2023-08-27T00:00:00Z'),
+    `Venus inferior conjunction ${event.epochUtc} expected within 2 weeks of 2023-08-13`);
+
+  assert.deepEqual(INNER_TARGETS, ['mercury', 'venus']);
+}
+
+// analysis/elongation-events: an invalid target throws for both functions
+{
+  assert.throws(() => analyzeGreatestElongation({ target: 'mars', startUtc: '2023-01-01T00:00:00Z', endUtc: '2023-12-31T00:00:00Z' }));
+  assert.throws(() => analyzeInnerConjunction({ target: 'mars', startUtc: '2023-01-01T00:00:00Z', endUtc: '2023-12-31T00:00:00Z' }));
+}
+
+// analysis/phase: illuminatedFraction follows the roadmap's exact formula
+// k = (1 + cos(alpha)) / 2 at its three defining angles
+{
+  assert.ok(Math.abs(illuminatedFraction(0) - 1) < 1e-9, 'alpha=0 (fully lit) should give k=1');
+  assert.ok(Math.abs(illuminatedFraction(Math.PI / 2) - 0.5) < 1e-9, 'alpha=90deg should give k=0.5');
+  assert.ok(Math.abs(illuminatedFraction(Math.PI)) < 1e-9, 'alpha=180deg (fully dark) should give k=0');
+}
+
+// analysis/phase: phaseAngleRad on hand-built synthetic geometries —
+// full-Moon-like (observer between Sun and target, so Sun and observer are
+// in the same direction from the target) gives alpha near 0; new-Moon-like
+// (target between Sun and observer) gives alpha near pi
+{
+  const sun = { positionAu: { x: 0, y: 0, z: 0 } };
+  const fullMoonObserver = { positionAu: { x: 1, y: 0, z: 0 } };
+  const fullMoonTarget = { positionAu: { x: 1.01, y: 0, z: 0 } }; // just beyond the observer, same side as the Sun
+  assert.ok(phaseAngleRad(fullMoonTarget, fullMoonObserver, sun) < 0.1, 'full-Moon-like geometry should give a near-zero phase angle');
+
+  const newMoonTarget = { positionAu: { x: 0.5, y: 0, z: 0 } }; // between Sun and observer
+  const newMoonObserver = { positionAu: { x: 1, y: 0, z: 0 } };
+  assert.ok(Math.abs(phaseAngleRad(newMoonTarget, newMoonObserver, sun) - Math.PI) < 1e-6, 'new-Moon-like geometry should give a phase angle near pi');
+}
+
+// core/orbital-elements: moonHeliocentricPositionAu at exactly
+// MOON_ANALYSIS_EPOCH_JD (= J2000, angle 0) places the moon at
+// parentPositionAu + {x: orbitKm*AU_PER_KM, y:0, z:0}
+{
+  const moonData = MOONS.moon;
+  const parentPositionAu = { x: 1.0, y: 0.2, z: -0.01 };
+  const j2000Jd = julianDateFromDate(new Date('2000-01-01T12:00:00Z'));
+  const pos = moonHeliocentricPositionAu(moonData, parentPositionAu, j2000Jd);
+  const expectedRAu = moonData.orbitKm / 149597870.7;
+  assert.ok(Math.abs(pos.x - (parentPositionAu.x + expectedRAu)) < 1e-9);
+  assert.ok(Math.abs(pos.y - parentPositionAu.y) < 1e-9);
+  assert.ok(Math.abs(pos.z - parentPositionAu.z) < 1e-9);
+}
+
+// analysis/phase: analyzePhaseIllumination real-date checks. The Moon's
+// heliocentric position here is a circular-orbit approximation anchored to
+// a fixed J2000 epoch (see core/orbital-elements.js's
+// MOON_ANALYSIS_EPOCH_JD docstring) — NOT calibrated to the real Moon's
+// actual phase (confirmed by actually running this against real recent
+// full-moon dates: they come back with k around 0.08-0.14, not near 1 —
+// see docs/accuracy.md). So this only checks the formula stays in its
+// valid [0,1] range and doesn't throw, for every supported target,
+// rather than asserting against a real astronomical phase date the
+// model was never built to reproduce.
+{
+  for (const target of PHASE_TARGETS) {
+    const result = analyzePhaseIllumination({ target, atUtc: '2024-06-15T00:00:00Z', ephemerisSource: 'kepler' });
+    assert.equal(result.type, 'phase-illumination');
+    assert.equal(result.target, target);
+    assert.equal(result.solver.method, 'direct');
+    assert.equal(result.solver.toleranceSeconds, 0);
+    assert.ok(result.result.illuminatedFraction >= 0 && result.result.illuminatedFraction <= 1,
+      `${target} illuminated fraction must be in [0,1], got ${result.result.illuminatedFraction}`);
+    assert.ok(result.result.phaseAngleDeg >= 0 && result.result.phaseAngleDeg <= 180,
+      `${target} phase angle must be in [0,180], got ${result.result.phaseAngleDeg}`);
+  }
+  assert.deepEqual(PHASE_TARGETS, ['moon', 'mercury', 'venus', 'mars']);
+}
+
+// analysis/phase: an invalid target throws, and an unparseable date throws
+{
+  assert.throws(() => analyzePhaseIllumination({ target: 'jupiter', atUtc: '2024-06-15T00:00:00Z' }));
+  assert.throws(() => analyzePhaseIllumination({ target: 'moon', atUtc: 'not-a-date' }));
+}
+
+// analysis/export: toExportableJson round-trips a hand-built minimal
+// result, drops `series`, and keeps every other field
+{
+  const result = {
+    id: 'test-1', type: 'opposition-conjunction', target: 'mars',
+    observer: { type: 'geocenter', bodyId: 'earth' },
+    reference: { frame: 'GEOCENTRIC_ECLIPJ2000', center: 'SUN', source: 'kepler' },
+    input: { startUtc: '2022-01-01T00:00:00Z', endUtc: '2022-12-01T00:00:00Z', intervalHours: 24 },
+    result: { events: [{ event: 'opposition', epochJd: 1, epochUtc: '2022-12-08T00:00:00Z', elongationDeg: 179.5 }] },
+    solver: { method: 'bisection', toleranceSeconds: 60, status: 'success' },
+    series: { timesJd: [1, 2, 3], valueDeg: [1, 2, 3] },
+  };
+  const parsed = JSON.parse(toExportableJson(result));
+  assert.equal(parsed.id, 'test-1');
+  assert.equal(parsed.target, 'mars');
+  assert.deepEqual(parsed.reference, result.reference);
+  assert.deepEqual(parsed.input, result.input);
+  assert.deepEqual(parsed.solver, result.solver);
+  assert.deepEqual(parsed.result, result.result);
+  assert.ok(!('series' in parsed), 'series (chart-only dense arrays) must be dropped from the export');
+}
+
+// analysis/export: a result missing required reproducibility metadata
+// throws, naming the missing field, rather than silently exporting an
+// incomplete record
+{
+  const incomplete = {
+    id: 'test-2', type: 'opposition-conjunction', target: 'mars',
+    observer: { type: 'geocenter', bodyId: 'earth' },
+    reference: { frame: 'GEOCENTRIC_ECLIPJ2000', center: 'SUN' }, // missing source
+    input: {},
+    result: { events: [] },
+    solver: { method: 'bisection', toleranceSeconds: 60 },
+  };
+  assert.throws(() => toExportableJson(incomplete), /source/);
+  assert.throws(() => toExportableCsv(incomplete), /source/);
+}
+
+// analysis/export: toExportableCsv header matches the shared column set
+// exactly, and row count / values are correct for both an events[]-bearing
+// result and a phase/illumination single-value result
+{
+  const expectedHeader = [
+    'id', 'type', 'target', 'observer.type', 'observer.bodyId',
+    'reference.frame', 'reference.center', 'reference.source',
+    'input.startUtc', 'input.endUtc', 'input.intervalHours', 'input.atUtc',
+    'solver.method', 'solver.toleranceSeconds', 'solver.status',
+    'event.name', 'event.epochUtc', 'event.epochJd', 'event.valueDeg',
+    'event.illuminatedFraction', 'units',
+  ].join(',');
+
+  const eventsResult = {
+    id: 'test-3', type: 'opposition-conjunction', target: 'mars',
+    observer: { type: 'geocenter', bodyId: 'earth' },
+    reference: { frame: 'GEOCENTRIC_ECLIPJ2000', center: 'SUN', source: 'kepler' },
+    input: { startUtc: '2022-01-01T00:00:00Z', endUtc: '2022-12-01T00:00:00Z', intervalHours: 24 },
+    result: {
+      events: [
+        { event: 'opposition', epochJd: 100, epochUtc: '2022-12-08T00:00:00Z', elongationDeg: 179.5 },
+        { event: 'conjunction', epochJd: 200, epochUtc: '2023-01-01T00:00:00Z', elongationDeg: 0.3 },
+      ],
+    },
+    solver: { method: 'bisection', toleranceSeconds: 60, status: 'success' },
+  };
+  const eventsCsv = toExportableCsv(eventsResult);
+  const eventsLines = eventsCsv.split('\n');
+  assert.equal(eventsLines[0], expectedHeader);
+  assert.equal(eventsLines.length, 3, 'header + 2 event rows');
+  assert.ok(eventsLines[1].includes('opposition') && eventsLines[1].includes('179.5'));
+  assert.ok(eventsLines[2].includes('conjunction') && eventsLines[2].includes('0.3'));
+
+  const phaseResult = {
+    id: 'test-4', type: 'phase-illumination', target: 'moon',
+    observer: { type: 'geocenter', bodyId: 'earth' },
+    reference: { frame: 'GEOCENTRIC_ECLIPJ2000', center: 'SUN', source: 'kepler' },
+    input: { atUtc: '2024-01-01T00:00:00Z' },
+    epochJd: 42,
+    result: { phaseAngleDeg: 12.5, illuminatedFraction: 0.94 },
+    solver: { method: 'direct', toleranceSeconds: 0, status: 'success' },
+  };
+  const phaseCsv = toExportableCsv(phaseResult);
+  const phaseLines = phaseCsv.split('\n');
+  assert.equal(phaseLines[0], expectedHeader);
+  assert.equal(phaseLines.length, 2, 'header + 1 synthetic phase row');
+  assert.ok(phaseLines[1].includes('phase-illumination') && phaseLines[1].includes('12.5') && phaseLines[1].includes('0.94'));
+}
+
+// analysis/export: end-to-end with a real analyzeMarsRetrograde result
+// (legacy v0.4 shape: observer is a string, frame/source are top-level,
+// start/end instead of result.events[]) — confirms export.js's dual-shape
+// accessor helpers actually work on the shape that ships today, not just
+// the newer nested one
+{
+  const result = analyzeMarsRetrograde({
+    startUtc: '2007-09-01T00:00:00Z', endUtc: '2008-03-01T00:00:00Z',
+    intervalHours: 6, ephemerisSource: 'kepler',
+  });
+  const json = toExportableJson(result);
+  assert.ok(json.length > 0);
+  assert.ok(!JSON.parse(json).series, 'series must be dropped from the retrograde export too');
+
+  const csv = toExportableCsv(result);
+  const csvLines = csv.split('\n');
+  assert.equal(csvLines.length, 3, 'header + start + end rows');
+  assert.ok(csvLines[1].includes('stationary-direct-to-retrograde'));
+  assert.ok(csvLines[2].includes('stationary-retrograde-to-direct'));
 }
 
 console.log('PASS: smoke-test.js all assertions passed');

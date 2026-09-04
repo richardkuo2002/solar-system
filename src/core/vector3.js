@@ -22,3 +22,7 @@ export function normalize(v) {
   if (len === 0) return { x: 0, y: 0, z: 0 };
   return scale(v, 1 / len);
 }
+
+export function dot(a, b) {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}

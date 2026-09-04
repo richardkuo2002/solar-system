@@ -14,10 +14,8 @@ import { createAttributionFooter } from './render/attribution-footer.js';
 import { createEphemerisHud } from './render/ephemeris-hud.js';
 import { createCameraRig } from './render/camera-rig.js';
 import { buildAsteroidBelt } from './render/asteroid-belt.js';
-import { createRetrogradeLabUI } from './render/retrograde-lab-panel.js';
+import { createEventToolkitPanel } from './render/event-toolkit-panel.js';
 import { createLineOfSightLine } from './render/retrograde-los-line.js';
-import { analyzeMarsRetrograde } from './analysis/retrograde.js';
-import { sampleGeocentricLongitudeSeries } from './analysis/longitude.js';
 import {
   createTimeController, tick, togglePlayPause, setSpeed, reverse, jumpToDate,
 } from './core/time-controller.js';
@@ -330,36 +328,37 @@ createSurfaceControlsUI(document.getElementById('ui-root'), PLANET_ORDER, (plane
   loadFullFor(planetMeshes[planet]);
 });
 
-// v0.4 Retrograde Lab — visual block 1 (line-of-sight) lives in the main
-// scene (see render/retrograde-los-line.js's docstring for why there's no
-// second camera/viewport). Follows the live simulation clock's Earth/Mars
-// positions each frame by default; scrubbing the panel's timeline instead
-// freezes it at the scrubbed epoch until the next Analyze run.
+// Event Toolkit (v0.5, replaces v0.4's single-purpose Retrograde Lab) —
+// visual block 1 (line-of-sight) lives in the main scene (see
+// render/retrograde-los-line.js's docstring for why there's no second
+// camera/viewport). Follows the live simulation clock's Earth/target
+// positions each frame by default; scrubbing a lab's timeline instead
+// freezes it at the scrubbed epoch until the next Analyze run. Only one
+// lab can be scrubbing at a time, so one shared override variable covers
+// every event type — `activeTargetKey` tracks which body the currently
+// displayed result is about (set on every successful analysis).
 const lineOfSight = createLineOfSightLine(scene);
-let retrogradeScrubOverrideScenePositions = null; // {earth, mars} or null (= follow live time)
+let scrubOverrideScenePositions = null; // {earth, [activeTargetKey]} or null (= follow live time)
+let activeTargetKey = 'mars';
 
-const retrogradeLabUI = createRetrogradeLabUI(document.getElementById('ui-root'), {
-  onAnalyze({ startUtc, endUtc, intervalHours, ephemerisSource }) {
-    retrogradeLabUI.setBusy(true);
-    retrogradeScrubOverrideScenePositions = null;
-    try {
-      const series = sampleGeocentricLongitudeSeries(startUtc, endUtc, intervalHours, { forceSource: 'kepler' });
-      const result = analyzeMarsRetrograde({ startUtc, endUtc, intervalHours, ephemerisSource });
-      retrogradeLabUI.renderResult(result, series);
-      lineOfSight.line.visible = true;
-    } catch (err) {
-      console.error('Mars retrograde analysis failed:', err);
-    } finally {
-      retrogradeLabUI.setBusy(false);
-    }
+createEventToolkitPanel(document.getElementById('ui-root'), {
+  onAnalyzed(result, targetKey) {
+    activeTargetKey = targetKey;
+    scrubOverrideScenePositions = null;
+    // Phase/illumination's 'moon' target has no heliocentric-AU scenePositions
+    // entry (moons are parent-relative scene positions only, see
+    // core/orbital-elements.js) — the shared line-of-sight visual only
+    // applies to targets that do.
+    lineOfSight.line.visible = targetKey in scenePositions;
   },
   onCursorChange(cursorJd) {
+    if (!(activeTargetKey in PLANETS)) return; // e.g. 'moon' — nothing to scrub the line-of-sight visual to
     const jsDate = dateFromJulianDate(cursorJd);
     const earthState = getBodyState('earth', jsDate, PLANETS.earth.elements, { forceSource: 'kepler' });
-    const marsState = getBodyState('mars', jsDate, PLANETS.mars.elements, { forceSource: 'kepler' });
-    retrogradeScrubOverrideScenePositions = {
+    const targetState = getBodyState(activeTargetKey, jsDate, PLANETS[activeTargetKey].elements, { forceSource: 'kepler' });
+    scrubOverrideScenePositions = {
       earth: toScenePosition(earthState.positionAu),
-      mars: toScenePosition(marsState.positionAu),
+      [activeTargetKey]: toScenePosition(targetState.positionAu),
     };
   },
 });
@@ -379,10 +378,12 @@ function animate() {
   timeUI.setCurrentDateDisplay(timeState.currentDate);
   ephemerisHud.update(timeState.currentDate, bodyDisplayName(selectedBodyKey), bodyStates[selectedBodyKey] ?? null, moonHudInfo(selectedBodyKey)?.parentName ?? null);
 
-  if (retrogradeScrubOverrideScenePositions) {
-    lineOfSight.update(retrogradeScrubOverrideScenePositions.earth, retrogradeScrubOverrideScenePositions.mars);
-  } else {
-    lineOfSight.update(scenePositions.earth, scenePositions.mars);
+  if (activeTargetKey in scenePositions) {
+    if (scrubOverrideScenePositions) {
+      lineOfSight.update(scrubOverrideScenePositions.earth, scrubOverrideScenePositions[activeTargetKey]);
+    } else {
+      lineOfSight.update(scenePositions.earth, scenePositions[activeTargetKey]);
+    }
   }
 
   if (cameraState.mode === CAMERA_MODES.FREE_FLIGHT) {
