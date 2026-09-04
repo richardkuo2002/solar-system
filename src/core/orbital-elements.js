@@ -2,8 +2,12 @@
 // per Julian century) into the {a,e,i,om,w,meanAnomalyRad} shape kepler.js
 // expects. Pure math, Node-testable.
 
-import { normalizeAngle } from './kepler.js';
+import { normalizeAngle, elementsToPosition } from './kepler.js';
 import { compressMoonOrbit } from './scale.js';
+
+const VELOCITY_HALF_DT_DAYS = 1 / 48; // ±30 min — small vs. the fastest
+  // period in this dataset (Mercury, ~88d), large enough that float
+  // subtraction noise in elementsToPosition doesn't dominate.
 
 const J2000_JD = 2451545.0;
 const MS_PER_DAY = 86400000;
@@ -47,6 +51,41 @@ export function elementsAtDate(baseElements, julianDate) {
     w: wDeg * DEG_TO_RAD,
     meanAnomalyRad: normalizeAngle(meanAnomalyDeg * DEG_TO_RAD),
   };
+}
+
+/**
+ * Central-difference AU/day velocity at `julianDate`, from the same
+ * elements/propagation already used for position — no separate model, no
+ * new numerics dependency.
+ */
+export function elementsVelocity(baseElements, julianDate) {
+  const before = elementsToPosition(elementsAtDate(baseElements, julianDate - VELOCITY_HALF_DT_DAYS));
+  const after = elementsToPosition(elementsAtDate(baseElements, julianDate + VELOCITY_HALF_DT_DAYS));
+  const dtDays = 2 * VELOCITY_HALF_DT_DAYS;
+  return {
+    x: (after.x - before.x) / dtDays,
+    y: (after.y - before.y) / dtDays,
+    z: (after.z - before.z) / dtDays,
+  };
+}
+
+/**
+ * AU points around one static, closed orbit-line loop at `julianDate`'s
+ * osculating elements — sampled at `segments` evenly spaced mean
+ * anomalies. Lives in core/ (not render/bodies.js, which used to import
+ * elementsAtDate/elementsToPosition directly to do this itself) so
+ * render/ never touches raw orbital elements — this is a shape sample,
+ * not a per-frame moving-body lookup, so it deliberately returns bare
+ * {x,y,z} AU points, not full body-state objects.
+ */
+export function sampleOrbitPath(baseElements, julianDate, segments = 256) {
+  const els = elementsAtDate(baseElements, julianDate);
+  const points = [];
+  for (let s = 0; s <= segments; s++) {
+    const meanAnomalyRad = (s / segments) * 2 * Math.PI;
+    points.push(elementsToPosition({ ...els, meanAnomalyRad }));
+  }
+  return points;
 }
 
 /**

@@ -28,14 +28,14 @@ function formatDate(jsDate) {
 
 /**
  * Parses the $$SOE / $$EOE delimited vector-table block from a Horizons
- * text response, returning the first row's heliocentric X/Y/Z (AU).
- * Isolated behind one function so it's the single point of change if
- * Horizons' output format shifts.
+ * text response, returning the first row's heliocentric position (AU) and
+ * velocity (AU/day). Isolated behind one function so it's the single point
+ * of change if Horizons' output format shifts.
  *
  * Real output interleaves a position line ("X = ... Y = ... Z = ...") and a
- * velocity line ("VX= ... VY= ... VZ= ...") per timestamp; this relies on
- * the position line appearing first, which is the standard Horizons vector
- * table order.
+ * velocity line ("VX= ... VY= ... VZ= ...") per timestamp, position first
+ * — the standard Horizons vector-table order (VEC_TABLE='2', position +
+ * velocity, requested by fetchHeliocentricPosition below).
  */
 export function parseVectorsBlock(rawText) {
   const startIdx = rawText.indexOf('$$SOE');
@@ -50,17 +50,35 @@ export function parseVectorsBlock(rawText) {
   if (!xyzLine) {
     throw new HorizonsUnavailableError('Horizons response missing an X/Y/Z line');
   }
-  const match = xyzLine.match(/X\s*=\s*([-\d.eE+]+)\s+Y\s*=\s*([-\d.eE+]+)\s+Z\s*=\s*([-\d.eE+]+)/);
-  if (!match) {
+  const posMatch = xyzLine.match(/X\s*=\s*([-\d.eE+]+)\s+Y\s*=\s*([-\d.eE+]+)\s+Z\s*=\s*([-\d.eE+]+)/);
+  if (!posMatch) {
     throw new HorizonsUnavailableError(`Could not parse X/Y/Z from Horizons line: ${xyzLine}`);
   }
-  const x = parseFloat(match[1]);
-  const y = parseFloat(match[2]);
-  const z = parseFloat(match[3]);
+  const x = parseFloat(posMatch[1]);
+  const y = parseFloat(posMatch[2]);
+  const z = parseFloat(posMatch[3]);
   if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
     throw new HorizonsUnavailableError(`Parsed non-finite X/Y/Z from Horizons line: ${xyzLine}`);
   }
-  return { x, y, z };
+
+  // Velocity line is optional — VEC_TABLE='1' responses (position only)
+  // won't have one, and callers that don't need velocity shouldn't have to
+  // fabricate a fixture line for it.
+  let vx = 0, vy = 0, vz = 0;
+  const vLine = lines.find((l) => /VX\s*=/.test(l) && /VY\s*=/.test(l) && /VZ\s*=/.test(l));
+  if (vLine) {
+    const vMatch = vLine.match(/VX\s*=\s*([-\d.eE+]+)\s+VY\s*=\s*([-\d.eE+]+)\s+VZ\s*=\s*([-\d.eE+]+)/);
+    if (!vMatch) {
+      throw new HorizonsUnavailableError(`Could not parse VX/VY/VZ from Horizons line: ${vLine}`);
+    }
+    vx = parseFloat(vMatch[1]);
+    vy = parseFloat(vMatch[2]);
+    vz = parseFloat(vMatch[3]);
+    if (!Number.isFinite(vx) || !Number.isFinite(vy) || !Number.isFinite(vz)) {
+      throw new HorizonsUnavailableError(`Parsed non-finite VX/VY/VZ from Horizons line: ${vLine}`);
+    }
+  }
+  return { x, y, z, vx, vy, vz };
 }
 
 /**
@@ -82,17 +100,18 @@ export async function fetchHeliocentricPosition(bodyCode, jsDate, { timeoutMs = 
     START_TIME: `'${startDate}'`,
     STOP_TIME: `'${stopDate}'`,
     STEP_SIZE: "'1d'",
-    VEC_TABLE: "'1'", // position only, skip velocity for a smaller payload
+    VEC_TABLE: "'2'", // position + velocity — still the cheapest table beyond position-only
     REF_PLANE: 'ECLIPTIC',
     OUT_UNITS: 'AU-D',
   });
+  const requestUrl = `${HORIZONS_URL}?${params.toString()}`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     let response;
     try {
-      response = await fetch(`${HORIZONS_URL}?${params.toString()}`, { signal: controller.signal });
+      response = await fetch(requestUrl, { signal: controller.signal });
     } catch (err) {
       throw new HorizonsUnavailableError('Horizons request failed (network/timeout)', err);
     }
@@ -108,7 +127,9 @@ export async function fetchHeliocentricPosition(bodyCode, jsDate, { timeoutMs = 
     if (!json.result) {
       throw new HorizonsUnavailableError('Horizons JSON response missing "result"');
     }
-    return parseVectorsBlock(json.result);
+    // sourceUrl carried through so ephemeris.js can record it in the cache
+    // entry without rebuilding the URL itself — construction stays here.
+    return { ...parseVectorsBlock(json.result), sourceUrl: requestUrl };
   } finally {
     clearTimeout(timer);
   }

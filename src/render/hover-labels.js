@@ -7,8 +7,11 @@ import * as THREE from 'three';
  * @param {(mesh: THREE.Object3D) => void} [onHover] — fired once per newly
  * hovered body (not every mousemove tick) — app.js uses this to trigger
  * that body's full-resolution texture load (see render/texture-loader.js).
+ * @param {(mesh: THREE.Object3D) => void} [onSelect] — fired on click when
+ * a body is currently hovered — app.js uses this to update the selected
+ * body (ephemeris HUD, camera focus). Same raycast, no extra work.
  */
-export function createHoverLabels(canvas, camera, pickables, onHover) {
+export function createHoverLabels(canvas, camera, pickables, onHover, onSelect) {
   const el = document.createElement('div');
   el.className = 'hover-label';
   el.hidden = true;
@@ -40,4 +43,7 @@ export function createHoverLabels(canvas, camera, pickables, onHover) {
   });
 
   canvas.addEventListener('mouseleave', () => { el.hidden = true; });
+  canvas.addEventListener('click', () => {
+    if (lastHovered) onSelect?.(lastHovered);
+  });
 }

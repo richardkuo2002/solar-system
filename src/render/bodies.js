@@ -5,8 +5,7 @@
 // builder here takes the initialized loader as a parameter rather than
 // managing its own texture cache.
 import * as THREE from 'three';
-import { elementsAtDate } from '../core/orbital-elements.js';
-import { elementsToPosition } from '../core/kepler.js';
+import { sampleOrbitPath } from '../core/orbital-elements.js';
 import { compressPosition, compressSize, SUN_SIZE_CAP } from '../core/scale.js';
 
 /**
@@ -134,17 +133,15 @@ export function buildSaturnRing(planetData, textureLoader) {
  * Precomputed closed orbit-path line, sampled at `segments` evenly spaced
  * mean anomalies at the *current* (not time-varying) osculating elements —
  * a display-only approximation of the orbit shape, doesn't itself move.
+ * Sampling itself lives in core/orbital-elements.js's sampleOrbitPath so
+ * render/ never imports elementsAtDate/elementsToPosition directly.
  */
 export function buildOrbitPath(baseElements, julianDate, segments = 256, color = 0x555566) {
-  const els = elementsAtDate(baseElements, julianDate);
-  const points = [];
-  for (let s = 0; s <= segments; s++) {
-    const meanAnomalyRad = (s / segments) * 2 * Math.PI;
-    const pos = elementsToPosition({ ...els, meanAnomalyRad });
+  const points = sampleOrbitPath(baseElements, julianDate, segments).map((pos) => {
     const scenePos = compressPosition(pos);
     // ecliptic z (out-of-plane) -> scene up
-    points.push(new THREE.Vector3(scenePos.x, scenePos.z, scenePos.y));
-  }
+    return new THREE.Vector3(scenePos.x, scenePos.z, scenePos.y);
+  });
   const geometry = new THREE.BufferGeometry().setFromPoints(points);
   const material = new THREE.LineBasicMaterial({ color });
   return new THREE.LineLoop(geometry, material);

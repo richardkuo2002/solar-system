@@ -21,7 +21,10 @@ retrograde motion).
 - **Live position data** from [NASA JPL Horizons](https://ssd.jpl.nasa.gov/horizons/)
   when online, falling back silently to local Kepler-equation math when
   offline or the API is unavailable — the render loop never blocks on a
-  network call.
+  network call. An on-screen HUD always shows which source, reference
+  center, and frame are currently active (see
+  [docs/accuracy.md](docs/accuracy.md) for the model, coverage, and known
+  limitations).
 - **4 camera modes**:
   - **Heliocentric top-down** — the classic solar-system-diagram view, with
     mouse-orbit controls.
