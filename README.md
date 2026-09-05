@@ -171,6 +171,21 @@ already in the app — no new astronomy, pure display:
   anything with them; **orbit radius + parent body name** instead for
   moons/Charon, which use a simpler circular-orbit model.
 
+## URL Shareable State (v0.8)
+
+The address bar always reflects the current simulated date and camera
+view — copy it at any time to get a link that restores the same scene:
+
+- **Included**: simulated date, camera mode, focus body (Top-Down/
+  Geocentric), Surface mode's planet/latitude/longitude.
+- **Not included**: playback speed/direction/paused state, Free-flight's
+  position/look direction, Event Toolkit or Observer Mode inputs.
+- Updated live via `history.replaceState` — no new browser-history entries
+  pile up as you play through time or fly around.
+- A hand-edited or stale URL (unknown mode, out-of-range coordinates, an
+  invalid date) silently falls back to defaults instead of crashing the
+  page.
+
 ## Data sources
 
 - Orbital elements: JPL Solar System Dynamics low-precision Keplerian

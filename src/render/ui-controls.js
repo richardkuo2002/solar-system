@@ -115,8 +115,9 @@ export function createViewModeUI(container, onModeChange, enabledModes) {
  * @param {HTMLElement} container
  * @param {string[]} planetKeys
  * @param {(planet: string, lat: number, lon: number) => void} onGo
+ * @param {{planet: string, lat: number, lon: number}} [initial] prefill values (e.g. restored from a shareable URL, see url-state.js) — defaults to earth/0/0
  */
-export function createSurfaceControlsUI(container, planetKeys, onGo) {
+export function createSurfaceControlsUI(container, planetKeys, onGo, initial = { planet: 'earth', lat: 0, lon: 0 }) {
   const panel = document.createElement('div');
   panel.className = 'surface-controls';
 
@@ -125,7 +126,7 @@ export function createSurfaceControlsUI(container, planetKeys, onGo) {
     const option = document.createElement('option');
     option.value = key;
     option.textContent = key[0].toUpperCase() + key.slice(1);
-    if (key === 'earth') option.selected = true;
+    if (key === initial.planet) option.selected = true;
     planetSelect.appendChild(option);
   }
 
@@ -133,14 +134,14 @@ export function createSurfaceControlsUI(container, planetKeys, onGo) {
   latInput.type = 'number';
   latInput.min = '-90';
   latInput.max = '90';
-  latInput.value = '0';
+  latInput.value = String(initial.lat);
   latInput.title = 'Latitude';
 
   const lonInput = document.createElement('input');
   lonInput.type = 'number';
   lonInput.min = '-180';
   lonInput.max = '180';
-  lonInput.value = '0';
+  lonInput.value = String(initial.lon);
   lonInput.title = 'Longitude';
 
   const goBtn = document.createElement('button');
@@ -151,4 +152,12 @@ export function createSurfaceControlsUI(container, planetKeys, onGo) {
 
   panel.append(planetSelect, latInput, lonInput, goBtn);
   container.appendChild(panel);
+
+  return {
+    setValue(planet, lat, lon) {
+      planetSelect.value = planet;
+      latInput.value = String(lat);
+      lonInput.value = String(lon);
+    },
+  };
 }
