@@ -50,7 +50,9 @@ retrograde motion).
     scripted animation. WASD cycles which planet it's tracking, re-aiming
     at the new target.
 - **Time controls** — play/pause, speed multiplier, reverse, jump to any
-  date.
+  date. Starts at true real time (v1.8: 1 simulated second per real
+  second, not the previous ~86400x default) until you pick a faster
+  preset.
 - Distances and sizes are **compressed on a power-law curve** (not
   true-to-scale) so the whole system fits on screen at once — a standard
   approach for web solar-system visualizations.
@@ -103,6 +105,10 @@ way, gated on the same lint+test job passing first.
 The "Event Toolkit" panel (right column, below the ephemeris HUD) is the
 app's astronomical-phenomenon analysis tool — a dropdown picks the event
 type, and one shared results/chart layout renders whichever is selected.
+Dragging a result's chart scrubber (v1.8) pauses the main simulated clock
+and jumps the whole scene — not just the line-of-sight visual — to the
+scrubbed epoch, staying there after you release so you can inspect that
+exact moment; resume playback with the time-controls Play button.
 
 - **Retrograde Motion** (v0.4; any planet since v1.5) — computes the
   target's geocentric ecliptic longitude (`λ = atan2(Δy, Δx)` of the
