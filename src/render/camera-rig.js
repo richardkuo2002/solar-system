@@ -44,6 +44,12 @@ export function createCameraRig(camera, domElement) {
   // ±1 via clamp11 in the update* methods below so keyboard and touch both
   // work at once, neither excluding the other.
   let touchMoveVector = { x: 0, y: 0 };
+  // v1.7 — Free-flight's vertical (Q/E) axis, the one movement axis v0.10's
+  // touch controls left without an equivalent (documented known limit,
+  // docs/ROADMAP.md). Continuous like touchMoveVector, not a discrete
+  // per-tap value: render/touch-controls.js's up/down buttons hold this at
+  // +-1 while pressed and reset it to 0 on release.
+  let touchVertical = 0;
 
   window.addEventListener('keydown', (e) => {
     keysDown.add(e.code);
@@ -77,11 +83,17 @@ export function createCameraRig(camera, domElement) {
       // whatever mode you were just in.
       pendingCycleDirections = [];
       touchMoveVector = { x: 0, y: 0 };
+      touchVertical = 0;
     },
 
     /** v0.10 — the on-screen joystick calls this continuously while dragging (and resets to {0,0} on release). */
     setTouchMoveVector(x, y) {
       touchMoveVector = { x, y };
+    },
+
+    /** v1.7 — the on-screen up/down buttons call this on press/release (+1/-1/0), same accumulator pattern as setTouchMoveVector. */
+    setTouchVertical(v) {
+      touchVertical = v;
     },
 
     /** v0.10 — the on-screen look-drag zone calls this with deltas scaled the same way mouse-drag already is; feeds the same accumulator updateFreeFlight/updateGeocentricLook already drain per-frame. */
@@ -105,7 +117,7 @@ export function createCameraRig(camera, domElement) {
     updateFreeFlight(cameraState, deltaSeconds) {
       const forward = clamp11(((keysDown.has('KeyW') ? 1 : 0) - (keysDown.has('KeyS') ? 1 : 0)) + touchMoveVector.y) * MOVE_SPEED * deltaSeconds;
       const strafe = clamp11(((keysDown.has('KeyD') ? 1 : 0) - (keysDown.has('KeyA') ? 1 : 0)) + touchMoveVector.x) * MOVE_SPEED * deltaSeconds;
-      const vertical = ((keysDown.has('KeyE') ? 1 : 0) - (keysDown.has('KeyQ') ? 1 : 0)) * MOVE_SPEED * deltaSeconds;
+      const vertical = clamp11(((keysDown.has('KeyE') ? 1 : 0) - (keysDown.has('KeyQ') ? 1 : 0)) + touchVertical) * MOVE_SPEED * deltaSeconds;
       const dYaw = pendingYaw;
       const dPitch = pendingPitch;
       pendingYaw = 0;

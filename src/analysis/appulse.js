@@ -12,7 +12,7 @@
 // refinement. Pure math, zero DOM/THREE, Node-testable like core/. See
 // docs/accuracy.md's "Planetary Appulses (v1.4)" section.
 
-import { getBodyState } from '../core/ephemeris.js';
+import { getBodyState, getLightTimeCorrectedState } from '../core/ephemeris.js';
 import { julianDateFromDate, dateFromJulianDate } from '../core/orbital-elements.js';
 import { PLANETS, PLANET_ORDER } from '../data/planets.js';
 import { angularSeparationAtObserver } from './elongation.js';
@@ -40,11 +40,15 @@ function validateRange(startUtc, endUtc, intervalHours) {
   return { startMs, endMs, stepMs };
 }
 
+// v1.7: light-time corrected — the two planets are almost never
+// equidistant from Earth, so their differential light-time (Jupiter vs.
+// Saturn differ by ~0.1 day near opposition) is exactly what a sub-degree
+// separation minimum is sensitive to.
 function separationDegAtJd(planetA, planetB, jd) {
   const jsDate = dateFromJulianDate(jd);
   const earthState = getBodyState('earth', jsDate, PLANETS.earth.elements, { forceSource: 'kepler' });
-  const stateA = getBodyState(planetA, jsDate, PLANETS[planetA].elements, { forceSource: 'kepler' });
-  const stateB = getBodyState(planetB, jsDate, PLANETS[planetB].elements, { forceSource: 'kepler' });
+  const stateA = getLightTimeCorrectedState(planetA, jsDate, PLANETS[planetA].elements, earthState.positionAu, { forceSource: 'kepler' });
+  const stateB = getLightTimeCorrectedState(planetB, jsDate, PLANETS[planetB].elements, earthState.positionAu, { forceSource: 'kepler' });
   return angularSeparationAtObserver(stateA, earthState, stateB) * RAD_TO_DEG;
 }
 

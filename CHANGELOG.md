@@ -5,6 +5,27 @@ All notable changes to this project. Format loosely follows
 milestones in `docs/ROADMAP.md` (local-only), with each version's exact
 scope and accuracy notes in [docs/accuracy.md](docs/accuracy.md).
 
+## v1.7 — 2026-09-05
+
+- **Light-time correction** — Observer Mode, Planetary Appulse, Phase/
+  Illumination, and Retrograde's refined stationary-point epochs now
+  evaluate the target at the retarded epoch its light actually left
+  (`core/ephemeris.js#getLightTimeCorrectedState`), not "now" — a
+  distinct effect from v1.6's annual aberration (target motion vs.
+  observer motion). Skipped where it's below solver tolerance: the Sun,
+  the Moon, Opposition/Conjunction, Greatest Elongation, and the
+  lunar-eclipse path.
+- **Moon Conjunction event type** — the general case Lunar Occultation is
+  the special case of: how close a planet gets to the Moon in a specific
+  observer's sky. Topocentric (unlike geocentric Planetary Appulse) since
+  the Moon's own parallax exceeds many of the separations reported here.
+  Tested against the real 2021-11-08 occultation of Venus and the real
+  2022-05-27 Moon-Venus conjunction.
+- **Free-flight vertical touch controls** — ▲/▼ buttons, press-and-hold,
+  closing a documented gap since v0.10.
+- **Chart PNG export** — every visible Event Toolkit chart can now be
+  saved as a PNG alongside the existing JSON/CSV export.
+
 ## v1.6 — 2026-09-05
 
 - **Nutation + annual aberration in Observer Mode** — RA/Dec is now a

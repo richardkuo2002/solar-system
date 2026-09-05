@@ -8,7 +8,7 @@ import {
   sampleGeocentricLongitudeSeries, unwrapAnglesRad, centralDiffAngularVelocityRadPerDay,
   geocentricEclipticLongitudeRad, RAD_TO_DEG,
 } from './longitude.js';
-import { getBodyState } from '../core/ephemeris.js';
+import { getBodyState, getLightTimeCorrectedState } from '../core/ephemeris.js';
 import { dateFromJulianDate } from '../core/orbital-elements.js';
 import { PLANETS, PLANET_ORDER } from '../data/planets.js';
 
@@ -32,10 +32,15 @@ export function classifyMotion(lambdaDotRadPerDay) {
   return lambdaDotRadPerDay < 0 ? 'retrograde' : 'direct';
 }
 
+// v1.7: light-time corrected. A stationary point is a zero-crossing of
+// dλ/dt — light-time adds a slowly-varying term to λ itself, which does
+// shift where that derivative crosses zero (by seconds, not the coarse
+// scan's bracket width, so this only sharpens the refined epoch, never
+// changes which bracket the coarse scan already found).
 function lambdaAtJd(target, jd, forceSource) {
   const jsDate = dateFromJulianDate(jd);
   const earthState = getBodyState('earth', jsDate, PLANETS.earth.elements, { forceSource });
-  const targetState = getBodyState(target, jsDate, PLANETS[target].elements, { forceSource });
+  const targetState = getLightTimeCorrectedState(target, jsDate, PLANETS[target].elements, earthState.positionAu, { forceSource });
   return geocentricEclipticLongitudeRad(targetState, earthState);
 }
 

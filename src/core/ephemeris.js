@@ -14,6 +14,8 @@ import { elementsAtDate, julianDateFromDate, elementsVelocity } from './orbital-
 import { elementsToPosition } from './kepler.js';
 import { createBodyState } from './body-state.js';
 import { isOnlineHint, HORIZONS_ENABLED } from '../config.js';
+import { sub, length } from './vector3.js';
+import { C_AU_PER_DAY } from './units.js';
 
 // JPL Horizons body codes (planet center, not barycenter) for the v1 planet set.
 // Deliberately not extended to Sun/moons/comets/Pluto — see docs/accuracy.md;
@@ -123,6 +125,34 @@ export function getBodyState(bodyKey, jsDate, baseElements, { forceSource } = {}
     velocityAuPerDay: elementsVelocity(baseElements, epochJd),
     validity: STANDISH_VALIDITY,
   });
+}
+
+// Fixed 2 iterations, no convergence check — light-time's own rate of
+// change across a re-evaluation is ~1e-5, so a second pass is already
+// accurate to well under a second for every body in this app's range
+// (Moon ~1.3s, Neptune at opposition ~0.17 day); a third iteration would
+// change nothing measurable. v1.7: light-time correction, analysis/observer.js.
+const LIGHT_TIME_ITERATIONS = 2;
+
+/**
+ * Light-time-corrected body-state: evaluates `bodyKey` not at `jsDate`
+ * but at the retarded epoch it must have occupied for its light to reach
+ * `observerPositionAu` (heliocentric AU) exactly at `jsDate` — the
+ * standard "where the target actually was" correction, distinct from
+ * annual aberration (which corrects for the OBSERVER's motion, not the
+ * target's light travel time; see analysis/observer.js). Reuses
+ * getBodyState verbatim, so `options.forceSource` behaves identically
+ * (callers doing a dense scan should keep passing 'kepler', same
+ * guardrail as every other analysis/*.js dense scan).
+ */
+export function getLightTimeCorrectedState(bodyKey, jsDate, baseElements, observerPositionAu, options = {}) {
+  let state = getBodyState(bodyKey, jsDate, baseElements, options);
+  for (let i = 0; i < LIGHT_TIME_ITERATIONS; i += 1) {
+    const lightTimeDays = length(sub(state.positionAu, observerPositionAu)) / C_AU_PER_DAY;
+    const retardedDate = new Date(jsDate.getTime() - lightTimeDays * 86400000);
+    state = getBodyState(bodyKey, retardedDate, baseElements, options);
+  }
+  return state;
 }
 
 /**

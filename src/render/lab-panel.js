@@ -132,7 +132,7 @@ export function createLabPanel(container, config, callbacks = {}) {
   if (chartKind !== 'none') panel.appendChild(scrub);
 
   let currentResult = null;
-  const exportButtons = createExportButtons(panel, () => currentResult);
+  const exportButtons = createExportButtons(panel, () => currentResult, { apparentPathCanvas, timelineCanvas });
 
   container.appendChild(panel);
 

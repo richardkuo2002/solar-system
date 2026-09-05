@@ -11,7 +11,7 @@
 // of every approximation made here.
 
 import { sub, length } from '../core/vector3.js';
-import { getBodyState, sunBodyState } from '../core/ephemeris.js';
+import { getBodyState, sunBodyState, getLightTimeCorrectedState } from '../core/ephemeris.js';
 import { julianDateFromDate, dateFromJulianDate, moonHeliocentricPositionAu } from '../core/orbital-elements.js';
 import { createBodyState } from '../core/body-state.js';
 import { PLANETS } from '../data/planets.js';
@@ -58,31 +58,44 @@ function validateLatLon(latDeg, lonDeg) {
 // analysis/phase.js's targetStateFor already established. Duplicated here
 // rather than extracted into a shared helper, matching this codebase's
 // existing precedent (forceSourceFor-style small per-file duplication).
-function targetHeliocentricStateFor(targetKey, jsDate, forceSource) {
-  if (targetKey === 'moon') {
-    const earthState = getBodyState('earth', jsDate, PLANETS.earth.elements, { forceSource: 'kepler' });
-    const currentJD = julianDateFromDate(jsDate);
-    const positionAu = moonHeliocentricPositionAu(MOONS.moon, earthState.positionAu, currentJD);
-    return createBodyState({
-      bodyId: 'moon', epochJd: currentJD, epochUtc: jsDate.toISOString(),
-      source: 'kepler', sourceDetail: 'Meeus lunar theory (Ch.47 truncated series) — see docs/accuracy.md',
-      quality: 'approximate', positionAu, velocityAuPerDay: { x: 0, y: 0, z: 0 },
-      validity: { startUtc: null, endUtc: null, note: 'Approximate — see docs/accuracy.md' },
-    });
-  }
-  return getBodyState(targetKey, jsDate, PLANETS[targetKey].elements, { forceSource });
+// v1.7: NOT light-time corrected — the Moon's light-time is ~1.3s, below
+// both this project's 60s solver tolerance and the lunar theory's own
+// ~10" budget, same scope decision as analysis/eclipse.js's lunar path.
+function moonHeliocentricStateAt(jsDate) {
+  const earthState = getBodyState('earth', jsDate, PLANETS.earth.elements, { forceSource: 'kepler' });
+  const currentJD = julianDateFromDate(jsDate);
+  const positionAu = moonHeliocentricPositionAu(MOONS.moon, earthState.positionAu, currentJD);
+  return createBodyState({
+    bodyId: 'moon', epochJd: currentJD, epochUtc: jsDate.toISOString(),
+    source: 'kepler', sourceDetail: 'Meeus lunar theory (Ch.47 truncated series) — see docs/accuracy.md',
+    quality: 'approximate', positionAu, velocityAuPerDay: { x: 0, y: 0, z: 0 },
+    validity: { startUtc: null, endUtc: null, note: 'Approximate — see docs/accuracy.md' },
+  });
 }
 
 /** Geocentric-equatorial position (AU) of `target` as seen from Earth's
- *  center, before topocentric correction. v1.5 precessed to the mean
- *  equinox of date; v1.6 completes the apparent place: annual aberration
- *  (velocity form — Earth's velocityAuPerDay is already on the state this
- *  function fetches, ecliptic J2000 like positionAu, so the correction
- *  applies to the ecliptic difference vector before any rotation) then
- *  nutation (mean -> true equinox of date). */
+ *  center, before topocentric correction. Full apparent-place chain: v1.7
+ *  light-time correction (the target is evaluated at the retarded epoch
+ *  its light actually left, using Earth's heliocentric position as the
+ *  observer proxy — see core/ephemeris.js's getLightTimeCorrectedState),
+ *  then v1.6 annual aberration (velocity form — corrects for the
+ *  OBSERVER's motion, a distinct effect from light-time, applied to the
+ *  ecliptic difference vector before any rotation), v1.5 precession to
+ *  the mean equinox of date, then v1.6 nutation (mean -> true equinox of
+ *  date). Sun and Moon skip light-time: the Sun sits at this frame's
+ *  exact origin (zero relative motion, so retarding it is a no-op), and
+ *  the Moon's ~1.3s light-time is below this project's precision tier
+ *  (see moonHeliocentricStateAt above). */
 function geocentricEquatorialAu(target, jsDate, forceSource) {
   const earthState = getBodyState('earth', jsDate, PLANETS.earth.elements, { forceSource });
-  const targetState = target === 'sun' ? sunBodyState(jsDate) : targetHeliocentricStateFor(target, jsDate, forceSource);
+  let targetState;
+  if (target === 'sun') {
+    targetState = sunBodyState(jsDate);
+  } else if (target === 'moon') {
+    targetState = moonHeliocentricStateAt(jsDate);
+  } else {
+    targetState = getLightTimeCorrectedState(target, jsDate, PLANETS[target].elements, earthState.positionAu, { forceSource });
+  }
   const geo = sub(targetState.positionAu, earthState.positionAu);
   // Annual aberration: displace the unit direction by v_earth/c, keep the
   // original magnitude (distance is unaffected by aberration).

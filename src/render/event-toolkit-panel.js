@@ -13,6 +13,7 @@ import { analyzeLunarEclipse, analyzeSolarEclipse } from '../analysis/eclipse.js
 import { analyzeTransit } from '../analysis/transit.js';
 import { analyzeAppulse, APPULSE_TARGETS } from '../analysis/appulse.js';
 import { analyzeLunarOccultation, OCCULTATION_TARGETS } from '../analysis/occultation.js';
+import { analyzeMoonConjunction, MOON_CONJUNCTION_TARGETS } from '../analysis/moon-conjunction.js';
 
 const SOURCE_OPTIONS = [
   { value: 'auto', label: 'Auto' },
@@ -153,6 +154,26 @@ function formatAppulseResult(result) {
     }
   }
   lines.push('', 'Note: geocentric ("how close in Earth\'s sky"), not tied to any one observer\'s horizon.');
+  return lines.join('\n');
+}
+
+function formatMoonConjunctionResult(result) {
+  const lines = [
+    `Target: ${capitalize(result.target)}  Source: ${result.reference.source}  Frame: ${result.reference.frame}`,
+    `Sampling: ${result.input.intervalHours}h × closest-approach events found: ${result.result.events.length}`,
+    `Solver: ${result.solver.method}, tolerance ${result.solver.toleranceSeconds}s, status: ${result.solver.status}`,
+    '',
+  ];
+  if (result.result.events.length === 0) {
+    lines.push('No conjunction found in this range.');
+  } else {
+    for (const event of result.result.events) {
+      lines.push(`Closest approach — ${event.epochUtc}`);
+      lines.push(`  separation = ${event.separationDeg.toFixed(3)}°${event.wouldOccult ? ' (close enough to be a lunar occultation — see that event type for full circumstances)' : ''}`);
+      if (!event.aboveHorizon) lines.push('  (Moon or target below the horizon at this location)');
+    }
+  }
+  lines.push('', 'Note: topocentric (this observer\'s actual sky), unlike Planetary Appulse which is geocentric — the Moon\'s ~1° parallax makes that distinction matter here.');
   return lines.join('\n');
 }
 
@@ -376,6 +397,27 @@ export const EVENT_TYPES = [
     chartKind: 'timeline',
     analyze: (params) => analyzeLunarOccultation(params),
     formatResult: formatOccultationResult,
+    getMarkers: (result) => result.result.events.map((e) => e.epochJd),
+    getHighlight: () => null,
+    resultTarget: (result) => result.target,
+  },
+  {
+    key: 'moon-conjunction',
+    label: 'Moon Conjunction',
+    fixedText: 'Occulter: Moon (conjunction only, not necessarily overlapping) · Observer: a specific location on Earth\'s surface · Frame: Geocentric ECLIPJ2000',
+    fields: [
+      { key: 'target', type: 'select', label: 'Target', default: 'venus', options: MOON_CONJUNCTION_TARGETS.map((t) => ({ value: t, label: capitalize(t) })) },
+      { key: 'startUtc', type: 'date', label: 'Start date', default: '2022-05-20' },
+      { key: 'endUtc', type: 'date', label: 'End date', default: '2022-06-01' },
+      { key: 'intervalHours', type: 'number', label: 'Sample interval (hours)', default: 24, min: 1 },
+      { key: 'latDeg', type: 'number', label: 'Observer latitude (deg)', default: 35.6892, min: -90, max: 90 },
+      { key: 'lonDeg', type: 'number', label: 'Observer longitude (deg)', default: 51.3890, min: -180, max: 180 },
+      { key: 'elevationM', type: 'number', label: 'Observer elevation (m)', default: 0, min: 0 },
+    ],
+    analyzeLabel: 'Analyze conjunctions',
+    chartKind: 'timeline',
+    analyze: (params) => analyzeMoonConjunction(params),
+    formatResult: formatMoonConjunctionResult,
     getMarkers: (result) => result.result.events.map((e) => e.epochJd),
     getHighlight: () => null,
     resultTarget: (result) => result.target,

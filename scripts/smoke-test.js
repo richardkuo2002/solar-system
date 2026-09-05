@@ -13,7 +13,7 @@ import { COMETS, COMET_ORDER } from '../src/data/comets.js';
 import { DWARF_PLANETS, DWARF_PLANET_ORDER, CHARON } from '../src/data/dwarf-planets.js';
 import { hasRealTextureFile } from '../src/core/texture-resolution.js';
 import { parseVectorsBlock, HorizonsUnavailableError } from '../src/core/horizons-client.js';
-import { getBodyState, sunBodyState, isHorizonsAvailable, resetCircuitBreaker } from '../src/core/ephemeris.js';
+import { getBodyState, sunBodyState, isHorizonsAvailable, resetCircuitBreaker, getLightTimeCorrectedState } from '../src/core/ephemeris.js';
 import { createBodyState } from '../src/core/body-state.js';
 import {
   createTimeController, tick, play, pause, setSpeed, reverse, jumpToDate,
@@ -35,6 +35,7 @@ import { analyzeLunarEclipse, analyzeSolarEclipse, angularSeparationDeg } from '
 import { analyzeTransit } from '../src/analysis/transit.js';
 import { analyzeAppulse, APPULSE_TARGETS } from '../src/analysis/appulse.js';
 import { analyzeLunarOccultation, OCCULTATION_TARGETS } from '../src/analysis/occultation.js';
+import { analyzeMoonConjunction, MOON_CONJUNCTION_TARGETS } from '../src/analysis/moon-conjunction.js';
 import { toExportableJson, toExportableCsv } from '../src/analysis/export.js';
 import {
   gmstDeg, eclipticToEquatorial, raDecFromEquatorial, observerGeocentricPositionAu,
@@ -1665,6 +1666,89 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
   // Missing params entirely.
   decoded = decodeAppStateFromParams(new URLSearchParams(''));
   assert.deepEqual(decoded, {});
+}
+
+// core/ephemeris (v1.7): getLightTimeCorrectedState actually retards the
+// target — Neptune's light-time (~4 light-hours, ~0.17 day at ~30 AU) is
+// large enough that the corrected position measurably differs from the
+// uncorrected one, and the implied light-time itself falls in the
+// expected physical range (Neptune's Earth-distance ranges ~29-31 AU
+// across its orbit, i.e. ~0.167-0.179 light-day).
+{
+  const jsDate = new Date('2026-01-01T00:00:00Z');
+  const earthState = getBodyState('earth', jsDate, PLANETS.earth.elements, { forceSource: 'kepler' });
+  const uncorrected = getBodyState('neptune', jsDate, PLANETS.neptune.elements, { forceSource: 'kepler' });
+  const corrected = getLightTimeCorrectedState('neptune', jsDate, PLANETS.neptune.elements, earthState.positionAu, { forceSource: 'kepler' });
+
+  const shiftAu = Math.hypot(
+    corrected.positionAu.x - uncorrected.positionAu.x,
+    corrected.positionAu.y - uncorrected.positionAu.y,
+    corrected.positionAu.z - uncorrected.positionAu.z,
+  );
+  assert.ok(shiftAu > 0.0003, `expected a measurable light-time shift for Neptune, got ${shiftAu} AU`);
+
+  const distAu = Math.hypot(
+    corrected.positionAu.x - earthState.positionAu.x,
+    corrected.positionAu.y - earthState.positionAu.y,
+    corrected.positionAu.z - earthState.positionAu.z,
+  );
+  const lightTimeDays = distAu / C_AU_PER_DAY;
+  assert.ok(lightTimeDays > 0.15 && lightTimeDays < 0.2, `Neptune's light-time should be roughly 0.167-0.179 day at this range, got ${lightTimeDays}`);
+
+  // Convergence: one more manual iteration past what getLightTimeCorrectedState
+  // already did (2 fixed iterations) should move the position by a
+  // negligible amount — confirms 2 iterations is already converged, not
+  // an arbitrary cutoff.
+  const retardedDate = new Date(jsDate.getTime() - lightTimeDays * 86400000);
+  const oneMoreIteration = getBodyState('neptune', retardedDate, PLANETS.neptune.elements, { forceSource: 'kepler' });
+  const driftAu = Math.hypot(
+    oneMoreIteration.positionAu.x - corrected.positionAu.x,
+    oneMoreIteration.positionAu.y - corrected.positionAu.y,
+    oneMoreIteration.positionAu.z - corrected.positionAu.z,
+  );
+  assert.ok(driftAu < 1e-9, `expected the 2-iteration result to already be converged, got a further drift of ${driftAu} AU`);
+}
+
+// analysis/moon-conjunction (v1.7): real reference case — the same
+// 2021-11-08 Moon-Venus event analysis/occultation.js tests (visible from
+// Tokyo ~04:40-05:59 UTC per in-the-sky.org) should also show up here as
+// a close conjunction whose disks actually overlap (wouldOccult: true) —
+// the two event types agreeing on the same real event.
+{
+  const result = analyzeMoonConjunction({
+    target: 'venus', startUtc: '2021-11-01T00:00:00Z', endUtc: '2021-11-15T00:00:00Z',
+    latDeg: 35.6762, lonDeg: 139.6503, elevationM: 0,
+  });
+  assert.equal(result.result.events.length, 1, 'expected exactly one Moon-Venus conjunction in this window');
+  const [event] = result.result.events;
+  assert.ok(event.wouldOccult, 'this real occultation should also register as a conjunction whose disks overlap');
+  const deltaMinutes = Math.abs(new Date(event.epochUtc) - new Date('2021-11-08T05:20:00Z')) / 60000;
+  assert.ok(deltaMinutes < 30, `closest-approach time should be within the real ~04:40-05:59 UTC window, off by ${deltaMinutes}min`);
+}
+
+// analysis/moon-conjunction: real reference case — the 2022-05-27
+// Moon-Venus conjunction (in-the-sky.org: Moon passes 12' / 0.2deg south
+// of Venus at the RA-match moment, visible from Tehran at dawn). Loose
+// tolerance since this topocentric closest-approach differs slightly from
+// the geocentric RA-match circumstance quoted by the source.
+{
+  const result = analyzeMoonConjunction({
+    target: 'venus', startUtc: '2022-05-20T00:00:00Z', endUtc: '2022-06-01T00:00:00Z',
+    latDeg: 35.6892, lonDeg: 51.3890, elevationM: 0,
+  });
+  assert.equal(result.result.events.length, 1, 'expected exactly one Moon-Venus conjunction in this window');
+  const [event] = result.result.events;
+  assert.ok(event.separationDeg < 1.0, `expected a close approach near the real ~0.2deg, got ${event.separationDeg}deg`);
+  const deltaHours = Math.abs(new Date(event.epochUtc) - new Date('2022-05-27T02:00:00Z')) / 3600000;
+  assert.ok(deltaHours < 24, `closest-approach time should be within ~1 day of the real 2022-05-27 event, off by ${deltaHours}h`);
+}
+
+// analysis/moon-conjunction: invalid target (Moon/Sun excluded, same
+// scope as OCCULTATION_TARGETS) throws.
+{
+  assert.throws(() => analyzeMoonConjunction({ target: 'moon', startUtc: '2021-01-01T00:00:00Z', endUtc: '2021-02-01T00:00:00Z', latDeg: 0, lonDeg: 0 }));
+  assert.throws(() => analyzeMoonConjunction({ target: 'sun', startUtc: '2021-01-01T00:00:00Z', endUtc: '2021-02-01T00:00:00Z', latDeg: 0, lonDeg: 0 }));
+  assert.deepEqual(MOON_CONJUNCTION_TARGETS, OCCULTATION_TARGETS);
 }
 
 console.log('PASS: smoke-test.js all assertions passed');
