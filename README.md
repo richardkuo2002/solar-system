@@ -118,11 +118,23 @@ type, and one shared results/chart layout renders whichever is selected.
 - **Phase / Illumination** (Moon, Mercury, Venus, Mars) — a single-epoch
   calculation (no solver): phase angle α (Sun-target-observer angle) and
   illuminated fraction `k = (1 + cos(α)) / 2`. The Moon's phase uses a
-  second, independent circular-orbit approximation from the live 3D
-  scene's Moon animation — see
-  [docs/accuracy.md](docs/accuracy.md#the-moons-second-independent-circular-orbit-approximation)
-  for why they can show the Moon at different orbital angles for the same
-  date, and why neither is calibrated to the real Moon's actual phase.
+  Meeus lunar-theory position, separate from the live 3D scene's Moon
+  animation (which still uses a simpler circular approximation) — see
+  [docs/accuracy.md](docs/accuracy.md#the-moons-analysis-position-v11-meeus-lunar-theory)
+  for why they can show the Moon at slightly different orbital angles for
+  the same date.
+- **Lunar / Solar Eclipse** (v1.1) — real eclipse geometry on top of the
+  Meeus lunar theory above: lunar eclipses classify none/penumbral/
+  partial/total from the Moon's offset from Earth's shadow axis vs. the
+  umbra/penumbra cone radii at its distance; solar eclipses classify
+  none/partial/annular/total *for a specific observer location*
+  (lat/lon/elevation), using topocentric parallax correction the same way
+  Observer Mode does. Tested against two real historical eclipses (the
+  2022-11-08 total lunar eclipse, the 2024-04-08 total solar eclipse) —
+  see [docs/accuracy.md](docs/accuracy.md#eclipses-v11) for the exact
+  geometric simplifications (spherical bodies, no atmospheric shadow
+  enlargement, magnitude + one peak time rather than a full 4/5-contact
+  circumstance table).
 - **Export** — every event result can be saved as JSON or CSV via the
   panel's Export buttons, with full reproducibility metadata (event type,
   target, observer, frame/center/source, inputs, solver method/tolerance);

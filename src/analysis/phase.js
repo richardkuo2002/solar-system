@@ -43,7 +43,7 @@ function targetStateFor(targetKey, jsDate, forceSource) {
     const positionAu = moonHeliocentricPositionAu(MOONS.moon, earthState.positionAu, currentJD);
     return createBodyState({
       bodyId: 'moon', epochJd: currentJD, epochUtc: jsDate.toISOString(),
-      source: 'kepler', sourceDetail: 'circular-orbit approximation, no inclination/eccentricity — see docs/accuracy.md',
+      source: 'kepler', sourceDetail: 'Meeus lunar theory (Ch.47 truncated series) — see docs/accuracy.md',
       quality: 'approximate', positionAu, velocityAuPerDay: { x: 0, y: 0, z: 0 },
       validity: { startUtc: null, endUtc: null, note: 'Approximate — see docs/accuracy.md' },
     });

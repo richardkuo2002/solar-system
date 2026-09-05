@@ -31,6 +31,8 @@ import { analyzeOppositionConjunction, OUTER_TARGETS } from '../src/analysis/opp
 import { analyzeGreatestElongation, analyzeInnerConjunction, INNER_TARGETS } from '../src/analysis/elongation-events.js';
 import { phaseAngleRad, illuminatedFraction, analyzePhaseIllumination, PHASE_TARGETS } from '../src/analysis/phase.js';
 import { moonHeliocentricPositionAu } from '../src/core/orbital-elements.js';
+import { moonEclipticPosition } from '../src/core/lunar-theory.js';
+import { analyzeLunarEclipse, analyzeSolarEclipse } from '../src/analysis/eclipse.js';
 import { toExportableJson, toExportableCsv } from '../src/analysis/export.js';
 import {
   gmstDeg, eclipticToEquatorial, raDecFromEquatorial, observerGeocentricPositionAu,
@@ -881,30 +883,51 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
   assert.ok(Math.abs(phaseAngleRad(newMoonTarget, newMoonObserver, sun) - Math.PI) < 1e-6, 'new-Moon-like geometry should give a phase angle near pi');
 }
 
-// core/orbital-elements: moonHeliocentricPositionAu at exactly
-// MOON_ANALYSIS_EPOCH_JD (= J2000, angle 0) places the moon at
-// parentPositionAu + {x: orbitKm*AU_PER_KM, y:0, z:0}
+// core/lunar-theory: Meeus's own worked example (2nd ed., p.342, Example
+// 47.a) at JDE=2448724.5 (1992-04-12 0h TD, treated here as UTC — this
+// project ignores the sub-minute UTC/TT difference throughout, see
+// docs/accuracy.md). Independently published/cross-checked reference
+// values: lambda=133.162655deg, beta=-3.229126deg, distance=368409.7km.
+{
+  const { lonDeg, latDeg, distanceKm } = moonEclipticPosition(2448724.5);
+  assert.ok(Math.abs(lonDeg - 133.162655) < 0.001, `lonDeg = ${lonDeg}, expected ~133.162655`);
+  assert.ok(Math.abs(latDeg - (-3.229126)) < 0.001, `latDeg = ${latDeg}, expected ~-3.229126`);
+  assert.ok(Math.abs(distanceKm - 368409.7) < 1, `distanceKm = ${distanceKm}, expected ~368409.7`);
+}
+
+// core/orbital-elements: moonHeliocentricPositionAu adds the Moon's real
+// (Meeus-theory) geocentric ecliptic offset onto the parent's heliocentric
+// position — round-trip consistency check against moonEclipticPosition
+// directly (including the mean-equinox-of-date -> J2000 precession
+// correction moonHeliocentricPositionAu applies on top of it — see that
+// function's docstring for why this correction exists at all), not a
+// re-implementation of the conversion math.
 {
   const moonData = MOONS.moon;
   const parentPositionAu = { x: 1.0, y: 0.2, z: -0.01 };
-  const j2000Jd = julianDateFromDate(new Date('2000-01-01T12:00:00Z'));
-  const pos = moonHeliocentricPositionAu(moonData, parentPositionAu, j2000Jd);
-  const expectedRAu = moonData.orbitKm / 149597870.7;
-  assert.ok(Math.abs(pos.x - (parentPositionAu.x + expectedRAu)) < 1e-9);
-  assert.ok(Math.abs(pos.y - parentPositionAu.y) < 1e-9);
-  assert.ok(Math.abs(pos.z - parentPositionAu.z) < 1e-9);
+  const jd = julianDateFromDate(new Date('2024-06-15T00:00:00Z'));
+  const pos = moonHeliocentricPositionAu(moonData, parentPositionAu, jd);
+  const { lonDeg: lonOfDateDeg, latDeg, distanceKm } = moonEclipticPosition(jd);
+  const T = (jd - J2000_JD) / 36525;
+  const precessionDeg = (5029.0966 / 3600) * T + (1.11113 / 3600) * T * T;
+  const lonRad = (lonOfDateDeg - precessionDeg) * Math.PI / 180, latRad = latDeg * Math.PI / 180;
+  const distanceAu = distanceKm / 149597870.7;
+  const expectedX = parentPositionAu.x + distanceAu * Math.cos(latRad) * Math.cos(lonRad);
+  const expectedY = parentPositionAu.y + distanceAu * Math.cos(latRad) * Math.sin(lonRad);
+  const expectedZ = parentPositionAu.z + distanceAu * Math.sin(latRad);
+  assert.ok(Math.abs(pos.x - expectedX) < 1e-9);
+  assert.ok(Math.abs(pos.y - expectedY) < 1e-9);
+  assert.ok(Math.abs(pos.z - expectedZ) < 1e-9);
 }
 
-// analysis/phase: analyzePhaseIllumination real-date checks. The Moon's
-// heliocentric position here is a circular-orbit approximation anchored to
-// a fixed J2000 epoch (see core/orbital-elements.js's
-// MOON_ANALYSIS_EPOCH_JD docstring) — NOT calibrated to the real Moon's
-// actual phase (confirmed by actually running this against real recent
-// full-moon dates: they come back with k around 0.08-0.14, not near 1 —
-// see docs/accuracy.md). So this only checks the formula stays in its
-// valid [0,1] range and doesn't throw, for every supported target,
-// rather than asserting against a real astronomical phase date the
-// model was never built to reproduce.
+// analysis/phase: analyzePhaseIllumination real-date checks. Range/shape
+// validity for every supported target, plus (since v1.1's Meeus lunar
+// theory swap — see core/lunar-theory.js) a real calibration check for the
+// Moon specifically: a solar eclipse can only happen at new moon and a
+// lunar eclipse only at full moon, so these two real historical eclipse
+// dates double as independently-verifiable new-moon/full-moon reference
+// points (see the eclipse reference-case tests below for the same dates'
+// sourcing).
 {
   for (const target of PHASE_TARGETS) {
     const result = analyzePhaseIllumination({ target, atUtc: '2024-06-15T00:00:00Z', ephemerisSource: 'kepler' });
@@ -918,6 +941,14 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
       `${target} phase angle must be in [0,180], got ${result.result.phaseAngleDeg}`);
   }
   assert.deepEqual(PHASE_TARGETS, ['moon', 'mercury', 'venus', 'mars']);
+
+  const newMoonDay = analyzePhaseIllumination({ target: 'moon', atUtc: '2024-04-08T18:00:00Z', ephemerisSource: 'kepler' });
+  assert.ok(newMoonDay.result.illuminatedFraction < 0.05,
+    `Moon illuminated fraction on a known new-moon (solar eclipse) day should be near 0, got ${newMoonDay.result.illuminatedFraction}`);
+
+  const fullMoonDay = analyzePhaseIllumination({ target: 'moon', atUtc: '2022-11-08T11:00:00Z', ephemerisSource: 'kepler' });
+  assert.ok(fullMoonDay.result.illuminatedFraction > 0.95,
+    `Moon illuminated fraction on a known full-moon (lunar eclipse) day should be near 1, got ${fullMoonDay.result.illuminatedFraction}`);
 }
 
 // analysis/phase: an invalid target throws, and an unparseable date throws
@@ -974,7 +1005,7 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
     'input.startUtc', 'input.endUtc', 'input.intervalHours', 'input.atUtc',
     'solver.method', 'solver.toleranceSeconds', 'solver.status',
     'event.name', 'event.epochUtc', 'event.epochJd', 'event.valueDeg',
-    'event.illuminatedFraction', 'units',
+    'event.illuminatedFraction', 'event.classification', 'event.magnitude', 'units',
   ].join(',');
 
   const eventsResult = {
@@ -1151,6 +1182,59 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
     `Sun transit at the Tropic of Cancer on the June solstice should be ~90deg (zenith), got ${transit.altDeg}`);
   assert.equal(result.reference.source, 'kepler', 'never horizons-live — see docs/accuracy.md, structurally unreachable here');
   assert.equal(result.solver.method, 'bisection');
+}
+
+// analysis/eclipse: real reference case — the 2022-11-08 total lunar
+// eclipse (greatest eclipse 10:59 UT per NASA/Espenak eclipse predictions,
+// central/umbral magnitude 1.359). Peak-time tolerance is a few hours, not
+// minutes — this model finds the elongation-extremum (full moon) instant,
+// not the true minimum-shadow-axis-distance instant (see eclipse.js's
+// documented simplification).
+{
+  const result = analyzeLunarEclipse({ startUtc: '2022-11-01T00:00:00Z', endUtc: '2022-11-15T00:00:00Z' });
+  assert.equal(result.result.events.length, 1, 'expected exactly one (real) eclipse in this window');
+  const [event] = result.result.events;
+  assert.equal(event.classification, 'total');
+  assert.ok(event.magnitude > 0.9, `expected umbral magnitude > 0.9 (real value 1.359), got ${event.magnitude}`);
+  const deltaHours = Math.abs(new Date(event.epochUtc) - new Date('2022-11-08T11:00:00Z')) / 3600000;
+  assert.ok(deltaHours < 6, `greatest-eclipse time should be within a few hours of the real 2022-11-08 11:00 UT, off by ${deltaHours}h`);
+}
+
+// analysis/eclipse: a full moon with no real eclipse (Aug 2022) correctly
+// reports no events, not a false positive — the actual point of replacing
+// the old zero-inclination Moon model.
+{
+  const result = analyzeLunarEclipse({ startUtc: '2022-08-01T00:00:00Z', endUtc: '2022-08-20T00:00:00Z' });
+  assert.equal(result.result.events.length, 0, 'August 2022 has a full moon but no real lunar eclipse');
+  assert.equal(result.solver.status, 'no-events-in-range');
+}
+
+// analysis/eclipse: real reference case — the 2024-04-08 total solar
+// eclipse, evaluated from Dallas, TX (in the path of totality per NASA)
+// and from Tokyo (night-time there at eclipse instant — Sun below the
+// horizon, a location/time guaranteed to see nothing regardless of any
+// model imprecision, not just "far from the path").
+{
+  const dallas = analyzeSolarEclipse({
+    startUtc: '2024-04-01T00:00:00Z', endUtc: '2024-04-15T00:00:00Z',
+    latDeg: 32.7767, lonDeg: -96.7970, elevationM: 130,
+  });
+  assert.equal(dallas.result.events.length, 1, 'expected exactly one solar eclipse visible from Dallas in this window');
+  assert.equal(dallas.result.events[0].classification, 'total');
+  assert.ok(dallas.result.events[0].magnitude > 0.9, `expected magnitude > 0.9 for totality, got ${dallas.result.events[0].magnitude}`);
+
+  const tokyo = analyzeSolarEclipse({
+    startUtc: '2024-04-01T00:00:00Z', endUtc: '2024-04-15T00:00:00Z',
+    latDeg: 35.6762, lonDeg: 139.6503, elevationM: 0,
+  });
+  assert.equal(tokyo.result.events.length, 0, 'the 2024-04-08 eclipse happens at night in Tokyo — nothing observable there');
+}
+
+// analysis/eclipse: invalid observer lat/lon throws
+{
+  assert.throws(() => analyzeSolarEclipse({
+    startUtc: '2024-01-01T00:00:00Z', endUtc: '2024-02-01T00:00:00Z', latDeg: 999, lonDeg: 0,
+  }));
 }
 
 // starfield-generator: mulberry32 is deterministic (same seed -> same

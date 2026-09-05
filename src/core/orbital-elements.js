@@ -5,6 +5,7 @@
 import { normalizeAngle, elementsToPosition } from './kepler.js';
 import { compressMoonOrbit, compressSize, SATURN_RING_OUTER_KM } from './scale.js';
 import { AU_PER_KM } from './units.js';
+import { moonEclipticPosition } from './lunar-theory.js';
 
 const VELOCITY_HALF_DT_DAYS = 1 / 48; // ±30 min — small vs. the fastest
   // period in this dataset (Mercury, ~88d), large enough that float
@@ -142,31 +143,46 @@ export function moonLocalPosition(moonData, parentRadiusKm, parentSceneRadius, c
   return { x: r * Math.cos(angle), y: 0, z: r * Math.sin(angle) };
 }
 
-// Fixed, deterministic epoch for moonHeliocentricPositionAu — Node-testable
-// and reproducible. Deliberately NOT the same epoch app.js's live 3D scene
-// uses for moonLocalPosition (that one is "page load time", different every
-// session). This means the Moon's analysis position and its live rendered
-// position can show it at different orbital angles for the same calendar
-// date — both are equally uncalibrated to the Moon's real phase (the
-// circular-orbit model was never anchored to reality, see docs/accuracy.md),
-// so this is a second independent approximation, not a "more wrong" one,
-// but it must be documented as such rather than silently assumed identical.
-const MOON_ANALYSIS_EPOCH_JD = J2000_JD;
-
 /**
- * Approximate heliocentric AU position of a moon: circular orbit (real
- * orbitKm/periodDays, via circularOrbitAngle — NOT the display-compressed
- * compressMoonOrbit path moonLocalPosition uses), zero inclination, zero
- * eccentricity, added onto the parent's real heliocentric AU position.
- * Good enough for phase-angle/illumination (insensitive to these small
- * effects); not for anything precision-sensitive. See docs/accuracy.md.
+ * Heliocentric AU position of the Moon: Meeus Ch.47 lunar theory
+ * (moonEclipticPosition, ~10 arcsec longitude / ~4 arcsec latitude
+ * precision) geocentric ecliptic lon/lat/distance, converted to ecliptic
+ * rectangular and added onto the parent's (Earth's) real heliocentric AU
+ * position. Real inclination/eccentricity/phase — unlike the old
+ * constant-angular-rate circular-orbit approximation this replaced (see
+ * git history / docs/accuracy.md), this one is calibrated to the actual
+ * Moon and safe to use for phase, eclipse, and Observer Mode geometry.
+ *
+ * `moonData` is unused (kept for signature compatibility with call sites
+ * and any other moon this might someday be asked to route through it —
+ * currently only ever called for `MOONS.moon`).
+ *
+ * moonEclipticPosition's lonDeg is referred to the MEAN EQUINOX OF DATE
+ * (that's what Meeus's lunar theory — and the published worked example
+ * this codebase tests it against — actually computes), not J2000. Every
+ * other body-state in this app (Standish elements via kepler.js) IS fixed
+ * to the J2000 equinox (FRAME_ECLIPJ2000). Left uncorrected, this is a
+ * real, growing error (general precession ~50.29"/year — already ~0.34deg
+ * by 2024), not a rounding nicety: it was large enough to flip a real
+ * total solar eclipse to "partial" in this codebase's own eclipse
+ * reference-case test before this fix. GENERAL_PRECESSION_DEG_PER_CENTURY
+ * below removes it, rotating the Moon's longitude back onto the same
+ * fixed J2000 equinox everything else uses.
  */
+const GENERAL_PRECESSION_DEG_PER_CENTURY = 5029.0966 / 3600; // IAU precession in longitude, linear term
+const GENERAL_PRECESSION_DEG_PER_CENTURY_SQ = 1.11113 / 3600; // quadratic term (negligible over this app's date ranges, kept for completeness)
+
 export function moonHeliocentricPositionAu(moonData, parentPositionAu, currentJD) {
-  const angle = circularOrbitAngle(currentJD - MOON_ANALYSIS_EPOCH_JD, moonData.periodDays);
-  const rAu = moonData.orbitKm * AU_PER_KM;
+  const { lonDeg: lonOfDateDeg, latDeg, distanceKm } = moonEclipticPosition(currentJD);
+  const T = (currentJD - J2000_JD) / 36525;
+  const precessionDeg = GENERAL_PRECESSION_DEG_PER_CENTURY * T + GENERAL_PRECESSION_DEG_PER_CENTURY_SQ * T * T;
+  const lonRad = (lonOfDateDeg - precessionDeg) * DEG_TO_RAD;
+  const latRad = latDeg * DEG_TO_RAD;
+  const distanceAu = distanceKm * AU_PER_KM;
+  const cosLat = Math.cos(latRad);
   return {
-    x: parentPositionAu.x + rAu * Math.cos(angle),
-    y: parentPositionAu.y + rAu * Math.sin(angle),
-    z: parentPositionAu.z,
+    x: parentPositionAu.x + distanceAu * cosLat * Math.cos(lonRad),
+    y: parentPositionAu.y + distanceAu * cosLat * Math.sin(lonRad),
+    z: parentPositionAu.z + distanceAu * Math.sin(latRad),
   };
 }

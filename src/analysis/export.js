@@ -58,7 +58,7 @@ const CSV_COLUMNS = [
   'input.startUtc', 'input.endUtc', 'input.intervalHours', 'input.atUtc',
   'solver.method', 'solver.toleranceSeconds', 'solver.status',
   'event.name', 'event.epochUtc', 'event.epochJd', 'event.valueDeg',
-  'event.illuminatedFraction', 'units',
+  'event.illuminatedFraction', 'event.classification', 'event.magnitude', 'units',
 ];
 
 function baseRow(result) {
@@ -84,12 +84,17 @@ function baseRow(result) {
   };
 }
 
-const EMPTY_EVENT_COLUMNS = { 'event.name': '', 'event.epochUtc': '', 'event.epochJd': '', 'event.valueDeg': '', 'event.illuminatedFraction': '', units: 'deg' };
+const EMPTY_EVENT_COLUMNS = {
+  'event.name': '', 'event.epochUtc': '', 'event.epochJd': '', 'event.valueDeg': '',
+  'event.illuminatedFraction': '', 'event.classification': '', 'event.magnitude': '', units: 'deg',
+};
 
 function flattenResult(result) {
   const base = baseRow(result);
 
-  // v0.5 events[] shape: opposition/conjunction, greatest elongation, inner conjunction
+  // v0.5 events[] shape: opposition/conjunction, greatest elongation, inner
+  // conjunction, eclipses (v1.1 — classification/magnitude instead of a
+  // degree value)
   if (result.result && Array.isArray(result.result.events)) {
     if (result.result.events.length === 0) return [{ ...base, ...EMPTY_EVENT_COLUMNS }];
     return result.result.events.map((e) => ({
@@ -99,6 +104,8 @@ function flattenResult(result) {
       'event.epochJd': e.epochJd,
       'event.valueDeg': e.elongationDeg ?? e.signedElongationDeg ?? '',
       'event.illuminatedFraction': '',
+      'event.classification': e.classification ?? '',
+      'event.magnitude': e.magnitude ?? '',
       units: 'deg',
     }));
   }

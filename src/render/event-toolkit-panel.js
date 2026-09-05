@@ -8,6 +8,7 @@ import { analyzeMarsRetrograde } from '../analysis/retrograde.js';
 import { analyzeOppositionConjunction, OUTER_TARGETS } from '../analysis/opposition.js';
 import { analyzeGreatestElongation, analyzeInnerConjunction, INNER_TARGETS } from '../analysis/elongation-events.js';
 import { analyzePhaseIllumination, samplePhaseSeries, PHASE_TARGETS } from '../analysis/phase.js';
+import { analyzeLunarEclipse, analyzeSolarEclipse } from '../analysis/eclipse.js';
 
 const SOURCE_OPTIONS = [
   { value: 'auto', label: 'Auto' },
@@ -67,7 +68,7 @@ function formatPhaseResult(result) {
     `Illuminated fraction = ${(result.result.illuminatedFraction * 100).toFixed(1)}%`,
   ];
   if (result.target === 'moon') {
-    lines.push('', 'Note: Moon position uses a separate circular-orbit approximation (see docs/accuracy.md) — may not exactly match the live 3D scene.');
+    lines.push('', 'Note: this uses the analysis-path Moon model (Meeus lunar theory, see docs/accuracy.md) — the live 3D scene\'s visual Moon uses a separate, less precise circular approximation, so the two may not exactly match.');
   }
   return lines.join('\n');
 }
@@ -88,6 +89,27 @@ function formatSignedElongationResult(noneMessage) {
         lines.push(`  signed elongation = ${event.signedElongationDeg.toFixed(3)}° (+ = east, − = west)`);
       }
     }
+    return lines.join('\n');
+  };
+}
+
+function formatEclipseResult(noneMessage) {
+  return (result) => {
+    const lines = [
+      `Source: ${result.reference.source}  Frame: ${result.reference.frame}`,
+      `Sampling: ${result.input.intervalHours}h × events found: ${result.result.events.length}`,
+      `Solver: ${result.solver.method}, tolerance ${result.solver.toleranceSeconds}s, status: ${result.solver.status}`,
+      '',
+    ];
+    if (result.result.events.length === 0) {
+      lines.push(noneMessage);
+    } else {
+      for (const event of result.result.events) {
+        lines.push(`${capitalize(event.classification)} — ${event.epochUtc}`);
+        lines.push(`  magnitude ≈ ${event.magnitude.toFixed(3)}`);
+      }
+    }
+    lines.push('', 'Note: geometric approximation — spherical Sun/Earth/Moon, no atmospheric shadow enlargement or refraction, no Besselian elements. See docs/accuracy.md.');
     return lines.join('\n');
   };
 }
@@ -194,6 +216,43 @@ export const EVENT_TYPES = [
     },
     formatResult: formatPhaseResult,
     getMarkers: (result) => [result.epochJd].filter((v) => v != null),
+    getHighlight: () => null,
+    resultTarget: (result) => result.target,
+  },
+  {
+    key: 'lunar-eclipse',
+    label: 'Lunar Eclipse',
+    fixedText: 'Target: Moon · Observer: Earth (geocenter) · Frame: Geocentric ECLIPJ2000',
+    fields: [
+      { key: 'startUtc', type: 'date', label: 'Start date', default: '2022-10-01' },
+      { key: 'endUtc', type: 'date', label: 'End date', default: '2022-12-01' },
+      { key: 'intervalHours', type: 'number', label: 'Sample interval (hours)', default: 6, min: 1 },
+    ],
+    analyzeLabel: 'Analyze lunar eclipses',
+    chartKind: 'timeline',
+    analyze: (params) => analyzeLunarEclipse(params),
+    formatResult: formatEclipseResult('No lunar eclipse found in this range.'),
+    getMarkers: (result) => result.result.events.map((e) => e.epochJd),
+    getHighlight: () => null,
+    resultTarget: (result) => result.target,
+  },
+  {
+    key: 'solar-eclipse',
+    label: 'Solar Eclipse',
+    fixedText: 'Target: Moon · Observer: a specific location on Earth\'s surface · Frame: Geocentric ECLIPJ2000',
+    fields: [
+      { key: 'startUtc', type: 'date', label: 'Start date', default: '2024-03-01' },
+      { key: 'endUtc', type: 'date', label: 'End date', default: '2024-05-01' },
+      { key: 'intervalHours', type: 'number', label: 'Sample interval (hours)', default: 6, min: 1 },
+      { key: 'latDeg', type: 'number', label: 'Observer latitude (deg)', default: 32.7767, min: -90, max: 90 },
+      { key: 'lonDeg', type: 'number', label: 'Observer longitude (deg)', default: -96.7970, min: -180, max: 180 },
+      { key: 'elevationM', type: 'number', label: 'Observer elevation (m)', default: 0, min: 0 },
+    ],
+    analyzeLabel: 'Analyze solar eclipses',
+    chartKind: 'timeline',
+    analyze: (params) => analyzeSolarEclipse(params),
+    formatResult: formatEclipseResult('No solar eclipse visible from this location in this range.'),
+    getMarkers: (result) => result.result.events.map((e) => e.epochJd),
     getHighlight: () => null,
     resultTarget: (result) => result.target,
   },
