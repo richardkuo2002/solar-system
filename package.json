@@ -8,6 +8,7 @@
     "test": "npm run smoke",
     "lint": "eslint .",
     "fetch-textures": "node scripts/fetch-textures.mjs",
+    "fetch-star-catalog": "node scripts/fetch-star-catalog.mjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build --config src-tauri/tauri.build.conf.json"

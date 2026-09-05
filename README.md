@@ -18,6 +18,12 @@ retrograde motion).
   low-precision Keplerian orbital elements (Standish 1992 / JPL SSD).
 - Real axial rotation and axial tilt per planet (NASA planetary fact sheet
   values), including Venus's/Uranus's real retrograde spin.
+- **Real star background** (v1.2) — the night sky is a real, Hipparcos-
+  numbered star catalog (~5,000 stars to magnitude 6.5, positioned by their
+  actual RA/Dec) with the 88 traditional constellation line figures overlaid,
+  not a procedural random field. Data from
+  [d3-celestial](https://github.com/ofrohn/d3-celestial) (BSD-3-Clause) —
+  see [ATTRIBUTION.md](ATTRIBUTION.md).
 - **Live position data** from [NASA JPL Horizons](https://ssd.jpl.nasa.gov/horizons/)
   when online, falling back silently to local Kepler-equation math when
   offline or the API is unavailable — the render loop never blocks on a

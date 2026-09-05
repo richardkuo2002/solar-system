@@ -1,16 +1,13 @@
-// Procedural background star layer: THREE.Points on a fixed-radius shell
-// centered on the camera, built once from src/core/starfield-generator.js's
-// deterministic output. This is a second, independent layer on top of the
+// Background star layer: THREE.Points on a fixed-radius shell centered on
+// the camera, built from a real star catalog (src/core/star-catalog.js —
+// see docs/ROADMAP.md's v1.2 closeout) rather than the old procedural
+// generator it replaces. This is a second, independent layer on top of the
 // Milky Way sky sphere (scene-setup.js#createMilkyWaySkySphere) — that
 // sphere only carries the large-scale galactic band/dust-lane texture now;
 // individual star points (with color/brightness variety and a real round
 // falloff) live here instead of being baked into that 2D image.
 import * as THREE from 'three';
-import { generateStarfield, STAR_COUNTS, DEFAULT_STAR_QUALITY } from '../core/starfield-generator.js';
-
-// Any fixed value works for determinism — this one just needs to never
-// change, so the star field looks the same on every load.
-const STARFIELD_SEED = 1337;
+import { loadStarCatalog } from '../core/star-catalog.js';
 
 // Comfortably inside the camera's far plane (5000, see scene-setup.js) and
 // the Milky Way sky sphere's radius (4000), and far outside every real
@@ -18,33 +15,9 @@ const STARFIELD_SEED = 1337;
 // scene units — see src/core/scale.js). Being closer than the sky sphere
 // means normal depth testing correctly draws star points in front of the
 // Milky Way band, with no z-fighting risk given the wide radius gap.
-const STAR_SHELL_RADIUS = 3000;
-
-const QUALITY_STORAGE_KEY = 'starfield-quality';
-
-function isValidQuality(q) {
-  return Object.prototype.hasOwnProperty.call(STAR_COUNTS, q);
-}
-
-/** Reads the persisted quality tier, falling back to medium if unset/invalid/unavailable (private browsing, storage disabled). */
-export function getStoredStarfieldQuality() {
-  try {
-    const stored = window.localStorage.getItem(QUALITY_STORAGE_KEY);
-    return isValidQuality(stored) ? stored : DEFAULT_STAR_QUALITY;
-  } catch {
-    return DEFAULT_STAR_QUALITY;
-  }
-}
-
-/** Persists a quality tier for next load. No-op (not thrown) if storage is unavailable. */
-export function setStoredStarfieldQuality(quality) {
-  if (!isValidQuality(quality)) return;
-  try {
-    window.localStorage.setItem(QUALITY_STORAGE_KEY, quality);
-  } catch {
-    // ignore — private browsing / storage disabled, not worth surfacing
-  }
-}
+// Also reused as-is by render/constellation-lines.js so the lines meet
+// the stars they connect.
+export const STAR_SHELL_RADIUS = 3000;
 
 const VERTEX_SHADER = `
   attribute float aSize;
@@ -78,20 +51,29 @@ const FRAGMENT_SHADER = `
   }
 `;
 
+async function fetchJson(path) {
+  const res = await fetch(path);
+  if (!res.ok) throw new Error(`fetch ${path} failed: HTTP ${res.status}`);
+  return res.json();
+}
+
 /**
- * Builds the star point cloud. `quality` picks a star count from
- * STAR_COUNTS (defaults to the stored preference, or medium); `pixelRatio`
- * should be the renderer's actual (already-capped) pixel ratio so point
- * sizes read consistently on high-DPI displays.
+ * Builds the star point cloud from the vendored real catalog
+ * (assets/stars/stars.6.json — ~5000 Hipparcos stars to mag 6.5).
+ * `pixelRatio` should be the renderer's actual (already-capped) pixel
+ * ratio so point sizes read consistently on high-DPI displays.
  *
- * Geometry/material are built exactly once here and never rebuilt —
+ * Async (top-level await is already used elsewhere in app.js for the
+ * texture manifest fetch) because the catalog has to be fetched before
+ * the star count — and therefore the BufferGeometry size — is known.
+ * Geometry/material are then built exactly once and never rebuilt —
  * `update(camera)` only recenters the shell on the camera each frame
- * (position, not rotation, so the star pattern itself never spins with the
- * camera), and resize never touches this at all.
+ * (position, not rotation, so the star pattern itself never spins with
+ * the camera), and resize never touches this at all.
  */
-export function createStarfield({ quality = getStoredStarfieldQuality(), pixelRatio = 1 } = {}) {
-  const count = STAR_COUNTS[quality] ?? STAR_COUNTS[DEFAULT_STAR_QUALITY];
-  const { positions, colors, sizes, brightness } = generateStarfield({ count, seed: STARFIELD_SEED });
+export async function createStarfield({ pixelRatio = 1 } = {}) {
+  const starsGeoJson = await fetchJson('assets/stars/stars.6.json');
+  const { positions, colors, sizes, brightness } = loadStarCatalog(starsGeoJson);
 
   const scaledPositions = new Float32Array(positions.length);
   for (let i = 0; i < positions.length; i++) scaledPositions[i] = positions[i] * STAR_SHELL_RADIUS;
@@ -117,7 +99,6 @@ export function createStarfield({ quality = getStoredStarfieldQuality(), pixelRa
 
   return {
     points,
-    quality,
     /** Recenter the shell on the camera every frame — no rotation change, so the pattern itself stays fixed while never producing free-flight parallax. */
     update(camera) {
       points.position.copy(camera.position);

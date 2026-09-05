@@ -1,7 +1,5 @@
 import assert from 'node:assert/strict';
-import {
-  mulberry32, sampleUnitSphere, generateStarfield, STAR_COUNTS, DEFAULT_STAR_QUALITY,
-} from '../src/core/starfield-generator.js';
+import { loadStarCatalog, constellationLineSegments } from '../src/core/star-catalog.js';
 import { solveEccentricAnomaly, elementsToPosition, normalizeAngle } from '../src/core/kepler.js';
 import {
   elementsAtDate, julianDateFromDate, dateFromJulianDate, circularOrbitAngle, moonLocalPosition,
@@ -36,7 +34,7 @@ import { analyzeLunarEclipse, analyzeSolarEclipse } from '../src/analysis/eclips
 import { toExportableJson, toExportableCsv } from '../src/analysis/export.js';
 import {
   gmstDeg, eclipticToEquatorial, raDecFromEquatorial, observerGeocentricPositionAu,
-  hourAngleDeg, altAzFromDecHa, OBLIQUITY_DEG,
+  hourAngleDeg, altAzFromDecHa, OBLIQUITY_DEG, equatorialToEcliptic, unitVectorFromRaDec,
 } from '../src/core/topocentric.js';
 import { J2000_JD } from '../src/core/orbital-elements.js';
 import { analyzeObserver, observeAt, OBSERVER_TARGETS } from '../src/analysis/observer.js';
@@ -1237,66 +1235,77 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
   }));
 }
 
-// starfield-generator: mulberry32 is deterministic (same seed -> same
-// sequence) and clearly not constant (a broken PRNG returning the same
-// value every call would still pass a naive "no crash" check).
+// core/topocentric: equatorialToEcliptic is the exact inverse of
+// eclipticToEquatorial (round-trips an arbitrary vector back to itself),
+// and unitVectorFromRaDec is the exact inverse of raDecFromEquatorial
+// (round-trips RA/Dec back to itself) — the two new v1.2 helpers agree
+// with the pair they mirror.
 {
-  const seqA = Array.from({ length: 5 }, mulberry32(42));
-  const seqB = Array.from({ length: 5 }, mulberry32(42));
-  assert.deepEqual(seqA, seqB, 'same seed must produce the same sequence');
-  assert.ok(new Set(seqA).size > 1, 'sequence must not be constant');
+  const v = { x: 0.4, y: -0.6, z: 0.7 };
+  const roundTripped = equatorialToEcliptic(eclipticToEquatorial(v));
+  assert.ok(Math.abs(roundTripped.x - v.x) < 1e-12);
+  assert.ok(Math.abs(roundTripped.y - v.y) < 1e-12);
+  assert.ok(Math.abs(roundTripped.z - v.z) < 1e-12);
+
+  const { raDeg, decDeg } = raDecFromEquatorial(unitVectorFromRaDec(101.2872, -16.7161));
+  assert.ok(Math.abs(raDeg - 101.2872) < 1e-9);
+  assert.ok(Math.abs(decDeg - (-16.7161)) < 1e-9);
 }
 
-// starfield-generator: sampleUnitSphere always lands exactly on the unit
-// sphere, and — the actual bug this function exists to avoid — a large
-// sample is NOT biased toward the cube's corners the way independently
-// sampling x/y/z in [-1,1] and normalizing would be. For true uniform
-// sampling, E[x^2] = E[y^2] = E[z^2] = 1/3 exactly (by symmetry); checking
-// all three land near 1/3 over a large sample catches that specific bug
-// (a corner-biased sampler pushes these apart, e.g. toward favoring
-// whichever axis the bias is worst along).
+// core/star-catalog: loadStarCatalog on a small fixture — array shapes
+// match the star count, every position is on the unit sphere, and
+// brightness/size correctly order brighter (lower/more-negative mag)
+// stars above fainter ones. Fixture includes Sirius's real id/mag/bv/
+// coordinates (HIP 32349, RA 101.2872deg/Dec -16.7161deg) as an
+// independent real-world anchor, not just internally-consistent fake data.
 {
-  const rand = mulberry32(7);
-  const N = 20000;
-  let sumX2 = 0, sumY2 = 0, sumZ2 = 0;
-  for (let i = 0; i < N; i++) {
-    const p = sampleUnitSphere(rand);
-    const r = Math.hypot(p.x, p.y, p.z);
-    assert.ok(Math.abs(r - 1) < 1e-9, `point must be exactly on the unit sphere, got r=${r}`);
-    sumX2 += p.x * p.x; sumY2 += p.y * p.y; sumZ2 += p.z * p.z;
+  const fixture = {
+    features: [
+      { id: 32349, properties: { mag: -1.44, bv: '0.009' }, geometry: { type: 'Point', coordinates: [101.2872, -16.7161] } },
+      { id: 1, properties: { mag: 3.0, bv: '1.2' }, geometry: { type: 'Point', coordinates: [10, 20] } },
+      { id: 2, properties: { mag: 6.4, bv: undefined }, geometry: { type: 'Point', coordinates: [-90, -45] } },
+    ],
+  };
+  const cat = loadStarCatalog(fixture);
+  assert.equal(cat.positions.length, 3 * 3);
+  assert.equal(cat.colors.length, 3 * 3);
+  assert.equal(cat.sizes.length, 3);
+  assert.equal(cat.brightness.length, 3);
+  for (let i = 0; i < 3; i++) {
+    const r = Math.hypot(cat.positions[i * 3], cat.positions[i * 3 + 1], cat.positions[i * 3 + 2]);
+    assert.ok(Math.abs(r - 1) < 1e-6, `star ${i} must be on the unit sphere, got r=${r}`);
   }
-  const meanX2 = sumX2 / N, meanY2 = sumY2 / N, meanZ2 = sumZ2 / N;
-  for (const [label, m] of [['x^2', meanX2], ['y^2', meanY2], ['z^2', meanZ2]]) {
-    assert.ok(Math.abs(m - 1 / 3) < 0.02,
-      `uniform-sphere sampling requires E[${label}] ~ 1/3, got ${m} (N=${N}) — check for corner-bias`);
-  }
+  assert.ok(cat.brightness[0] > cat.brightness[1], 'Sirius (mag -1.44) must be brighter than mag 3.0');
+  assert.ok(cat.brightness[1] > cat.brightness[2], 'mag 3.0 must be brighter than mag 6.4');
+  assert.ok(cat.sizes[0] > cat.sizes[1] && cat.sizes[1] > cat.sizes[2], 'point size must track brightness');
+  // no-bv star (index 2) falls back to white rather than throwing/NaN
+  assert.deepEqual([cat.colors[6], cat.colors[7], cat.colors[8]], [1, 1, 1]);
+
+  // Sirius's own position matches an independently-computed expected
+  // ecliptic-frame unit vector for its real RA/Dec.
+  const expected = equatorialToEcliptic(unitVectorFromRaDec(101.2872, -16.7161));
+  assert.ok(Math.abs(cat.positions[0] - expected.x) < 1e-5);
+  assert.ok(Math.abs(cat.positions[1] - expected.y) < 1e-5);
+  assert.ok(Math.abs(cat.positions[2] - expected.z) < 1e-5);
 }
 
-// starfield-generator: generateStarfield is deterministic per seed, every
-// array is the right length/shape, and every value stays in its documented
-// range (colors/brightness in [0,1], positions on the unit sphere).
+// core/star-catalog: constellationLineSegments produces exactly 2 points
+// (6 floats) per line segment — one segment per consecutive coordinate
+// pair across every MultiLineString part, and every point lands on the
+// unit sphere.
 {
-  const a = generateStarfield({ count: 500, seed: 99 });
-  const b = generateStarfield({ count: 500, seed: 99 });
-  assert.deepEqual(Array.from(a.positions), Array.from(b.positions), 'same seed must reproduce identical positions');
-  assert.deepEqual(Array.from(a.colors), Array.from(b.colors), 'same seed must reproduce identical colors');
-  assert.equal(a.positions.length, 500 * 3);
-  assert.equal(a.colors.length, 500 * 3);
-  assert.equal(a.sizes.length, 500);
-  assert.equal(a.brightness.length, 500);
-  for (let i = 0; i < 500; i++) {
-    const r = Math.hypot(a.positions[i * 3], a.positions[i * 3 + 1], a.positions[i * 3 + 2]);
-    // 1e-5, not 1e-9 — positions round-trip through a Float32Array (~7
-    // significant decimal digits), unlike sampleUnitSphere's plain-double
-    // check above.
-    assert.ok(Math.abs(r - 1) < 1e-5, `every star position must be on the unit sphere, got r=${r}`);
-    assert.ok(a.brightness[i] >= 0 && a.brightness[i] <= 1, 'brightness must be in [0,1]');
-    for (const c of [a.colors[i * 3], a.colors[i * 3 + 1], a.colors[i * 3 + 2]]) {
-      assert.ok(c >= 0 && c <= 1, 'color channels must be in [0,1]');
-    }
+  const fixture = {
+    features: [
+      { id: 'Fix', properties: {}, geometry: { type: 'MultiLineString', coordinates: [[[0, 0], [10, 0], [10, 10]], [[50, 50], [60, 60]]] } },
+    ],
+  };
+  // part 1 has 3 points -> 2 segments; part 2 has 2 points -> 1 segment; 3 segments * 6 floats each
+  const segs = constellationLineSegments(fixture);
+  assert.equal(segs.length, 3 * 6);
+  for (let i = 0; i < segs.length; i += 3) {
+    const r = Math.hypot(segs[i], segs[i + 1], segs[i + 2]);
+    assert.ok(Math.abs(r - 1) < 1e-6, `segment endpoint must be on the unit sphere, got r=${r}`);
   }
-  assert.deepEqual(STAR_COUNTS, { low: 2500, medium: 6000, high: 12000 });
-  assert.equal(DEFAULT_STAR_QUALITY, 'medium');
 }
 
 // url-state (v0.8): round-trip encode->decode for each camera mode that
