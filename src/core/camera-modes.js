@@ -96,10 +96,22 @@ const GLOBAL_UP = { x: 0, y: 1, z: 0 };
  * tilt — "north" is taken as the global scene up axis, a deliberate v1
  * simplification consistent with not modeling axial tilt anywhere else in
  * this project.
+ *
+ * `rotationRad` is the planet mesh's *current* `rotation.y` (see app.js's
+ * updateAllPositions) — without it, (lat, lon) would be a fixed direction
+ * in WORLD space, so as the planet mesh spins under the camera the ground
+ * would slide out from under a "stationary" observer instead of the
+ * observer staying planted on the same physical point as the planet turns
+ * (which is what actually produces a day/night sky sweep). Subtracting it
+ * from theta is the correct sign for three.js's rotation.y convention
+ * (verified against THREE.Matrix4#makeRotationY: a fixed local-frame point
+ * at longitude lon ends up, after rotating the mesh by R, at world theta =
+ * lon - R) — get this backwards and the sky would sweep at DOUBLE the
+ * correct rate instead of staying put.
  */
-function surfacePose(planetPos, sceneRadius, lat, lon) {
+function surfacePose(planetPos, sceneRadius, lat, lon, rotationRad = 0) {
   const phi = (90 - lat) * DEG_TO_RAD; // colatitude from north pole
-  const theta = lon * DEG_TO_RAD;
+  const theta = lon * DEG_TO_RAD - rotationRad;
   const normal = {
     x: Math.sin(phi) * Math.cos(theta),
     y: Math.cos(phi),
@@ -160,9 +172,10 @@ function facingVector(yaw, pitch) {
 /**
  * @param {object} state           camera-modes state (see createCameraState)
  * @param {object} bodyPositions   { [bodyKey]: {x,y,z} } in scene units (post-scale)
+ * @param {object} bodyRotations   { [bodyKey]: radians } current mesh.rotation.y per planet (SURFACE_FIRST_PERSON only; every other mode ignores it)
  * @returns {{position: {x,y,z}, target: {x,y,z}, up: {x,y,z}}}
  */
-export function computePose(state, bodyPositions) {
+export function computePose(state, bodyPositions, bodyRotations = {}) {
   switch (state.mode) {
     case CAMERA_MODES.HELIOCENTRIC_TOPDOWN: {
       const target = bodyPositions[state.focusBody] ?? { x: 0, y: 0, z: 0 };
@@ -197,7 +210,7 @@ export function computePose(state, bodyPositions) {
       const { planet, lat, lon } = state.surface;
       const planetPos = bodyPositions[planet] ?? { x: 0, y: 0, z: 0 };
       const sceneRadius = compressSize(PLANETS[planet].radiusKm);
-      return surfacePose(planetPos, sceneRadius, lat, lon);
+      return surfacePose(planetPos, sceneRadius, lat, lon, bodyRotations[planet] ?? 0);
     }
     case CAMERA_MODES.GEOCENTRIC: {
       const earthPos = bodyPositions.earth ?? { x: 0, y: 0, z: 0 };
