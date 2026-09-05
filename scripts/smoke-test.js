@@ -325,6 +325,43 @@ import { analyzeObserver, observeAt, OBSERVER_TARGETS } from '../src/analysis/ob
   assert.ok(Math.abs(cosAngle) < 0.999, 'up vector must not be parallel to the view direction');
 }
 
+// camera-modes: surface first-person must turn WITH the planet's spin — a
+// "standing observer" stays planted on the same physical point as the
+// planet rotates, so the camera's world-space position has to advance as
+// bodyRotations[planet] advances (this was the actual bug report: the
+// surface camera used to ignore rotation entirely and stay fixed in world
+// space while the visible planet mesh spun underneath it).
+{
+  let state = setMode(createCameraState(), CAMERA_MODES.SURFACE_FIRST_PERSON, { planet: 'earth' });
+  state = setSurfaceLocation(state, 0, 0); // equator, prime meridian
+  const bodyPositions = { earth: { x: 0, y: 0, z: 0 } };
+
+  const poseAtZero = computePose(state, bodyPositions, { earth: 0 });
+  const poseAtQuarterTurn = computePose(state, bodyPositions, { earth: Math.PI / 2 });
+  assert.ok(
+    Math.hypot(
+      poseAtZero.position.x - poseAtQuarterTurn.position.x,
+      poseAtZero.position.y - poseAtQuarterTurn.position.y,
+      poseAtZero.position.z - poseAtQuarterTurn.position.z
+    ) > 0.01,
+    'surface camera position must change as the planet rotation angle advances'
+  );
+
+  // A full rotation (2*PI) must return to exactly the same pose as R=0 —
+  // otherwise the camera would be drifting rather than tracking a fixed
+  // physical point through one full spin.
+  const poseAfterFullTurn = computePose(state, bodyPositions, { earth: 2 * Math.PI });
+  for (const axis of ['x', 'y', 'z']) {
+    assert.ok(Math.abs(poseAtZero.position[axis] - poseAfterFullTurn.position[axis]) < 1e-9,
+      `one full rotation must return the surface camera to its starting position (axis ${axis})`);
+  }
+
+  // Missing bodyRotations (old call sites / other modes) must default to 0,
+  // not throw — same pose as explicitly passing rotationRad=0.
+  const poseNoRotationsArg = computePose(state, bodyPositions);
+  assert.deepEqual(poseNoRotationsArg, poseAtZero, 'omitting bodyRotations must behave like rotation=0, for backward compatibility');
+}
+
 // camera-modes: setSurfacePlanet switches which body surface mode stands on
 {
   let state = setSurfacePlanet(createCameraState(), 'mars');

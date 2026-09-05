@@ -227,6 +227,11 @@ const ephemerisHud = createEphemerisHud(document.getElementById('ui-root'));
 // Unchanged shape/consumer: camera-rig.js/computePose don't know or care
 // this now comes from a normalized body-state instead of a raw {x,y,z}.
 const scenePositions = { sun: { x: 0, y: 0, z: 0 } };
+// bodyKey -> current planetMeshes[key].rotation.y (radians), kept in sync
+// inside updateAllPositions — SURFACE_FIRST_PERSON's computePose needs this
+// so a "standing on the surface" camera turns with the planet instead of
+// staying fixed in world space while the ground spins under it.
+const bodyRotations = {};
 
 // Every body with real heliocentric `elements` — everything getBodyState
 // can produce a normalized AU body-state for (planets go through Horizons
@@ -261,7 +266,9 @@ function updateAllPositions(currentDate) {
   // getBodyState.
   for (const key of PLANET_ORDER) {
     const planetData = PLANETS[key];
-    planetMeshes[key].rotation.y = circularOrbitAngle(currentJD - startJD, planetData.rotationPeriodDays);
+    const rotationRad = circularOrbitAngle(currentJD - startJD, planetData.rotationPeriodDays);
+    planetMeshes[key].rotation.y = rotationRad;
+    bodyRotations[key] = rotationRad;
     const parentSceneRadius = compressSize(planetData.radiusKm);
     for (const { mesh, moonData } of moonMeshesByParent[key]) {
       const localPos = moonLocalPosition(moonData, planetData.radiusKm, parentSceneRadius, currentJD, startJD);
@@ -325,7 +332,7 @@ const viewModeUI = createViewModeUI(
       ? enterGeocentric(cameraState, scenePositions, 'mars') // Mars: the classic retrograde-motion example
       : setMode(cameraState, mode);
     cameraRig.setMode(cameraState.mode);
-    cameraRig.applyPose(computePose(cameraState, scenePositions));
+    cameraRig.applyPose(computePose(cameraState, scenePositions, bodyRotations));
     viewModeUI.setActiveMode(cameraState.mode);
     if (mode === CAMERA_MODES.GEOCENTRIC) loadFullFor(planetMeshes.mars);
   },
@@ -336,7 +343,7 @@ viewModeUI.setActiveMode(cameraState.mode);
 createSurfaceControlsUI(document.getElementById('ui-root'), PLANET_ORDER, (planet, lat, lon) => {
   cameraState = setMode(cameraState, CAMERA_MODES.SURFACE_FIRST_PERSON, { planet, lat, lon });
   cameraRig.setMode(cameraState.mode);
-  cameraRig.applyPose(computePose(cameraState, scenePositions));
+  cameraRig.applyPose(computePose(cameraState, scenePositions, bodyRotations));
   viewModeUI.setActiveMode(cameraState.mode);
   loadFullFor(planetMeshes[planet]);
 });
@@ -393,7 +400,7 @@ createEventToolkitPanel(document.getElementById('ui-root'), {
 });
 
 updateAllPositions(timeState.currentDate);
-cameraRig.applyPose(computePose(cameraState, scenePositions));
+cameraRig.applyPose(computePose(cameraState, scenePositions, bodyRotations));
 ephemerisHud.update(timeState.currentDate, bodyDisplayName(selectedBodyKey), bodyStates[selectedBodyKey] ?? null, moonHudInfo(selectedBodyKey)?.parentName ?? null);
 
 const clock = new THREE.Clock();
@@ -420,16 +427,16 @@ function animate() {
 
   if (cameraState.mode === CAMERA_MODES.FREE_FLIGHT) {
     cameraState = cameraRig.updateFreeFlight(cameraState, delta);
-    cameraRig.applyPose(computePose(cameraState, scenePositions));
+    cameraRig.applyPose(computePose(cameraState, scenePositions, bodyRotations));
   } else if (cameraState.mode === CAMERA_MODES.HELIOCENTRIC_TOPDOWN) {
     cameraRig.orbitControls.update();
   } else if (cameraState.mode === CAMERA_MODES.SURFACE_FIRST_PERSON) {
     // The planet under our feet keeps moving along its orbit — re-derive
     // the pose every frame rather than once on mode entry.
-    cameraRig.applyPose(computePose(cameraState, scenePositions));
+    cameraRig.applyPose(computePose(cameraState, scenePositions, bodyRotations));
   } else if (cameraState.mode === CAMERA_MODES.GEOCENTRIC) {
     cameraState = cameraRig.updateGeocentricLook(cameraState);
-    cameraRig.applyPose(computePose(cameraState, scenePositions));
+    cameraRig.applyPose(computePose(cameraState, scenePositions, bodyRotations));
   }
 
   renderer.render(scene, camera);
