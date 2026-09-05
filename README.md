@@ -222,10 +222,34 @@ before with zero extra UI.
   (no API key required).
 - Textures: see [Assets](#assets) below.
 
+## Desktop App (Tauri)
+
+Wraps the same static site in a native window via [Tauri](https://tauri.app/)
+(not Electron — uses the OS's own WebView, no bundled Chromium). Requires
+the [Rust toolchain](https://rustup.rs/) to build.
+
+```bash
+npm install
+npm run tauri:dev     # native window, live against the source tree
+npm run tauri:build   # produces a real .app/.dmg (macOS) bundle
+```
+
+- **Offline by default** — this is exactly why THREE.js is vendored
+  locally (see [Assets](#assets) below) instead of loaded from a CDN: a
+  packaged desktop app with no network shouldn't white-screen.
+- **Window title/icon** and **window size/position** (remembered across
+  launches, via the official `tauri-plugin-window-state` plugin) are set
+  in `src-tauri/tauri.conf.json` / `src-tauri/src/lib.rs`.
+- The app icon (`assets/icon-source.png`) is a placeholder — swap it for
+  real artwork and re-run `npx tauri icon assets/icon-source.png` any
+  time.
+- **Out of scope for now**: auto-update, native menus/tray/notifications,
+  code-signing/notarization for distribution, and mobile targets.
+
 ## Status
 
-v1 — desktop packaging (Tauri/Electron) is a possible future phase, not part
-of this build.
+v1 — desktop packaging via Tauri is implemented (see above); an installer/
+auto-update pipeline for distributing signed builds is not.
 
 ## Assets
 
@@ -242,6 +266,13 @@ Sphere, compiled from NASA source imagery. Textures are downloaded by
 `scripts/fetch-textures.mjs` (`npm run fetch-textures`), not committed by
 hand — re-run it any time to refresh them or pick up a body that had no
 working source URL yet (see the TODO list in `ATTRIBUTION.md`).
+
+[three.js](https://threejs.org/) is vendored at `assets/vendor/three/`
+(pinned to `0.160.0`, [MIT licensed](https://github.com/mrdoob/three.js/blob/dev/LICENSE))
+rather than loaded from a CDN — needed for the desktop app to actually
+work offline (see [Desktop App](#desktop-app-tauri) below). Only the exact
+files this project imports are vendored: `build/three.module.js` and the
+one addon in use, `examples/jsm/controls/OrbitControls.js`.
 
 ## Contributing
 

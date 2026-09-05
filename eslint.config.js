@@ -36,5 +36,5 @@ export default [
     files: ['scripts/**/*.js', 'scripts/**/*.mjs'],
     languageOptions: { ecmaVersion: 2022, sourceType: 'module', globals: nodeGlobals },
   },
-  { ignores: ['node_modules/', 'assets/'] },
+  { ignores: ['node_modules/', 'assets/', 'src-tauri/', 'web-dist/'] },
 ];

@@ -127,9 +127,33 @@ Prev/Next 按鈕——桌面版完全不受影響、不會多出任何 UI。
 - 即時位置:[JPL Horizons API](https://ssd-api.jpl.nasa.gov/doc/horizons.html)(不需 API key)。
 - 貼圖:詳見下方[資產授權](#資產授權)。
 
+## 桌面應用程式(Tauri)
+
+用 [Tauri](https://tauri.app/) 把同一個靜態網站包成原生視窗(不是
+Electron——用作業系統自帶的 WebView,不內建 Chromium)。需要
+[Rust 工具鏈](https://rustup.rs/)才能 build。
+
+```bash
+npm install
+npm run tauri:dev     # 原生視窗,直接對著原始碼跑
+npm run tauri:build   # 產生真的 .app/.dmg(macOS)安裝包
+```
+
+- **預設就離線可用**——這正是為什麼 THREE.js 要地化到本地(見下方
+  [資產授權](#資產授權)),而不是從 CDN 載入:桌面版打包好之後如果沒有
+  網路就白屏,那就不算真的離線可用。
+- **視窗標題/圖示**跟**視窗大小/位置**(用官方 `tauri-plugin-window-state`
+  外掛記憶,跨次啟動)都設定在 `src-tauri/tauri.conf.json` /
+  `src-tauri/src/lib.rs`。
+- App 圖示(`assets/icon-source.png`)目前是占位圖——換成正式美術素材後
+  重跑 `npx tauri icon assets/icon-source.png` 就能更新全套圖示。
+- **目前範圍不含**:自動更新、原生選單/系統匣/通知、發布用的程式碼
+  簽署與公證、行動裝置平台。
+
 ## 目前狀態
 
-v1 版本——桌面應用程式打包(Tauri/Electron)是未來可能的階段,目前尚未著手。
+v1 版本——桌面應用程式打包(見上方)已經做了;正式簽署 build 的安裝包/
+自動更新發布流程還沒有。
 
 ## 資產授權
 
