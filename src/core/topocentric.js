@@ -15,8 +15,12 @@ import { J2000_JD } from './orbital-elements.js';
 const DEG_TO_RAD = Math.PI / 180;
 export const RAD_TO_DEG = 180 / Math.PI;
 
-// Fixed obliquity approximation — see docs/accuracy.md "Observer Mode
-// (v0.6)". Ignores real time-varying obliquity, precession, nutation.
+// Fixed J2000 obliquity for the shared ecliptic<->equatorial rotations —
+// deliberately NOT date-dependent (the star catalog renders fixed-J2000
+// coordinates through the same rotation; see docs/accuracy.md). Precession
+// (v1.5, precessEquatorialToDate) and nutation (v1.6, nutation/
+// nutateEquatorialToTrue/eqEquinoxDeg) are applied separately at Observer
+// Mode's output only.
 export const OBLIQUITY_DEG = PLANETS.earth.axialTiltDeg;
 
 function clampUnit(v) {
@@ -182,6 +186,89 @@ export function precessEquatorialToDate(v, jd) {
     y: x2 * Math.sin(z) + y2 * Math.cos(z),
     z: z2,
   };
+}
+
+/**
+ * Nutation in longitude/obliquity — Meeus Ch. 22, abbreviated form: the
+ * five fundamental arguments as low-order polynomials (deliberately NOT
+ * refactored out of lunar-theory.js's higher-order versions — that
+ * function is verified against Meeus's own worked example and doesn't
+ * compute Ω anyway) plus the dominant periodic terms. Accuracy ~0.5″,
+ * ample against the full IAU 1980 106-term series for this project's
+ * precision tier. Degrees out.
+ */
+export function nutation(jd) {
+  const T = (jd - J2000_JD) / 36525;
+  // Fundamental arguments (degrees) — Meeus 22.x low-order polynomials.
+  const D = 297.85036 + 445267.111480 * T - 0.0019142 * T * T + T * T * T / 189474;
+  const M = 357.52772 + 35999.050340 * T - 0.0001603 * T * T - T * T * T / 300000;
+  const Mp = 134.96298 + 477198.867398 * T + 0.0086972 * T * T + T * T * T / 56250;
+  const F = 93.27191 + 483202.017538 * T - 0.0036825 * T * T + T * T * T / 327270;
+  const Om = 125.04452 - 1934.136261 * T + 0.0020708 * T * T + T * T * T / 450000;
+
+  const rad = (deg) => deg * DEG_TO_RAD;
+  // Dominant terms of the IAU 1980 series (coefficients in 0.0001″).
+  const dPsiArcsec = (
+    (-171996 - 174.2 * T) * Math.sin(rad(Om))
+    + (-13187 - 1.6 * T) * Math.sin(rad(-2 * D + 2 * F + 2 * Om))
+    + (-2274 - 0.2 * T) * Math.sin(rad(2 * F + 2 * Om))
+    + (2062 + 0.2 * T) * Math.sin(rad(2 * Om))
+    + (1426 - 3.4 * T) * Math.sin(rad(M))
+    + (712 + 0.1 * T) * Math.sin(rad(Mp))
+    + (-517 + 1.2 * T) * Math.sin(rad(-2 * D + M + 2 * F + 2 * Om))
+    + (-386 - 0.4 * T) * Math.sin(rad(2 * F + Om))
+    - 301 * Math.sin(rad(Mp + 2 * F + 2 * Om))
+  ) * 0.0001;
+  const dEpsArcsec = (
+    (92025 + 8.9 * T) * Math.cos(rad(Om))
+    + (5736 - 3.1 * T) * Math.cos(rad(-2 * D + 2 * F + 2 * Om))
+    + (977 - 0.5 * T) * Math.cos(rad(2 * F + 2 * Om))
+    + (-895 + 0.5 * T) * Math.cos(rad(2 * Om))
+    + (54 - 0.1 * T) * Math.cos(rad(M))
+    - 7 * Math.cos(rad(Mp))
+    + (224 - 0.6 * T) * Math.cos(rad(-2 * D + M + 2 * F + 2 * Om))
+    + 200 * Math.cos(rad(2 * F + Om))
+    + (129 - 0.1 * T) * Math.cos(rad(Mp + 2 * F + 2 * Om))
+  ) * 0.0001;
+
+  return { dPsiDeg: dPsiArcsec / 3600, dEpsDeg: dEpsArcsec / 3600 };
+}
+
+/**
+ * Rotates a MEAN-equinox-of-date equatorial vector to the TRUE equinox of
+ * date: R_x(-(eps+dEps)) · R_z(-dPsi) · R_x(eps) — into the ecliptic
+ * frame, rotate the equinox by nutation-in-longitude, back into the
+ * (now-nutated) equatorial frame. Uses the fixed OBLIQUITY_DEG for eps:
+ * the mean-obliquity drift inside a 17″ rotation contributes <0.01″,
+ * far below this tier.
+ */
+export function nutateEquatorialToTrue(v, jd) {
+  const { dPsiDeg, dEpsDeg } = nutation(jd);
+  const eps = OBLIQUITY_DEG * DEG_TO_RAD;
+  const epsTrue = (OBLIQUITY_DEG + dEpsDeg) * DEG_TO_RAD;
+  const dPsi = dPsiDeg * DEG_TO_RAD;
+
+  // R_x(eps): equatorial -> ecliptic-of-date
+  const y1 = v.y * Math.cos(eps) + v.z * Math.sin(eps);
+  const z1 = -v.y * Math.sin(eps) + v.z * Math.cos(eps);
+  const x1 = v.x;
+  // R_z(-dPsi): rotate the equinox by nutation in longitude
+  const x2 = x1 * Math.cos(dPsi) - y1 * Math.sin(dPsi);
+  const y2 = x1 * Math.sin(dPsi) + y1 * Math.cos(dPsi);
+  const z2 = z1;
+  // R_x(-(eps+dEps)): ecliptic -> TRUE equatorial (nutated obliquity)
+  return {
+    x: x2,
+    y: y2 * Math.cos(epsTrue) - z2 * Math.sin(epsTrue),
+    z: y2 * Math.sin(epsTrue) + z2 * Math.cos(epsTrue),
+  };
+}
+
+/** Equation of the equinoxes (degrees): apparent minus mean sidereal time
+ *  = dPsi · cos(eps). Added to gmstDeg/lstDeg to get apparent (GAST-based)
+ *  sidereal time, keeping hour angles consistent with a true-of-date RA. */
+export function eqEquinoxDeg(jd) {
+  return nutation(jd).dPsiDeg * Math.cos(OBLIQUITY_DEG * DEG_TO_RAD);
 }
 
 /** Local hour angle H = LST - RA. Degrees, [0, 360). */

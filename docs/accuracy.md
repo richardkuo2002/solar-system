@@ -41,7 +41,10 @@ returned.
 
 - No planetary perturbations (no N-body gravity between planets) — pure
   two-body Kepler orbits around the Sun.
-- No light-time correction, no relativistic correction.
+- No light-time correction to the target, no relativistic correction.
+  (Observer Mode does model the observer-motion half of the apparent
+  displacement — annual aberration, v1.6 — but the light-travel-time
+  offset of the target's own position remains unmodeled everywhere.)
 - Comets and dwarf planets use the *same* low-precision element
   propagation as planets, even though the Standish table was fit to the 8
   major planets — treat comet/dwarf-planet positions as illustrative, not
@@ -246,9 +249,11 @@ requirement to state the topocentric model's scope.
   `precessEquatorialToDate` (`src/core/topocentric.js`) applies the
   rigorous IAU 1976 rotation (Meeus Ch. 21, ζ/z/θ polynomials, verified
   against Meeus's own worked Example 21.b in `scripts/smoke-test.js`) to
-  the target's equatorial vector before RA/Dec extraction — Observer
-  Mode's output frame is now the **mean equator/equinox of date**
-  (`TOPOCENTRIC_EQUATORIAL_MEAN_OF_DATE` in exported results). This also
+  the target's equatorial vector before RA/Dec extraction — as of v1.5
+  the output frame became the **mean equator/equinox of date**, and v1.6's
+  nutation upgrade (next bullet) took it the rest of the way to the true
+  equinox of date (`TOPOCENTRIC_EQUATORIAL_APPARENT` in exported
+  results). This also
   fixed a real internal inconsistency: `gmstDeg`'s sidereal time is
   inherently equinox-of-date, so hour angles built from a J2000-anchored
   RA were silently mixing two equinox references (~0.36° by 2026) in
@@ -277,16 +282,27 @@ requirement to state the topocentric model's scope.
   table for Kaohsiung, Taiwan (see `scripts/smoke-test.js`), matching to
   within tens of seconds. Transit (culmination) is unaffected by
   refraction and stays geometric.
-- **Still not modeled, with numbers** (below this project's stated
-  precision tier):
-  - **Nutation** (~9-17″ depending on date) — already below the Meeus
-    lunar theory's own ~10″ error budget (`lunar-theory.js`), so adding it
-    to Observer Mode alone wouldn't improve overall consistency. This is
-    why the output frame is *mean* (not *true*) equinox of date.
-  - **Aberration** (~20.5″, the annual aberration constant) — would need
-    the Sun's true longitude threaded into a function that currently only
-    takes a direction vector; a real (small) rewrite, not a one-line add.
-  - ~~Precession~~ — modeled as of v1.5, see above.
+- **Nutation + annual aberration (v1.6: modeled — apparent place).**
+  `nutation(jd)` (`src/core/topocentric.js`) computes Δψ/Δε via Meeus
+  Ch. 22's abbreviated series (verified against Meeus's worked Example
+  22.a to ~0.01″, see `scripts/smoke-test.js`); `nutateEquatorialToTrue`
+  rotates mean-of-date → true equinox of date, and `eqEquinoxDeg`
+  (Δψ·cos ε) upgrades the sidereal time to apparent (GAST) so hour angles
+  stay equinox-consistent with the true-of-date RA — the same class of
+  mixing v1.5's precession fix closed at the mean-of-date level.
+  Aberration uses the classical velocity form: Earth's `velocityAuPerDay`
+  (already on every body-state, central-difference) displaces the
+  apparent direction by v/c (`C_AU_PER_DAY` in `core/units.js`). Note:
+  the pre-v1.6 version of this document claimed aberration "would need
+  the Sun's true longitude threaded in" — that was wrong; the velocity
+  form needs no such plumbing. Observer Mode's output frame is now the
+  standard **apparent place** (`TOPOCENTRIC_EQUATORIAL_APPARENT`).
+- **Still not modeled** (below this precision tier; add if Observer Mode
+  ever claims sub-arcsecond): full IAU 1980 106-term nutation
+  (abbreviated series is ~0.5″ worst-case off), date-dependent mean
+  obliquity (<0.01″ inside a 17″ rotation), barycentric-vs-heliocentric
+  Earth velocity (~0.04″), light-time to the target, relativistic light
+  deflection (~0.004″ away from the Sun's limb).
 - **Rise/transit/set** reuses the exact same `findStationaryPoints`
   coarse-scan-then-bisect solver v0.4/v0.5 already use (10-minute coarse
   sampling across the UTC calendar day, 60-second bisection tolerance) —

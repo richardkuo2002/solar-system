@@ -5,6 +5,17 @@ All notable changes to this project. Format loosely follows
 milestones in `docs/ROADMAP.md` (local-only), with each version's exact
 scope and accuracy notes in [docs/accuracy.md](docs/accuracy.md).
 
+## v1.6 — 2026-09-05
+
+- **Nutation + annual aberration in Observer Mode** — RA/Dec is now a
+  complete apparent place (true equinox of date): Meeus Ch. 22 abbreviated
+  nutation series (verified against Meeus's worked Example 22.a),
+  velocity-form annual aberration (Earth's velocity vector was already on
+  every body-state — the old doc claim that this needed new plumbing was
+  wrong, and is corrected), and apparent (GAST) sidereal time so hour
+  angles stay equinox-consistent. Export frame renamed to
+  `TOPOCENTRIC_EQUATORIAL_APPARENT`.
+
 ## v1.5 — 2026-09-05
 
 - **Retrograde motion for all planets** — the Retrograde event type now

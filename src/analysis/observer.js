@@ -20,8 +20,9 @@ import { findStationaryPoints } from './retrograde.js';
 import {
   lstDeg, eclipticToEquatorial, raDecFromEquatorial,
   observerGeocentricPositionAu, hourAngleDeg, altAzFromDecHa, refractionArcmin,
-  precessEquatorialToDate,
+  precessEquatorialToDate, nutateEquatorialToTrue, eqEquinoxDeg,
 } from '../core/topocentric.js';
+import { C_AU_PER_DAY } from '../core/units.js';
 
 // Standard rise/set convention: apparent altitude at the horizon (Meeus
 // Ch. 15) — this already includes atmospheric refraction (~34') plus a
@@ -73,15 +74,29 @@ function targetHeliocentricStateFor(targetKey, jsDate, forceSource) {
 }
 
 /** Geocentric-equatorial position (AU) of `target` as seen from Earth's
- *  center, before topocentric correction. v1.5: precessed to the mean
- *  equinox of date — gmstDeg's sidereal time is inherently of-date, so a
- *  J2000-anchored RA was silently mixing two equinox references in every
- *  hour-angle/rise-set/transit calculation (~0.36deg by 2026). */
+ *  center, before topocentric correction. v1.5 precessed to the mean
+ *  equinox of date; v1.6 completes the apparent place: annual aberration
+ *  (velocity form — Earth's velocityAuPerDay is already on the state this
+ *  function fetches, ecliptic J2000 like positionAu, so the correction
+ *  applies to the ecliptic difference vector before any rotation) then
+ *  nutation (mean -> true equinox of date). */
 function geocentricEquatorialAu(target, jsDate, forceSource) {
   const earthState = getBodyState('earth', jsDate, PLANETS.earth.elements, { forceSource });
   const targetState = target === 'sun' ? sunBodyState(jsDate) : targetHeliocentricStateFor(target, jsDate, forceSource);
-  const equatorialJ2000 = eclipticToEquatorial(sub(targetState.positionAu, earthState.positionAu));
-  return precessEquatorialToDate(equatorialJ2000, julianDateFromDate(jsDate));
+  const geo = sub(targetState.positionAu, earthState.positionAu);
+  // Annual aberration: displace the unit direction by v_earth/c, keep the
+  // original magnitude (distance is unaffected by aberration).
+  const r = length(geo);
+  const v = earthState.velocityAuPerDay;
+  const aberrated = {
+    x: geo.x / r + v.x / C_AU_PER_DAY,
+    y: geo.y / r + v.y / C_AU_PER_DAY,
+    z: geo.z / r + v.z / C_AU_PER_DAY,
+  };
+  const rAb = length(aberrated);
+  const eclipticApparent = { x: aberrated.x / rAb * r, y: aberrated.y / rAb * r, z: aberrated.z / rAb * r };
+  const jd = julianDateFromDate(jsDate);
+  return nutateEquatorialToTrue(precessEquatorialToDate(eclipticToEquatorial(eclipticApparent), jd), jd);
 }
 
 /**
@@ -93,7 +108,11 @@ function geocentricEquatorialAu(target, jsDate, forceSource) {
 export function observeAt({ target, jsDate, latDeg, lonDeg, elevationM = 0, forceSource = 'kepler' }) {
   const jd = julianDateFromDate(jsDate);
   const geoEqAu = geocentricEquatorialAu(target, jsDate, forceSource);
-  const lst = lstDeg(jd, lonDeg);
+  // v1.6 — apparent (GAST-based) local sidereal time: with a true-of-date
+  // RA, mean sidereal time would re-mix equinox references (up to ~15.6",
+  // ~1s of time) in both the observer-position and hour-angle uses below —
+  // the same class of inconsistency v1.5's precession fix closed.
+  const lst = (lstDeg(jd, lonDeg) + eqEquinoxDeg(jd) + 360) % 360;
   const observerAu = observerGeocentricPositionAu({ latDeg, elevationM }, lst);
   const topoAu = sub(geoEqAu, observerAu);
   const { raDeg, decDeg } = raDecFromEquatorial(topoAu);
@@ -205,7 +224,7 @@ export function analyzeObserver({ target, atUtc, latDeg, lonDeg, elevationM = 0 
     type: 'observer',
     target,
     observer: { type: 'topocentric', bodyId: 'earth', latDeg, lonDeg, elevationM },
-    reference: { frame: 'TOPOCENTRIC_EQUATORIAL_MEAN_OF_DATE', center: 'OBSERVER', source: 'kepler' },
+    reference: { frame: 'TOPOCENTRIC_EQUATORIAL_APPARENT', center: 'OBSERVER', source: 'kepler' },
     input: { atUtc, latDeg, lonDeg, elevationM },
     result: {
       raDeg: now.raDeg, decDeg: now.decDeg, altDeg: now.altDeg, azDeg: now.azDeg,

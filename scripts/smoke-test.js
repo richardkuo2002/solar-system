@@ -39,8 +39,9 @@ import { toExportableJson, toExportableCsv } from '../src/analysis/export.js';
 import {
   gmstDeg, eclipticToEquatorial, raDecFromEquatorial, observerGeocentricPositionAu,
   hourAngleDeg, altAzFromDecHa, OBLIQUITY_DEG, equatorialToEcliptic, unitVectorFromRaDec,
-  refractionArcmin, precessEquatorialToDate,
+  refractionArcmin, precessEquatorialToDate, nutation, nutateEquatorialToTrue, eqEquinoxDeg,
 } from '../src/core/topocentric.js';
+import { C_AU_PER_DAY } from '../src/core/units.js';
 import { J2000_JD } from '../src/core/orbital-elements.js';
 import { analyzeObserver, observeAt, OBSERVER_TARGETS } from '../src/analysis/observer.js';
 import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/url-state.js';
@@ -1156,6 +1157,51 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
   assert.ok(Math.abs(same.x - 0.3) < 1e-15 && Math.abs(same.y - -0.4) < 1e-15 && Math.abs(same.z - 0.86) < 1e-15, 'precession at J2000 must be identity');
 }
 
+// core/topocentric (v1.6): nutation — Meeus's own worked example (2nd
+// ed., Example 22.a): 1987 April 10.0 TD = JD 2446895.5, expected
+// dPsi = -3.788", dEps = +9.443" (full IAU 1980 series values). This
+// abbreviated series measured -3.783"/+9.454" when actually run —
+// tolerance 0.05" covers that truncation gap, not hand-assumed.
+{
+  const { dPsiDeg, dEpsDeg } = nutation(2446895.5);
+  assert.ok(Math.abs(dPsiDeg * 3600 - -3.788) < 0.05, `Meeus 22.a dPsi: expected -3.788", got ${dPsiDeg * 3600}"`);
+  assert.ok(Math.abs(dEpsDeg * 3600 - 9.443) < 0.05, `Meeus 22.a dEps: expected +9.443", got ${dEpsDeg * 3600}"`);
+}
+
+// core/topocentric (v1.6): nutateEquatorialToTrue preserves vector length
+// (pure rotation) and moves a vector by roughly the nutation magnitude
+// (~arcseconds), never by degrees.
+{
+  const jd = 2446895.5;
+  const v = { x: 0.5, y: 0.5, z: Math.SQRT1_2 };
+  const rotated = nutateEquatorialToTrue(v, jd);
+  const lenBefore = Math.hypot(v.x, v.y, v.z);
+  const lenAfter = Math.hypot(rotated.x, rotated.y, rotated.z);
+  assert.ok(Math.abs(lenBefore - lenAfter) < 1e-14, 'nutation rotation must preserve length');
+  const dot = (v.x * rotated.x + v.y * rotated.y + v.z * rotated.z) / (lenBefore * lenAfter);
+  const angleArcsec = Math.acos(Math.min(1, dot)) * (180 / Math.PI) * 3600;
+  assert.ok(angleArcsec > 0.1 && angleArcsec < 30, `nutation should move a vector by arcseconds, got ${angleArcsec}"`);
+}
+
+// core/topocentric (v1.6): eqEquinoxDeg = dPsi*cos(eps) — for Meeus 22.a's
+// dPsi = -3.788", expect about -3.48" (cos 23.44deg ~ 0.917), tiny but
+// nonzero, and consistent with nutation()'s own dPsi.
+{
+  const expectedDeg = nutation(2446895.5).dPsiDeg * Math.cos(OBLIQUITY_DEG * Math.PI / 180);
+  assert.ok(Math.abs(eqEquinoxDeg(2446895.5) - expectedDeg) < 1e-15, 'eqEquinoxDeg must equal dPsi*cos(eps)');
+  assert.ok(Math.abs(eqEquinoxDeg(2446895.5) * 3600 - -3.47) < 0.1, `expected ~-3.47", got ${eqEquinoxDeg(2446895.5) * 3600}"`);
+}
+
+// core/units + analysis/observer (v1.6): the aberration constant — a unit
+// direction perpendicular to a velocity of Earth's mean orbital speed
+// (~29.79 km/s = 0.0172 AU/day) is displaced by ~20.5" (kappa, the
+// classical annual aberration constant).
+{
+  const vEarthAuPerDay = 29.7859 * 86400 / 149597870.7;
+  const kappaArcsec = (vEarthAuPerDay / C_AU_PER_DAY) * (180 / Math.PI) * 3600;
+  assert.ok(Math.abs(kappaArcsec - 20.5) < 0.1, `aberration constant: expected ~20.5", got ${kappaArcsec}"`);
+}
+
 // core/topocentric: refractionArcmin — 0 at zenith, Bennett's well-known
 // ~34' figure at the true-altitude horizon, and 0 (not extrapolated into
 // the formula's singularity) below -1deg.
@@ -1273,11 +1319,13 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
 // after v1.5's precession-to-of-date the gaps re-measured at ~49s and ~79s
 // — the old J2000/of-date equinox mixing happened to partially cancel
 // other error terms here, so a frame-consistent answer moves individual
-// numbers slightly while being more correct overall) — 3 minutes
-// comfortably covers that with margin for this app's other documented
-// approximations (no nutation/aberration, low-precision Kepler Sun
-// position), not hand-assumed. Before v1.3 (no refraction/oblateness),
-// this same case was off by several minutes.
+// numbers slightly while being more correct overall; v1.6's nutation/
+// aberration re-measured identically at ~49s/~79s — their ~1-15" effects
+// are below the solver's 60s bisection tolerance quantization) — 3
+// minutes comfortably covers that with margin for this app's remaining
+// documented approximation (low-precision Kepler Sun position), not
+// hand-assumed. Before v1.3 (no refraction/oblateness), this same case
+// was off by several minutes.
 {
   const kaohsiung = { latDeg: 22.6273, lonDeg: 120.3014, elevationM: 0 };
   const riseDay = analyzeObserver({ target: 'sun', atUtc: '2026-03-19T00:00:00Z', ...kaohsiung });

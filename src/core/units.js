@@ -8,3 +8,8 @@
 export const KM_PER_AU = 149597870.7;
 
 export const AU_PER_KM = 1 / KM_PER_AU;
+
+/** Speed of light in AU/day (≈173.1446) — derived from the exact c in
+ *  km/s rather than hardcoding the rounded figure. v1.6: annual
+ *  aberration (analysis/observer.js). */
+export const C_AU_PER_DAY = 299792.458 * 86400 * AU_PER_KM;

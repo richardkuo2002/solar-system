@@ -191,9 +191,10 @@ and click Observe:
   lat/lon/elevation and sidereal time, now using a **WGS-84 oblate**
   Earth model as of v1.3, not a sphere). Rise/set now accounts for
   **atmospheric refraction** (Bennett's formula, v1.3) on top of the
-  geometric altitude. RA/Dec is reported in the **mean equinox of date**
-  (real IAU precession, v1.5) — nutation and aberration remain unmodeled;
-  every approximation, and the ones now modeled, is documented in
+  geometric altitude. RA/Dec is a full **apparent place** — real IAU
+  precession (v1.5) plus nutation and annual aberration (v1.6), reported
+  in the true equinox of date; every approximation, and the ones now
+  modeled, is documented in
   [docs/accuracy.md](docs/accuracy.md#observer-mode-v06).
 
 ## Planet Info Panel (v0.7)
