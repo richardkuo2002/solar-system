@@ -5,6 +5,20 @@ All notable changes to this project. Format loosely follows
 milestones in `docs/ROADMAP.md` (local-only), with each version's exact
 scope and accuracy notes in [docs/accuracy.md](docs/accuracy.md).
 
+## v1.8.3 — 2026-09-06
+
+- **Added 100x and 1000x to the speed dropdown**, between 5x and the two
+  previous fixed rates (≈8640x, ≈86400x).
+- **Fixed the Planet Info Panel still overlapping when expanded** —
+  `.body-info-panel` was its own independent `position: fixed` stack
+  growing upward from the bottom-left corner while `.left-column`
+  (view-mode/surface/observer) grows downward from the top-left corner,
+  sharing no combined height budget; a long Observer Mode result and a
+  shown Planet Info Panel could still collide in the middle of the
+  screen. It's now a flex item inside `.left-column` itself (`order: 1`
+  + `margin-top: auto` keep it visually last regardless of DOM order),
+  so the whole left-side stack shares one bounded height.
+
 ## v1.8.2 — 2026-09-06
 
 - **Fixed bottom-left panels overlapping the time-controls bar** —

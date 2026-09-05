@@ -221,10 +221,33 @@ for (const key of DWARF_PLANET_ORDER) nameToKey.set(DWARF_PLANETS[key].name, key
 
 let selectedBodyKey = 'sun';
 
+// v1.8.1 — a single flex-column wrapper for the left-side panel stack
+// (view-mode, surface controls, observer, planet-info) so each panel's
+// real rendered height pushes the next one down automatically, instead
+// of every panel hardcoding its own `position: fixed; top/bottom: Npx`
+// guessed from its neighbors' assumed heights — that's exactly how
+// .observer-panel ended up silently overlapping .surface-controls's
+// "Stand Here" button (see css/style.css's .left-column comment).
+// v1.8.3 — .body-info-panel (Planet Info Panel, below) moved in here too:
+// it used to be a second, independently-positioned fixed stack growing
+// UP from the bottom-left corner while this column grows DOWN from the
+// top-left corner, so an expanded Observer Mode result and a shown
+// Planet Info Panel could still collide in the middle of the screen —
+// the exact "still overlaps when expanded" report v1.8.1/v1.8.2 hadn't
+// actually fixed (those only fixed the two most obvious/reported
+// instances, not this whole class of "two independently-growing stacks
+// share no height budget"). One flex column now bounds everyone sharing
+// this corner, with `order`/`margin-top: auto` (see .body-info-panel's
+// CSS) keeping the planet-info panel visually last regardless of its
+// creation order in this file.
+const leftColumn = document.createElement('div');
+leftColumn.className = 'left-column';
+document.getElementById('ui-root').appendChild(leftColumn);
+
 // v0.7 Planet Info Panel — click-driven only (see buildBodyInfo above):
 // every field it shows is static per body, so nothing here touches the
 // animate() loop, unlike ephemerisHud's per-frame time/source updates.
-const bodyInfoPanel = createBodyInfoPanel(document.getElementById('ui-root'));
+const bodyInfoPanel = createBodyInfoPanel(leftColumn);
 
 createHoverLabels(canvas, camera, pickableMeshes, loadFullFor, (mesh) => {
   const key = nameToKey.get(mesh.name);
@@ -571,17 +594,7 @@ cameraRig.setMode(cameraState.mode);
 const touchControls = createTouchControls(document.getElementById('ui-root'), canvas, cameraRig);
 touchControls.setMode(cameraState.mode);
 
-// v1.8.1 — a single flex-column wrapper for the top-left panel stack
-// (view-mode, surface controls, observer) so each panel's real rendered
-// height pushes the next one down automatically, instead of every panel
-// hardcoding its own `position: fixed; top: Npx` guessed from its
-// siblings' assumed heights — that's exactly how .observer-panel ended up
-// silently overlapping and eating clicks meant for .surface-controls's
-// "Stand Here" button (see css/style.css's .left-column comment).
-const leftColumn = document.createElement('div');
-leftColumn.className = 'left-column';
-document.getElementById('ui-root').appendChild(leftColumn);
-
+// leftColumn created earlier, alongside bodyInfoPanel (see its comment above).
 const viewModeUI = createViewModeUI(
   leftColumn,
   (mode) => {
