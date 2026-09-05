@@ -4,6 +4,8 @@
 // this number come from" is never a mystery (see docs/accuracy.md).
 // Same createXxxUI(container, ...) shape as ui-controls.js's builders.
 
+import { J2000_JD } from '../core/orbital-elements.js';
+
 const SOURCE_LABELS = {
   'horizons-live': 'JPL Horizons (live)',
   'horizons-cache': 'JPL Horizons (cached)',
@@ -25,7 +27,8 @@ export function createEphemerisHud(container) {
   const center = document.createElement('div');
   const frame = document.createElement('div');
   const unit = document.createElement('div');
-  el.append(simTime, selected, source, center, frame, unit);
+  const reliability = document.createElement('div');
+  el.append(simTime, selected, source, center, frame, unit, reliability);
   container.appendChild(el);
 
   return {
@@ -49,11 +52,26 @@ export function createEphemerisHud(container) {
         center.textContent = `Reference center: ${moonParentName}`;
         frame.textContent = `Reference frame: ${MOON_FRAME_LABEL}`;
         unit.textContent = 'Position unit: scene units (not AU)';
+        reliability.textContent = '';
       } else {
         source.textContent = `Ephemeris source: ${SOURCE_LABELS[state.source]}`;
         center.textContent = `Reference center: ${state.center[0]}${state.center.slice(1).toLowerCase()}`;
         frame.textContent = `Reference frame: ${state.frame}`;
         unit.textContent = 'Position unit: AU';
+        // v1.4 — Kepler-only positions drift further from truth the further
+        // the date is from J2000 (docs/accuracy.md already states this);
+        // Horizons-cache and the Sun's exact origin stay silent here since
+        // they don't carry this caveat.
+        if (state.quality === 'approximate') {
+          const yearsFromJ2000 = Math.abs(state.epochJd - J2000_JD) / 365.25;
+          const outOfRange = state.validity && (
+            currentDate < new Date(state.validity.startUtc) || currentDate > new Date(state.validity.endUtc)
+          );
+          reliability.textContent = `Precision: ~${yearsFromJ2000.toFixed(0)} yr from J2000 elements`
+            + (outOfRange ? " — outside the table's valid date range" : '');
+        } else {
+          reliability.textContent = '';
+        }
       }
     },
   };

@@ -326,14 +326,14 @@ made eclipse detection meaningless). Simplifications, all deliberate:
   the relevant instant — a check robust to any model imprecision, not
   just path distance).
 
-## Surface Mode sky realism (v1.3)
+## Surface Mode sky realism (v1.3, extended v1.4)
 
 Everywhere else in the app, `core/scale.js`'s compression curves are
 deliberately non-realistic (real relative scale would crush the inner
 planets to sub-pixel dots). Surface Mode inherits those same curves for
-everything it renders — except the Sun and the current planet's moon(s),
-which get a **cosmetic-only override** so "look up from the ground"
-doesn't feel absurd:
+everything it renders — except the Sun, the current planet's moon(s), and
+(as of v1.4) every other planet — which get a **cosmetic-only override**
+so "look up from the ground" doesn't feel absurd:
 
 - The compression curves compress *distance* far more aggressively than
   *size* (`compressMoonOrbit`'s `MOON_GAP_POWER=0.4` vs. `compressSize`'s
@@ -341,20 +341,102 @@ doesn't feel absurd:
   angular diameter from Earth's surface would be ≈51° (real: 0.52°) — the
   Sun's ≈14° (real: 0.53°).
 - While Surface Mode is active, `app.js#applySurfaceSkyProxies` repositions
-  the Sun mesh and the tracked planet's moon mesh(es) onto a fixed-radius
-  sky shell (`SKY_PROXY_DISTANCE`, inside the star shell) along the same
-  direction the normal compressed scene already computed that frame
-  (`compressPosition`/`compressMoonOrbit` preserve direction, only
-  compress magnitude — no new topocentric math needed), then scales each
-  mesh so its on-screen angular size matches `apparentAngularRadiusRad`
-  computed from its **real** (uncompressed) radius and distance.
+  the Sun mesh, the tracked planet's moon mesh(es), and (v1.4) every other
+  planet's group onto a fixed-radius sky shell (`SKY_PROXY_DISTANCE`,
+  inside the star shell) along the same direction the normal compressed
+  scene already computed that frame (`compressPosition`/`compressMoonOrbit`
+  preserve direction, only compress magnitude — no new topocentric math
+  needed), then scales each so its on-screen angular size matches
+  `apparentAngularRadiusRad` computed from its **real** (uncompressed)
+  radius and distance.
+- **v1.4 — other planets, with a visibility floor.** Every planet's true
+  angular radius as seen from another planet's surface is 1-2 orders of
+  magnitude smaller than the Moon's (Jupiter at opposition ≈23″, Mars
+  typically ≈2″, vs. the Moon's 933″) — at this app's field of view that's
+  sub-pixel, so true scale alone would make them flicker or vanish rather
+  than just look small. The apparent angular radius is floored at a fixed
+  minimum on-screen pixel size (computed from the camera's actual FOV and
+  canvas height, so it stays correct on window resize) — a documented
+  rendering simplification, not a precision claim. Real relative size
+  differences between planets still show through whenever a planet's true
+  size exceeds the floor (e.g. Venus near inferior conjunction, Mars near
+  opposition).
+- The v1.3 Sun override originally read `PLANETS[planet].elements.a`
+  (Standish elements: `[valueAtJ2000, ratePerCentury]`, an array) directly
+  as if it were a plain number — a bug that made the Sun's Surface Mode
+  position/scale silently `NaN`. Fixed in v1.4 by using the real,
+  already-computed current heliocentric distance
+  (`bodyStates[planet].positionAu`) instead, which is both correct and
+  more accurate than the mean semi-major axis it replaced.
 - This is purely a rendering-layer overlay: no analysis path (Observer
   Mode, Event Toolkit, Eclipses) reads these overridden mesh transforms —
   they all compute directly from AU-contract positions, unaffected.
-- Scope: only the Sun and the tracked planet's own moon(s). Other planets
-  visible from the surface keep their normal compressed size — a smaller,
-  less jarring effect, and arguably a reasonable "distant point of light"
-  cue to preserve.
+
+## Transits (v1.4)
+
+Transit of Mercury or Venus across the Sun's disk, as seen from a specific
+observer — the same "occulting disk crosses a larger disk" geometry as a
+solar eclipse (`analysis/transit.js` reuses most of `analysis/eclipse.js`'s
+solar-eclipse machinery directly), with a planet instead of the Moon as
+the occulter.
+
+- Trigger epochs are the target's inferior conjunctions (reusing the
+  existing conjunction-finder behind the Inferior/Superior Conjunction
+  event type), refined per observer the same way solar eclipses refine to
+  a local minimum of apparent separation.
+- Classified `transit` (planet's disk fully within the Sun's) or `grazing`
+  (partial limb overlap) — `total`/`annular` don't apply, a planet's disk
+  is always far smaller than the Sun's.
+- **Precision ceiling, worse than eclipses**: Mercury's transit disk is
+  only ≈12″ across, a small fraction of the Standish table's own position
+  error (of order arcminutes for the inner planets) — good enough to say
+  "a transit happens on this date," not to time contacts to the minute.
+  Reference-case tests (2019-11-11 Mercury, 2012-06-06 Venus, both real
+  historical transits) confirm greatest-transit timing to within a few
+  minutes of the published geocentric instant, which is within this
+  ceiling, not a claim of higher precision.
+- **Venus is constrained to 2004 or 2012** — the next real transit (2117)
+  falls outside the Standish table's documented 1800–2050 validity range.
+- No atmospheric refraction correction beyond what `observeAt` already
+  applies to altitude (used only for the above/below-horizon check, not
+  disk geometry), no black-drop-effect modeling, no contact-time table.
+
+## Planetary Appulses (v1.4)
+
+How close two planets get to each other in Earth's sky (`analysis/appulse.js`)
+— geocentric, not tied to any one observer's horizon, since this is "how
+the sky looks from Earth generally," the same framing as opposition/
+conjunction events. Finds every local minimum of angular separation
+between the two chosen planets in the date range and reports it — no
+"counts as an appulse" threshold, matching how the Inferior/Superior
+Conjunction event type already reports every crossing regardless of size.
+Reference-case test: the 2020-12-21 Jupiter-Saturn "Great Conjunction"
+(closest since 1623), separation reproduced to ≈0.0001° of the real
+≈0.1°.
+
+## Lunar Occultations (v1.4)
+
+A planet passing behind the Moon, as seen from a specific observer
+(`analysis/occultation.js`) — site-specific like a solar eclipse or
+transit, for the same reason (the Moon's ~2° parallax across Earth means
+"is it actually covered" is observer-dependent). Scoped to **planets
+only, not stars** — a star-occultation table would need new hardcoded
+bright-star data with real sourced coordinates, and the existing star
+catalog (`core/star-catalog.js`) deliberately keeps no names/IDs (see its
+own scope note), so this ships the half that reuses existing planetary
+ephemeris with zero new data files.
+
+- Classified `total` (planet fully hidden — the near-always case, since
+  every planet's disk is far smaller than the Moon's) or `grazing`
+  (partial, near the Moon's limb).
+- **Precision ceiling, worse than transits**: the Meeus lunar theory this
+  app uses carries roughly ±10″ of its own error, against the Moon's
+  ≈0.26° (≈933″) apparent radius — **limb-grazing occultations are
+  unresolvable** at this model's precision; only occultations well away
+  from the limb are reliable. Reference-case test: the 2021-11-08
+  occultation of Venus, visible from Japan — reproduced timing within a
+  few minutes of the real ~04:40–05:59 UTC visibility window reported by
+  in-the-sky.org.
 
 ## Known limitations (plain language)
 
@@ -369,3 +451,8 @@ doesn't feel absurd:
 - Comets, dwarf planets, and moons are approximate by design (see above).
   Do not use this app to plan an actual perihelion-timing or occultation
   observation.
+- **(v1.4)** The ephemeris HUD now shows a precision hint (years from the
+  Kepler elements' J2000 epoch, plus a call-out if the current date is
+  outside the Standish table's 1800–2050 range) for Kepler-sourced bodies
+  only — Horizons-cache positions and the Sun's exact origin don't carry
+  this caveat and stay silent.

@@ -10,6 +10,9 @@ import { analyzeOppositionConjunction, OUTER_TARGETS } from '../analysis/opposit
 import { analyzeGreatestElongation, analyzeInnerConjunction, INNER_TARGETS } from '../analysis/elongation-events.js';
 import { analyzePhaseIllumination, samplePhaseSeries, PHASE_TARGETS } from '../analysis/phase.js';
 import { analyzeLunarEclipse, analyzeSolarEclipse } from '../analysis/eclipse.js';
+import { analyzeTransit } from '../analysis/transit.js';
+import { analyzeAppulse, APPULSE_TARGETS } from '../analysis/appulse.js';
+import { analyzeLunarOccultation, OCCULTATION_TARGETS } from '../analysis/occultation.js';
 
 const SOURCE_OPTIONS = [
   { value: 'auto', label: 'Auto' },
@@ -113,6 +116,63 @@ function formatEclipseResult(noneMessage) {
     lines.push('', 'Note: geometric approximation — spherical Sun/Earth/Moon, no atmospheric shadow enlargement or refraction, no Besselian elements. See docs/accuracy.md.');
     return lines.join('\n');
   };
+}
+
+function formatTransitResult(result) {
+  const lines = [
+    `Target: ${capitalize(result.target)}  Source: ${result.reference.source}  Frame: ${result.reference.frame}`,
+    `Sampling: ${result.input.intervalHours}h × events found: ${result.result.events.length}`,
+    `Solver: ${result.solver.method}, tolerance ${result.solver.toleranceSeconds}s, status: ${result.solver.status}`,
+    '',
+  ];
+  if (result.result.events.length === 0) {
+    lines.push('No transit visible from this location in this range.');
+  } else {
+    for (const event of result.result.events) {
+      lines.push(`${capitalize(event.classification)} — ${event.epochUtc}`);
+      lines.push(`  separation ≈ ${event.separationDeg.toFixed(3)}°, magnitude ≈ ${event.magnitude.toFixed(3)}`);
+    }
+  }
+  lines.push('', 'Note: geometric approximation — spherical Sun/planet, no atmospheric refraction, no contact-time table. See docs/accuracy.md.');
+  return lines.join('\n');
+}
+
+function formatAppulseResult(result) {
+  const lines = [
+    `${capitalize(result.input.planetA)} ↔ ${capitalize(result.input.planetB)}  Source: ${result.reference.source}  Frame: ${result.reference.frame}`,
+    `Sampling: ${result.input.intervalHours}h × closest-approach events found: ${result.result.events.length}`,
+    `Solver: ${result.solver.method}, tolerance ${result.solver.toleranceSeconds}s, status: ${result.solver.status}`,
+    '',
+  ];
+  if (result.result.events.length === 0) {
+    lines.push('No closest-approach event found in this range.');
+  } else {
+    for (const event of result.result.events) {
+      lines.push(`Closest approach — ${event.epochUtc}`);
+      lines.push(`  separation = ${event.separationDeg.toFixed(3)}°`);
+    }
+  }
+  lines.push('', 'Note: geocentric ("how close in Earth\'s sky"), not tied to any one observer\'s horizon.');
+  return lines.join('\n');
+}
+
+function formatOccultationResult(result) {
+  const lines = [
+    `Target: ${capitalize(result.target)}  Source: ${result.reference.source}  Frame: ${result.reference.frame}`,
+    `Sampling: ${result.input.intervalHours}h × events found: ${result.result.events.length}`,
+    `Solver: ${result.solver.method}, tolerance ${result.solver.toleranceSeconds}s, status: ${result.solver.status}`,
+    '',
+  ];
+  if (result.result.events.length === 0) {
+    lines.push('No lunar occultation visible from this location in this range.');
+  } else {
+    for (const event of result.result.events) {
+      lines.push(`${capitalize(event.classification)} — ${event.epochUtc}`);
+      lines.push(`  separation ≈ ${event.separationDeg.toFixed(3)}°, magnitude ≈ ${event.magnitude.toFixed(3)}`);
+    }
+  }
+  lines.push('', 'Note: geometric approximation — spherical Moon/planet, no atmospheric refraction, no limb profile. Limb-grazing events are unresolvable at this model\'s precision. See docs/accuracy.md.');
+  return lines.join('\n');
 }
 
 export const EVENT_TYPES = [
@@ -253,6 +313,68 @@ export const EVENT_TYPES = [
     chartKind: 'timeline',
     analyze: (params) => analyzeSolarEclipse(params),
     formatResult: formatEclipseResult('No solar eclipse visible from this location in this range.'),
+    getMarkers: (result) => result.result.events.map((e) => e.epochJd),
+    getHighlight: () => null,
+    resultTarget: (result) => result.target,
+  },
+  {
+    key: 'transit',
+    label: 'Transit of Mercury/Venus',
+    fixedText: 'Observer: a specific location on Earth\'s surface · Frame: Geocentric ECLIPJ2000',
+    fields: [
+      { key: 'target', type: 'select', label: 'Target', default: 'mercury', options: INNER_TARGETS.map((t) => ({ value: t, label: capitalize(t) })) },
+      { key: 'startUtc', type: 'date', label: 'Start date', default: '2019-11-01' },
+      { key: 'endUtc', type: 'date', label: 'End date', default: '2019-12-01' },
+      { key: 'intervalHours', type: 'number', label: 'Sample interval (hours)', default: 24, min: 1 },
+      { key: 'latDeg', type: 'number', label: 'Observer latitude (deg)', default: 40.7128, min: -90, max: 90 },
+      { key: 'lonDeg', type: 'number', label: 'Observer longitude (deg)', default: -74.0060, min: -180, max: 180 },
+      { key: 'elevationM', type: 'number', label: 'Observer elevation (m)', default: 0, min: 0 },
+    ],
+    analyzeLabel: 'Analyze transits',
+    chartKind: 'timeline',
+    analyze: (params) => analyzeTransit(params),
+    formatResult: formatTransitResult,
+    getMarkers: (result) => result.result.events.map((e) => e.epochJd),
+    getHighlight: () => null,
+    resultTarget: (result) => result.target,
+  },
+  {
+    key: 'appulse',
+    label: 'Planetary Appulse',
+    fixedText: 'Observer: Earth (geocenter) · Frame: Geocentric ECLIPJ2000',
+    fields: [
+      { key: 'planetA', type: 'select', label: 'Planet A', default: 'jupiter', options: APPULSE_TARGETS.map((t) => ({ value: t, label: capitalize(t) })) },
+      { key: 'planetB', type: 'select', label: 'Planet B', default: 'saturn', options: APPULSE_TARGETS.map((t) => ({ value: t, label: capitalize(t) })) },
+      { key: 'startUtc', type: 'date', label: 'Start date', default: '2020-11-01' },
+      { key: 'endUtc', type: 'date', label: 'End date', default: '2021-01-15' },
+      { key: 'intervalHours', type: 'number', label: 'Sample interval (hours)', default: 24, min: 1 },
+      { key: 'ephemerisSource', type: 'select', label: 'Ephemeris source', default: 'kepler', options: SOURCE_OPTIONS },
+    ],
+    analyzeLabel: 'Analyze appulse',
+    chartKind: 'timeline',
+    analyze: (params) => analyzeAppulse(params),
+    formatResult: formatAppulseResult,
+    getMarkers: (result) => result.result.events.map((e) => e.epochJd),
+    getHighlight: () => null,
+    resultTarget: (result) => result.target,
+  },
+  {
+    key: 'lunar-occultation',
+    label: 'Lunar Occultation of a Planet',
+    fixedText: 'Occulter: Moon · Observer: a specific location on Earth\'s surface · Frame: Geocentric ECLIPJ2000',
+    fields: [
+      { key: 'target', type: 'select', label: 'Target', default: 'venus', options: OCCULTATION_TARGETS.map((t) => ({ value: t, label: capitalize(t) })) },
+      { key: 'startUtc', type: 'date', label: 'Start date', default: '2021-11-01' },
+      { key: 'endUtc', type: 'date', label: 'End date', default: '2021-11-15' },
+      { key: 'intervalHours', type: 'number', label: 'Sample interval (hours)', default: 24, min: 1 },
+      { key: 'latDeg', type: 'number', label: 'Observer latitude (deg)', default: 35.6762, min: -90, max: 90 },
+      { key: 'lonDeg', type: 'number', label: 'Observer longitude (deg)', default: 139.6503, min: -180, max: 180 },
+      { key: 'elevationM', type: 'number', label: 'Observer elevation (m)', default: 0, min: 0 },
+    ],
+    analyzeLabel: 'Analyze occultations',
+    chartKind: 'timeline',
+    analyze: (params) => analyzeLunarOccultation(params),
+    formatResult: formatOccultationResult,
     getMarkers: (result) => result.result.events.map((e) => e.epochJd),
     getHighlight: () => null,
     resultTarget: (result) => result.target,

@@ -30,7 +30,10 @@ import { analyzeGreatestElongation, analyzeInnerConjunction, INNER_TARGETS } fro
 import { phaseAngleRad, illuminatedFraction, analyzePhaseIllumination, PHASE_TARGETS } from '../src/analysis/phase.js';
 import { moonHeliocentricPositionAu } from '../src/core/orbital-elements.js';
 import { moonEclipticPosition } from '../src/core/lunar-theory.js';
-import { analyzeLunarEclipse, analyzeSolarEclipse } from '../src/analysis/eclipse.js';
+import { analyzeLunarEclipse, analyzeSolarEclipse, angularSeparationDeg } from '../src/analysis/eclipse.js';
+import { analyzeTransit } from '../src/analysis/transit.js';
+import { analyzeAppulse, APPULSE_TARGETS } from '../src/analysis/appulse.js';
+import { analyzeLunarOccultation, OCCULTATION_TARGETS } from '../src/analysis/occultation.js';
 import { toExportableJson, toExportableCsv } from '../src/analysis/export.js';
 import {
   gmstDeg, eclipticToEquatorial, raDecFromEquatorial, observerGeocentricPositionAu,
@@ -1300,6 +1303,123 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
   assert.throws(() => analyzeSolarEclipse({
     startUtc: '2024-01-01T00:00:00Z', endUtc: '2024-02-01T00:00:00Z', latDeg: 999, lonDeg: 0,
   }));
+}
+
+// analysis/eclipse: angularSeparationDeg (v1.4, exported for reuse by
+// analysis/occultation.js) — spherical law of cosines, sanity-checked
+// against two trivial cases.
+{
+  assert.equal(angularSeparationDeg(10, 20, 10, 20), 0, 'separation between identical RA/Dec should be 0');
+  assert.ok(Math.abs(angularSeparationDeg(0, 0, 90, 0) - 90) < 1e-9, 'two points 90 deg apart on the celestial equator should separate by 90 deg');
+}
+
+// analysis/transit: real reference case — the 2019-11-11 Mercury transit
+// (Espenak/eclipsewise.com: geocentric greatest transit 15:19:48 UT,
+// separation 75.9"), evaluated from New York (in the visibility path for
+// the whole transit per Espenak's table).
+{
+  const result = analyzeTransit({
+    target: 'mercury', startUtc: '2019-11-01T00:00:00Z', endUtc: '2019-12-01T00:00:00Z',
+    latDeg: 40.7128, lonDeg: -74.0060, elevationM: 0,
+  });
+  assert.equal(result.result.events.length, 1, 'expected exactly one Mercury transit visible from New York in this window');
+  const [event] = result.result.events;
+  assert.equal(event.classification, 'transit', 'Mercury\'s disk (~76" from Sun center) should be fully within the Sun\'s disk');
+  const deltaMinutes = Math.abs(new Date(event.epochUtc) - new Date('2019-11-11T15:19:48Z')) / 60000;
+  assert.ok(deltaMinutes < 10, `greatest-transit time should be within ~10 min of the real 2019-11-11 15:19:48 UT (measured gap ~4 min — topocentric parallax alone accounts for up to ~2 min per Espenak), off by ${deltaMinutes}min`);
+}
+
+// analysis/transit: an ordinary Mercury inferior conjunction with no real
+// transit (~2020-03-24, next transit isn't until 2032) correctly reports
+// no events — same "no false positive" discipline as the eclipse tests.
+{
+  const result = analyzeTransit({
+    target: 'mercury', startUtc: '2020-03-01T00:00:00Z', endUtc: '2020-04-15T00:00:00Z',
+    latDeg: 40.7128, lonDeg: -74.0060, elevationM: 0,
+  });
+  assert.equal(result.result.events.length, 0, 'March 2020 has a Mercury inferior conjunction but no real transit');
+  assert.equal(result.solver.status, 'no-events-in-range');
+}
+
+// analysis/transit: real reference case — the 2012-06-05/06 Venus transit
+// (NASA/Espenak: geocentric greatest transit 2012-06-06 01:29:36 UT,
+// separation 553"), evaluated from Los Angeles (saw the beginning of the
+// transit through greatest transit before it continued past local
+// midnight, per NASA's visibility notes).
+{
+  const result = analyzeTransit({
+    target: 'venus', startUtc: '2012-06-01T00:00:00Z', endUtc: '2012-06-15T00:00:00Z',
+    latDeg: 34.0522, lonDeg: -118.2437, elevationM: 0,
+  });
+  assert.equal(result.result.events.length, 1, 'expected exactly one Venus transit visible from Los Angeles in this window');
+  const [event] = result.result.events;
+  assert.equal(event.classification, 'transit', 'Venus\'s disk (~553" from Sun center) should be fully within the Sun\'s disk');
+  const deltaMinutes = Math.abs(new Date(event.epochUtc) - new Date('2012-06-06T01:29:36Z')) / 60000;
+  assert.ok(deltaMinutes < 10, `greatest-transit time should be within ~10 min of the real 2012-06-06 01:29:36 UT (measured gap ~2 min — topocentric parallax alone accounts for up to ~7 min per NASA), off by ${deltaMinutes}min`);
+}
+
+// analysis/transit: an ordinary Venus inferior conjunction with no real
+// transit (~2014-01, next transit isn't until 2117).
+{
+  const result = analyzeTransit({
+    target: 'venus', startUtc: '2013-12-01T00:00:00Z', endUtc: '2014-02-01T00:00:00Z',
+    latDeg: 34.0522, lonDeg: -118.2437, elevationM: 0,
+  });
+  assert.equal(result.result.events.length, 0, 'this window has a Venus inferior conjunction but no real transit');
+}
+
+// analysis/appulse: real reference case — the 2020-12-21 "Great
+// Conjunction" of Jupiter and Saturn, the closest appulse of the two since
+// 1623, separation ~0.1° (~6 arcminutes, widely reported).
+{
+  const result = analyzeAppulse({
+    planetA: 'jupiter', planetB: 'saturn', startUtc: '2020-11-01T00:00:00Z', endUtc: '2021-01-15T00:00:00Z',
+  });
+  assert.equal(result.result.events.length, 1, 'expected exactly one Jupiter-Saturn closest approach in this window');
+  const [event] = result.result.events;
+  assert.ok(event.separationDeg < 0.15, `expected the Great Conjunction's separation to be close to the real ~0.1 deg, got ${event.separationDeg}`);
+  const deltaHours = Math.abs(new Date(event.epochUtc) - new Date('2020-12-21T18:00:00Z')) / 3600000;
+  assert.ok(deltaHours < 24, `closest-approach time should be within ~1 day of the widely-reported 2020-12-21 ~18:00 UT, off by ${deltaHours}h (measured ~10h)`);
+}
+
+// analysis/appulse: invalid target combinations throw rather than silently
+// misbehaving.
+{
+  assert.throws(() => analyzeAppulse({ planetA: 'earth', planetB: 'mars', startUtc: '2020-01-01T00:00:00Z', endUtc: '2020-02-01T00:00:00Z' }), 'Earth cannot be an appulse target (it is the observer)');
+  assert.throws(() => analyzeAppulse({ planetA: 'mars', planetB: 'mars', startUtc: '2020-01-01T00:00:00Z', endUtc: '2020-02-01T00:00:00Z' }), 'planetA and planetB must differ');
+  assert.ok(!APPULSE_TARGETS.includes('earth'));
+}
+
+// analysis/occultation: real reference case — the 2021-11-08 lunar
+// occultation of Venus, visible from Japan roughly 04:40-05:59 UTC
+// (in-the-sky.org), evaluated from Tokyo.
+{
+  const result = analyzeLunarOccultation({
+    target: 'venus', startUtc: '2021-11-01T00:00:00Z', endUtc: '2021-11-15T00:00:00Z',
+    latDeg: 35.6762, lonDeg: 139.6503, elevationM: 0,
+  });
+  assert.equal(result.result.events.length, 1, 'expected exactly one lunar occultation of Venus visible from Tokyo in this window');
+  const [event] = result.result.events;
+  assert.equal(event.classification, 'total', 'Venus should be fully hidden behind the Moon\'s much larger disk');
+  const deltaMinutes = Math.abs(new Date(event.epochUtc) - new Date('2021-11-08T05:20:00Z')) / 60000;
+  assert.ok(deltaMinutes < 30, `closest-approach time should be within the real ~04:40-05:59 UTC visibility window (measured ~3 min from its midpoint), off by ${deltaMinutes}min`);
+}
+
+// analysis/occultation: an ordinary month with no real occultation of
+// Venus visible from Tokyo correctly reports no events.
+{
+  const result = analyzeLunarOccultation({
+    target: 'venus', startUtc: '2021-09-01T00:00:00Z', endUtc: '2021-09-15T00:00:00Z',
+    latDeg: 35.6762, lonDeg: 139.6503, elevationM: 0,
+  });
+  assert.equal(result.result.events.length, 0, 'September 2021 has no real lunar occultation of Venus visible from Tokyo');
+}
+
+// analysis/occultation: invalid target (Moon can't occult itself or the
+// Sun in this event type's scope) throws.
+{
+  assert.throws(() => analyzeLunarOccultation({ target: 'moon', startUtc: '2021-01-01T00:00:00Z', endUtc: '2021-02-01T00:00:00Z', latDeg: 0, lonDeg: 0 }));
+  assert.ok(!OCCULTATION_TARGETS.includes('moon') && !OCCULTATION_TARGETS.includes('sun'));
 }
 
 // core/topocentric: equatorialToEcliptic is the exact inverse of

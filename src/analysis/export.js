@@ -102,7 +102,7 @@ function flattenResult(result) {
       'event.name': e.event,
       'event.epochUtc': e.epochUtc,
       'event.epochJd': e.epochJd,
-      'event.valueDeg': e.elongationDeg ?? e.signedElongationDeg ?? '',
+      'event.valueDeg': e.elongationDeg ?? e.signedElongationDeg ?? e.separationDeg ?? '',
       'event.illuminatedFraction': '',
       'event.classification': e.classification ?? '',
       'event.magnitude': e.magnitude ?? '',

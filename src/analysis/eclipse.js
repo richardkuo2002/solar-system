@@ -203,7 +203,10 @@ export function analyzeLunarEclipse({ startUtc, endUtc, intervalHours = 6, ephem
 
 // --- Solar eclipse: apparent-disk geometry for a specific observer ---
 
-function angularSeparationDeg(ra1Deg, dec1Deg, ra2Deg, dec2Deg) {
+// Exported for reuse by analysis/occultation.js (v1.4) — a pure spherical-
+// law-of-cosines primitive worth sharing verbatim, unlike the position-
+// lookup snippets this codebase otherwise duplicates per-file on purpose.
+export function angularSeparationDeg(ra1Deg, dec1Deg, ra2Deg, dec2Deg) {
   const ra1 = ra1Deg * DEG_TO_RAD, dec1 = dec1Deg * DEG_TO_RAD;
   const ra2 = ra2Deg * DEG_TO_RAD, dec2 = dec2Deg * DEG_TO_RAD;
   const cosSep = Math.sin(dec1) * Math.sin(dec2) + Math.cos(dec1) * Math.cos(dec2) * Math.cos(ra1 - ra2);
