@@ -1,0 +1,84 @@
+# Changelog
+
+All notable changes to this project. Format loosely follows
+[Keep a Changelog](https://keepachangelog.com/); versions map 1:1 to the
+milestones in `docs/ROADMAP.md` (local-only), with each version's exact
+scope and accuracy notes in [docs/accuracy.md](docs/accuracy.md).
+
+## v1.5 — 2026-09-05
+
+- **Retrograde motion for all planets** — the Retrograde event type now
+  accepts any of the 7 non-Earth planets (Mercury's famous retrograde
+  included), not just Mars. Verified against Jupiter's real 2022
+  retrograde loop (~2.5 h from published station times).
+- **Real precession in Observer Mode** — RA/Dec is now reported in the
+  mean equinox of date (rigorous IAU 1976 rotation, verified against
+  Meeus's worked Example 21.b). Also fixes a silent J2000/of-date equinox
+  mix in every hour-angle/rise-set/transit solve (~0.36° by 2026). The
+  star catalog deliberately stays fixed-J2000.
+- **Unified Moon position** — the 3D scene's Moon now uses the same Meeus
+  lunar theory as the analysis path (one shared helper, drift-guard
+  tested): real phase, real ~5° inclination, real eccentric distance.
+  Surface Mode's Moon size follows the real perigee/apogee ±5.5% swing.
+
+## v1.4 — 2026-09-05
+
+- **Surface Mode true scale for all planets** — every planet (not just
+  the Sun/moons) renders at its true real angular size from a planet's
+  surface, with a FOV-derived minimum-pixel floor so sub-arcsecond discs
+  stay visible as points. Fixes a v1.3 bug that made the Sun's Surface
+  Mode position/scale NaN.
+- **3 new Event Toolkit types** — Transit of Mercury/Venus (tested:
+  2019-11-11 Mercury, 2012-06-06 Venus), Planetary Appulse (tested:
+  2020-12-21 Jupiter-Saturn Great Conjunction), Lunar Occultation of a
+  Planet (tested: 2021-11-08 occultation of Venus from Japan).
+- **Epoch-reliability hint** — the ephemeris HUD warns how far a
+  Kepler-only body's date is from its J2000 elements, and when it's
+  outside the Standish table's 1800–2050 validity.
+
+## v1.3 — 2026-09-05
+
+- **Observer Mode precision** — atmospheric refraction (Bennett's
+  formula; rise/set now solves the standard apparent-altitude −0.8333°
+  crossing, verified against a published Kaohsiung sunrise/sunset table)
+  and WGS-84 Earth oblateness in the observer position.
+- **Surface Mode sky realism** — the Sun and the current planet's moon(s)
+  render at their true real angular size while standing on a surface
+  (previously the Moon filled ~half the sky due to the display
+  compression curves).
+- Surface Mode time-speed hint; fixed the v1.2.1 collapsible panels
+  (CSS `[hidden]` was overridden by an explicit `display: flex`).
+
+## v1.2.1 — 2026-09-05
+
+- Constellation name labels (rank-1 constellations), dimmer constellation
+  lines, per-planet orbit-path colors, collapsible Observer Mode / Event
+  Toolkit panels.
+
+## v1.2 — 2026-09-05
+
+- **Real star catalog** — the night sky is now ~5,000 real Hipparcos
+  stars (to magnitude 6.5, positioned by actual RA/Dec) plus the 88
+  constellation line figures, from d3-celestial (BSD-3-Clause), replacing
+  the procedural random starfield.
+
+## v1.1 — 2026-09-05
+
+- **Eclipse events** — lunar (none/penumbral/partial/total vs. Earth's
+  real shadow cone) and solar (per-observer, topocentric,
+  none/partial/annular/total) eclipse detection in the Event Toolkit,
+  tested against the real 2022-11-08 lunar and 2024-04-08 solar eclipses.
+- **Meeus lunar theory** — the Moon's analysis position upgraded from a
+  circular approximation to Meeus Ch. 47 truncated series (~10″), the
+  hard prerequisite for eclipse detection.
+
+## v1.0.0 — 2026-09-05
+
+First public release: 8 planets + Pluto/Charon + 7 moons + Halley's Comet
+with real Keplerian elements and JPL Horizons live-data fallback, 4 camera
+modes, time controls, Mars Retrograde Lab, Event Toolkit
+(opposition/conjunction, elongation, phase, JSON/CSV export), Observer
+Mode (topocentric RA/Dec/Alt/Az, rise/transit/set), planet info panel,
+URL-shareable state, CI + GitHub Pages deploy, mobile touch controls,
+Tauri desktop packaging. See `git log` v0.2–v0.11 for the step-by-step
+build-up.
