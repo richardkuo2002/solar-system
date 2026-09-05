@@ -4,7 +4,7 @@ import {
   elementsAtDate, julianDateFromDate, dateFromJulianDate, circularOrbitAngle, moonLocalPosition,
   elementsVelocity, sampleOrbitPath,
 } from '../src/core/orbital-elements.js';
-import { compressDistance, compressSize, compressPosition, compressMoonOrbit } from '../src/core/scale.js';
+import { compressDistance, compressSize, compressPosition, compressMoonOrbit, SATURN_RING_OUTER_KM } from '../src/core/scale.js';
 import { PLANETS, PLANET_ORDER } from '../src/data/planets.js';
 import { MOONS, MOON_ORDER } from '../src/data/moons.js';
 import { COMETS, COMET_ORDER } from '../src/data/comets.js';
@@ -199,6 +199,20 @@ import { analyzeObserver, observeAt, OBSERVER_TARGETS } from '../src/analysis/ob
   const rCallisto = compressMoonOrbit(1882709, parentRadiusKm, parentSceneRadius);
   assert.ok(rIo > parentSceneRadius, 'Io must render outside Jupiter');
   assert.ok(rCallisto > rIo, 'Callisto orbits farther out than Io');
+}
+
+// scale: compressMoonOrbit's minSceneRadius floor keeps Titan clear of
+// Saturn's ring — without it, Titan's compressed orbit (~1.04) would land
+// inside the ring's compressed outer edge (~1.19), a real visual bug this
+// floor exists to fix (see src/core/orbital-elements.js#moonLocalPosition).
+{
+  const saturnRadiusKm = 58232;
+  const saturnSceneRadius = compressSize(saturnRadiusKm);
+  const ringOuterScene = compressSize(SATURN_RING_OUTER_KM);
+  const titanUnclamped = compressMoonOrbit(1221870, saturnRadiusKm, saturnSceneRadius);
+  assert.ok(titanUnclamped < ringOuterScene, 'sanity: unclamped Titan orbit really would fall inside the ring');
+  const titanClamped = compressMoonOrbit(1221870, saturnRadiusKm, saturnSceneRadius, ringOuterScene * 1.05);
+  assert.ok(titanClamped > ringOuterScene, 'Titan orbit must clear Saturn\'s ring once floored');
 }
 
 // orbital-elements: circularOrbitAngle wraps to [0, 2*PI) and completes one
