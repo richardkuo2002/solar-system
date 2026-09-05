@@ -47,15 +47,20 @@ returned.
   major planets — treat comet/dwarf-planet positions as illustrative, not
   ephemeris-grade, especially far from whatever date their elements were
   sourced for.
-- Moons (including Charon) use a circular-orbit approximation (constant
-  angular rate from `orbitKm`/`periodDays`, zero eccentricity/inclination)
-  around their parent planet — not Kepler-propagated, and deliberately
-  **not** part of the AU body-state contract at all (see
-  `src/core/body-state.js`'s scope note): `moonLocalPosition` returns
-  parent-relative *scene* units via a nonlinear display-space compression
-  curve with no meaningful inverse back to AU. The HUD shows a moon's
-  source as "Kepler propagation (circular approx.)" with its parent as
-  center and "scene units (not AU)" instead of fabricating an AU position.
+- Moons other than the Moon (Charon, Io, Europa, etc.) use a circular-
+  orbit approximation (constant angular rate from `orbitKm`/`periodDays`,
+  zero eccentricity/inclination) around their parent planet — not Kepler-
+  propagated, and deliberately **not** part of the AU body-state contract
+  at all (see `src/core/body-state.js`'s scope note): `moonLocalPosition`
+  returns parent-relative *scene* units via a nonlinear display-space
+  compression curve with no meaningful inverse back to AU. The HUD shows a
+  moon's source as "Kepler propagation (circular approx.)" with its parent
+  as center and "scene units (not AU)" instead of fabricating an AU
+  position. The Moon's own **analysis-path** position (Event Toolkit,
+  Observer Mode, Eclipses) is different as of v1.1 — see "The Moon's
+  analysis position (v1.1: Meeus lunar theory)" below; its **3D-scene**
+  position (`moonLocalPosition`) still uses this same circular
+  approximation, unchanged.
 - Horizons requests fetch position + velocity only — no light-time,
   range-rate, or uncertainty data.
 
@@ -155,25 +160,48 @@ only labels one extra display lookup.
   Phase angle α is the Sun-target-observer angle (vertex at the target);
   illuminated fraction is `k = (1 + cos(α)) / 2`.
 
-### The Moon's second, independent circular-orbit approximation
+### The Moon's analysis position (v1.1: Meeus lunar theory)
 
-Phase/illumination analysis needs a heliocentric AU position for the Moon,
-which the live 3D scene has never had (`moonLocalPosition` only produces a
-parent-relative *scene*-unit position via a nonlinear display-compression
-curve — see "What is NOT modeled" above). `moonHeliocentricPositionAu`
-adds one: the same circular-orbit shape (real `orbitKm`/`periodDays`, zero
-inclination/eccentricity) as `moonLocalPosition`, but anchored to a fixed,
-deterministic epoch (J2000, for Node-testability) instead of the live
-scene's "page load time" epoch. **This means the Event Toolkit's Moon
-phase and the live 3D scene's Moon position can show the Moon at different
-orbital angles for the same calendar date** — two independent
-approximations, not one shared source of truth. Neither is calibrated to
-the real Moon's actual phase (confirmed by running the implementation
-against real recent full-moon dates: it reports illuminated fractions
-around 0.08–0.14, not near 1) — this was already true before v0.5 (the
-circular-orbit model was never anchored to reality), so this doesn't make
-anything "more wrong," but the dual-epoch split itself is new and worth
-knowing about if the two ever seem to disagree.
+Phase/illumination, Observer Mode, and Eclipse analysis all need a real
+heliocentric AU position for the Moon, which the live 3D scene has never
+had (`moonLocalPosition` only produces a parent-relative *scene*-unit
+position via a nonlinear display-compression curve — see "What is NOT
+modeled" above, and note it is **unaffected by this section**: it's still
+the old constant-angular-rate circular orbit, a separate approximation
+used only for the 3D scene's visual Moon).
+
+Through v1.0, `moonHeliocentricPositionAu` used that *same* circular-orbit
+shape for the analysis path too (zero inclination, zero eccentricity, an
+arbitrary J2000 phase anchor) — not calibrated to the real Moon at all
+(confirmed by running it against real full-moon dates: it reported
+illuminated fractions around 0.08–0.14, not near 1). Because inclination
+was zero, the Moon was always exactly coplanar with the ecliptic at every
+new/full moon, which made real eclipse detection impossible on top of it
+(every syzygy would spuriously "eclipse").
+
+**v1.1 replaced this** with `src/core/lunar-theory.js#moonEclipticPosition`
+— Meeus, *Astronomical Algorithms* 2nd ed., Chapter 47's truncated
+periodic series (60 terms for longitude/distance, 60 for latitude; ~10
+arcsec longitude / ~4 arcsec latitude / ~4000 km distance precision per
+Meeus). This has real inclination, eccentricity, and is calibrated to the
+actual Moon (verified against Meeus's own published worked example, see
+`scripts/smoke-test.js`). Two things worth knowing:
+
+- Meeus's series outputs longitude referred to the **mean equinox of
+  date**, not the fixed J2000 equinox every other body-state in this app
+  uses. `moonHeliocentricPositionAu` applies the general-precession-in-
+  longitude correction (~50.29"/year, so ~0.33° by 2024) before combining
+  it with Earth's J2000-fixed position — get this wrong and the error is
+  large enough to misclassify a real eclipse (this actually happened
+  during v1.1 development; the fix is what the reference-case tests now
+  guard against).
+- Not corrected for nutation (sub-arcminute, negligible at this project's
+  precision level) or light-time (Earth-Moon light-time is ~1.3s, also
+  negligible here).
+- This upgrade is analysis-only. The 3D scene's visual Moon still uses the
+  old circular approximation and can show the Moon at a different orbital
+  angle than the Event Toolkit/Observer Mode for the same calendar date —
+  a known, disclosed split between the two, not a bug in either.
 
 ### Export (JSON / CSV)
 
@@ -228,7 +256,55 @@ requirement to state the topocentric model's scope.
   centered on it — a local evening near UTC midnight can therefore show
   its rise/set split across two different queries.
 - Do not use Observer Mode to plan an actual observation, imaging session,
-  or eclipse/occultation timing.
+  or occultation timing — none of the above changed for v1.1. Eclipse
+  timing now has its own dedicated feature (see "Eclipses (v1.1)" below)
+  with its own, separately documented precision — still not observation-
+  planning grade, but real geometry rather than an out-of-scope guess.
+
+## Eclipses (v1.1)
+
+`src/analysis/eclipse.js` adds lunar and solar eclipse detection to the
+Event Toolkit, on top of the v1.1 Meeus lunar theory above (a hard
+prerequisite — see that section for why the old circular-orbit Moon model
+made eclipse detection meaningless). Simplifications, all deliberate:
+
+- **Syzygy (new/full moon) finding** reuses `analysis/opposition.js`'s
+  exact "extremum of elongation" technique — the epoch found is the
+  moment of maximum/minimum Sun-Moon elongation in the search window, not
+  necessarily the exact instant of minimum distance from the shadow axis
+  (lunar eclipses) or minimum apparent separation (solar eclipses,
+  geocentrically). These differ by up to roughly an hour, since ecliptic
+  latitude changes slowly compared to elongation right at syzygy.
+- **Solar eclipses ARE re-solved per observer**: after the geocentric
+  new-moon time above, `refineLocalSolarEclipseEpoch` finds that specific
+  observer's own nearby minimum of topocentric Sun-Moon separation (lunar
+  parallax, ~1°, shifts the apparent alignment enough over an hour of
+  Earth's rotation to flip total/partial for a narrow eclipse path — this
+  refinement is what makes the Dallas-2024-04-08 reference-case test in
+  `scripts/smoke-test.js` actually come back "total" rather than
+  "partial"). Lunar eclipses are geocentric by nature (visible from the
+  whole night-side hemisphere) and don't need this per-observer step.
+- **Shadow geometry is a pure vacuum cone** (similar triangles on the real
+  Sun/Earth/Moon radii and actual Sun-Earth/Earth-Moon distances) — no
+  empirical atmospheric-enlargement factor (real eclipse calendars
+  typically add ~1% to Earth's umbra/penumbra radius for this; omitted
+  here).
+- **Spherical Earth and Moon** (no oblateness, no lunar-limb profile) — no
+  atmospheric refraction for the solar-eclipse observer check (same
+  caveats Observer Mode already carries).
+- **Magnitude + one peak time only** — not the 4/5-contact circumstance
+  table (P1/U1/U2/greatest/U3/U4/P4) a real eclipse calendar shows, and no
+  path/footprint mapping across Earth's surface (solar eclipses answer
+  "what does this one point see," not "where is the path of totality").
+- No Besselian elements — this is plain vector/spherical-trig geometry,
+  not the precision apparatus real eclipse predictions use for path maps
+  down to the kilometer.
+- Reference-case tests (`scripts/smoke-test.js`) check against two real
+  historical eclipses: the 2022-11-08 total lunar eclipse and the
+  2024-04-08 total solar eclipse (verified visible from Dallas, TX; and
+  correctly *not* visible from Tokyo, where it was simply night-time at
+  the relevant instant — a check robust to any model imprecision, not
+  just path distance).
 
 ## Known limitations (plain language)
 
