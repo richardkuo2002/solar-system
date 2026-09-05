@@ -52,13 +52,35 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
-.view-mode-controls {
-  pointer-events: auto;
+/* v1.8.1 — the left column's panels (view-mode, surface controls, observer)
+   used to each hardcode their own `position: fixed; top: Npx`, computed by
+   guessing every sibling's height above it. That guess went stale whenever
+   a later version added content to an earlier panel (v1.3's surface-controls
+   hint, wrapped buttons) without anyone re-measuring every top offset below
+   it — the exact bug this reported (.observer-panel silently overlapping
+   and eating clicks meant for .surface-controls's "Stand Here" button). A
+   flex column lets each panel's real rendered height push the next one
+   down automatically, so no offset here can ever go stale again. `bottom`
+   is set (not just `top`) so the column's height is viewport-bounded,
+   giving flex children something concrete to size `flex: 1 1 auto` against
+   for their own internal scrolling instead of running off-screen. */
+.left-column {
   position: fixed;
   top: 12px;
   left: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  pointer-events: none; /* children opt back in individually, same convention as #ui-root */
+}
+
+.view-mode-controls {
+  pointer-events: auto;
   display: flex;
   gap: 6px;
+  flex: 0 0 auto;
 }
 
 .ephemeris-hud {
@@ -99,13 +121,11 @@ html, body {
 
 .surface-controls {
   pointer-events: auto;
-  position: fixed;
-  top: 52px;
-  left: 12px;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   max-width: 300px;
+  flex: 0 0 auto;
 }
 
 .surface-controls-hint {
@@ -132,11 +152,18 @@ html, body {
 
 .observer-panel {
   pointer-events: auto;
-  position: fixed;
-  top: 96px;
-  left: 12px;
   width: 300px;
-  max-height: calc(100vh - 96px - 12px);
+  /* max-height:100% (not a hardcoded px value) caps this at whatever room
+     is actually left in .left-column's fixed viewport-derived height,
+     after view-mode-controls/surface-controls above it — collapsed (title
+     only) sizes to its small content instead of stretching to fill the
+     column (flex-grow:0), while a long expanded result still can't push
+     past the column's bottom edge (max-height:100%, with overflow-y
+     scrolling internally instead). min-height:0 lets flexbox actually
+     shrink it below content size when the column is short. */
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 100%;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -511,6 +538,33 @@ html, body {
   inset: 0;
   pointer-events: none;
   z-index: 1; /* under hover-label/panels, above the canvas */
+}
+
+.analysis-target-marker {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 2; /* above constellation labels, matches hover-label's tier */
+  padding: 2px 8px 2px 20px;
+  border: 1px solid #f80;
+  border-radius: 10px;
+  background: rgba(10, 10, 20, 0.4);
+  color: #f80;
+  font: 11px system-ui, sans-serif;
+  white-space: nowrap;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.9);
+}
+
+.analysis-target-marker::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  transform: translateY(-50%);
+  border: 1px solid #f80;
+  border-radius: 50%;
 }
 
 .constellation-label {

@@ -437,6 +437,18 @@ so "look up from the ground" doesn't feel absurd:
 - This is purely a rendering-layer overlay: no analysis path (Observer
   Mode, Event Toolkit, Eclipses) reads these overridden mesh transforms —
   they all compute directly from AU-contract positions, unaffected.
+- **v1.8.1 — Event Toolkit's line-of-sight line hidden here, a
+  screen-space marker used instead.** The line-of-sight visual
+  (`render/retrograde-los-line.js`) is drawn between Earth's and the
+  target's **compressed** `scenePositions` — a different direction than
+  the true-angular-direction proxies this section describes, so it would
+  point somewhere unrelated to what's actually rendered while standing in
+  Surface Mode (and the observer's camera sits essentially at the line's
+  own Earth-endpoint besides). `app.js` hides it in Surface Mode instead
+  of drawing something wrong, and shows `render/analysis-target-marker.js`
+  — a DOM label projected onto the analyzed planet's actual sky-proxy
+  position each frame — so the (often sub-pixel-floored) correct dot is
+  identifiable at all.
 
 ## Transits (v1.4)
 

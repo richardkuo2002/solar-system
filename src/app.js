@@ -22,6 +22,7 @@ import { createEventToolkitPanel } from './render/event-toolkit-panel.js';
 import { createObserverPanel } from './render/observer-panel.js';
 import { createBodyInfoPanel } from './render/body-info-panel.js';
 import { createLineOfSightLine } from './render/retrograde-los-line.js';
+import { createAnalysisTargetMarker } from './render/analysis-target-marker.js';
 import { analyzeObserver } from './analysis/observer.js';
 import {
   createTimeController, tick, togglePlayPause, setSpeed, reverse, jumpToDate, pause,
@@ -562,8 +563,19 @@ cameraRig.setMode(cameraState.mode);
 const touchControls = createTouchControls(document.getElementById('ui-root'), canvas, cameraRig);
 touchControls.setMode(cameraState.mode);
 
+// v1.8.1 — a single flex-column wrapper for the top-left panel stack
+// (view-mode, surface controls, observer) so each panel's real rendered
+// height pushes the next one down automatically, instead of every panel
+// hardcoding its own `position: fixed; top: Npx` guessed from its
+// siblings' assumed heights — that's exactly how .observer-panel ended up
+// silently overlapping and eating clicks meant for .surface-controls's
+// "Stand Here" button (see css/style.css's .left-column comment).
+const leftColumn = document.createElement('div');
+leftColumn.className = 'left-column';
+document.getElementById('ui-root').appendChild(leftColumn);
+
 const viewModeUI = createViewModeUI(
-  document.getElementById('ui-root'),
+  leftColumn,
   (mode) => {
     // Geocentric needs bodyPositions to snapshot its initial look direction
     // (see enterGeocentric's docstring) — every other mode is a plain
@@ -582,7 +594,7 @@ const viewModeUI = createViewModeUI(
 viewModeUI.setActiveMode(cameraState.mode);
 
 createSurfaceControlsUI(
-  document.getElementById('ui-root'),
+  leftColumn,
   PLANET_ORDER,
   (planet, lat, lon) => {
     cameraState = setMode(cameraState, CAMERA_MODES.SURFACE_FIRST_PERSON, { planet, lat, lon });
@@ -600,9 +612,9 @@ createSurfaceControlsUI(
 // Observer Mode (v0.6) — pure 2D-panel feature, no 3D-scene visual
 // (unlike the Event Toolkit's line-of-sight line): RA/Dec, Alt/Az,
 // above/below-horizon, and rise/transit/set are all panel-only outputs.
-// Sits in the same left-column region createSurfaceControlsUI occupies,
-// just below it (see css/style.css's .observer-panel top:96px).
-const observerPanel = createObserverPanel(document.getElementById('ui-root'), {
+// Sits in the same `leftColumn` flex stack createSurfaceControlsUI
+// occupies, just below it — see css/style.css's .left-column comment.
+const observerPanel = createObserverPanel(leftColumn, {
   onObserve(params) {
     try {
       const result = analyzeObserver(params);
@@ -617,9 +629,11 @@ const observerPanel = createObserverPanel(document.getElementById('ui-root'), {
 // visual block 1 (line-of-sight) lives in the main scene (see
 // render/retrograde-los-line.js's docstring for why there's no second
 // camera/viewport). `activeTargetKey` tracks which body the currently
-// displayed result is about (set on every successful analysis) so the
-// per-frame line-of-sight update below knows which scenePositions entry
-// to draw to.
+// displayed result is about (set on every successful analysis);
+// `analysisHasScenePosition` tracks whether that target is one the shared
+// visuals below can actually draw to (false for e.g. Phase/Illumination's
+// 'moon' target — moons are parent-relative scene positions only, see
+// core/orbital-elements.js, not a top-level scenePositions entry).
 //
 // v1.7: scrubbing a lab's chart now pauses AND jumps the actual simulated
 // clock (`timeState`) to the scrubbed epoch, staying there after the drag
@@ -628,17 +642,26 @@ const observerPanel = createObserverPanel(document.getElementById('ui-root'), {
 // every frame from `timeState.currentDate`) already reflects it directly,
 // so the line-of-sight line below just reads scenePositions like normal —
 // no second position source to keep in sync.
+//
+// v1.8.1: the line-of-sight line is built from compressed scenePositions —
+// while standing in Surface Mode, that direction has nothing to do with
+// applySurfaceSkyProxies's true-angular-direction proxies (see
+// docs/accuracy.md), so drawing it there would be actively misleading, not
+// just unhelpful. Hidden in Surface Mode; a screen-space marker
+// (analysisTargetMarker) points at the analyzed body's actual sky proxy
+// instead — Surface Mode floors sub-pixel planets to a ~1.5px dot
+// (MIN_PROXY_PIXEL_RADIUS), indistinguishable from any other faint point
+// without one.
 const lineOfSight = createLineOfSightLine(scene);
+const analysisTargetMarker = createAnalysisTargetMarker();
 let activeTargetKey = 'mars';
+let analysisHasScenePosition = false;
 
 createEventToolkitPanel(document.getElementById('ui-root'), {
   onAnalyzed(result, targetKey) {
     activeTargetKey = targetKey;
-    // Phase/illumination's 'moon' target has no heliocentric-AU scenePositions
-    // entry (moons are parent-relative scene positions only, see
-    // core/orbital-elements.js) — the shared line-of-sight visual only
-    // applies to targets that do.
-    lineOfSight.line.visible = targetKey in scenePositions;
+    analysisHasScenePosition = targetKey in scenePositions;
+    analysisTargetMarker.setLabel(bodyDisplayName(targetKey));
   },
   onCursorChange(cursorJd) {
     timeState = jumpToDate(pause(timeState), dateFromJulianDate(cursorJd));
@@ -703,9 +726,20 @@ function animate() {
   timeUI.setCurrentDateDisplay(timeState.currentDate);
   ephemerisHud.update(timeState.currentDate, bodyDisplayName(selectedBodyKey), bodyStates[selectedBodyKey] ?? null, moonHudInfo(selectedBodyKey)?.parentName ?? null);
 
-  if (activeTargetKey in scenePositions) {
+  // v1.8.1: the two analysis visuals are mutually exclusive by camera
+  // mode — line-of-sight everywhere except Surface Mode (where its
+  // compressed-scenePositions direction would be wrong, see the comment
+  // above createEventToolkitPanel), the screen-space marker only in
+  // Surface Mode (and only when NOT standing on the analyzed body itself
+  // — nothing meaningful to point at then).
+  const surfacePlanetKey = cameraState.mode === CAMERA_MODES.SURFACE_FIRST_PERSON ? cameraState.surface.planet : null;
+  const showLineOfSight = analysisHasScenePosition && !surfacePlanetKey;
+  lineOfSight.line.visible = showLineOfSight;
+  if (showLineOfSight) {
     lineOfSight.update(scenePositions.earth, scenePositions[activeTargetKey]);
   }
+  const showTargetMarker = analysisHasScenePosition && surfacePlanetKey && activeTargetKey !== surfacePlanetKey;
+  analysisTargetMarker.update(camera, showTargetMarker ? planetGroups[activeTargetKey] : null);
 
   if (cameraState.mode === CAMERA_MODES.FREE_FLIGHT) {
     cameraState = cameraRig.updateFreeFlight(cameraState, delta);
