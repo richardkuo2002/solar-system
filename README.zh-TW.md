@@ -137,6 +137,11 @@ v1 版本——桌面應用程式打包(Tauri/Electron)是未來可能的階段,
 
 行星貼圖主要基於 [Solar System Scope](https://www.solarsystemscope.com/textures/) 的素材,採 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 授權,並依網頁渲染需求做過修改。部分衛星貼圖(木衛一 Io、木衛二 Europa、木衛三 Ganymede、土衛六 Titan、海衛一 Triton、冥衛一 Charon)則來自 Steve Albers / NOAA Science On a Sphere,以 NASA 原始影像整理而成。貼圖由 `scripts/fetch-textures.mjs`(`npm run fetch-textures`)下載,不是手動 commit 上去的——之後隨時可以重跑這個腳本來更新,或補上目前還沒找到穩定來源的天體(清單見 `ATTRIBUTION.md` 的 TODO 區塊)。
 
+## 貢獻
+
+參見 [CONTRIBUTING.md](CONTRIBUTING.md)(英文)——本地開發環境、程式碼慣例
+(單位要寫進變數名、座標來源要明確、新增分析功能的測試要求)、素材授權規則。
+
 ## 授權
 
 MIT(僅限程式碼——第三方貼圖授權見上方[資產授權](#資產授權))
