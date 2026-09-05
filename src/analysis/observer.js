@@ -19,8 +19,16 @@ import { MOONS } from '../data/moons.js';
 import { findStationaryPoints } from './retrograde.js';
 import {
   lstDeg, eclipticToEquatorial, raDecFromEquatorial,
-  observerGeocentricPositionAu, hourAngleDeg, altAzFromDecHa,
+  observerGeocentricPositionAu, hourAngleDeg, altAzFromDecHa, refractionArcmin,
 } from '../core/topocentric.js';
+
+// Standard rise/set convention: apparent altitude at the horizon (Meeus
+// Ch. 15) — this already includes atmospheric refraction (~34') plus a
+// small allowance for solar/lunar semidiameter and horizon dip; using one
+// constant for every target (not a per-target semidiameter) is this
+// project's usual "close enough, not observatory-grade" scope, same as
+// gmstDeg's own stated precision.
+const APPARENT_ALTITUDE_AT_RISE_SET_DEG = -0.8333;
 
 export const OBSERVER_TARGETS = [
   'sun', 'moon', 'mercury', 'venus', 'mars',
@@ -86,11 +94,27 @@ export function observeAt({ target, jsDate, latDeg, lonDeg, elevationM = 0, forc
   const { raDeg, decDeg } = raDecFromEquatorial(topoAu);
   const haDeg = hourAngleDeg(lst, raDeg);
   const { altDeg, azDeg } = altAzFromDecHa({ decDeg, latDeg, haDeg });
-  return { jd, raDeg, decDeg, altDeg, azDeg, aboveHorizon: altDeg > 0, distanceAu: length(topoAu) };
+  // v1.3: apparent altitude adds atmospheric refraction on top of the
+  // geometric value — altDeg itself is unchanged (every existing
+  // self-consistency test keeps passing), apparentAltDeg is additive.
+  const apparentAltDeg = altDeg + refractionArcmin(altDeg) / 60;
+  return {
+    jd, raDeg, decDeg, altDeg, apparentAltDeg, azDeg,
+    aboveHorizon: altDeg > 0, distanceAu: length(topoAu),
+  };
 }
 
 function altDegAtJd(jd, target, latDeg, lonDeg, elevationM, forceSource) {
   return observeAt({ target, jsDate: dateFromJulianDate(jd), latDeg, lonDeg, elevationM, forceSource }).altDeg;
+}
+
+// Shifted so a zero-crossing of THIS series is exactly the standard
+// apparent-altitude rise/set threshold — same "shift then feed the
+// zero-crossing solver" trick analysis/elongation-events.js already uses
+// for signed elongation values, not a new solver concept.
+function riseSetValueAtJd(jd, target, latDeg, lonDeg, elevationM, forceSource) {
+  const apparentAltDeg = observeAt({ target, jsDate: dateFromJulianDate(jd), latDeg, lonDeg, elevationM, forceSource }).apparentAltDeg;
+  return apparentAltDeg - APPARENT_ALTITUDE_AT_RISE_SET_DEG;
 }
 
 function altDerivativeAtJd(jd, target, latDeg, lonDeg, elevationM, forceSource) {
@@ -137,17 +161,23 @@ export function analyzeObserver({ target, atUtc, latDeg, lonDeg, elevationM = 0 
   const timesJd = [];
   const altDegValues = [];
   const altDerivValues = [];
+  const riseSetValues = [];
   for (let ms = dayStartMs; ms <= dayStartMs + 24 * 3600 * 1000; ms += stepMs) {
     const jd = julianDateFromDate(new Date(ms));
     timesJd.push(jd);
     altDegValues.push(altDegAtJd(jd, target, latDeg, lonDeg, elevationM, forceSource));
     altDerivValues.push(altDerivativeAtJd(jd, target, latDeg, lonDeg, elevationM, forceSource));
+    riseSetValues.push(riseSetValueAtJd(jd, target, latDeg, lonDeg, elevationM, forceSource));
   }
 
-  const evalAltFn = (jd) => altDegAtJd(jd, target, latDeg, lonDeg, elevationM, forceSource);
+  const evalRiseSetFn = (jd) => riseSetValueAtJd(jd, target, latDeg, lonDeg, elevationM, forceSource);
   const evalDerivFn = (jd) => altDerivativeAtJd(jd, target, latDeg, lonDeg, elevationM, forceSource);
 
-  const riseSetPts = findStationaryPoints(timesJd, altDegValues, evalAltFn, { toleranceSeconds: RISE_SET_TOLERANCE_SECONDS, labelFor: riseSetLabelFor });
+  // Rise/set now solves on the shifted apparent-altitude series (v1.3 —
+  // includes atmospheric refraction, matches the standard -0.8333deg
+  // convention); transit stays geometric (refraction is monotone and
+  // doesn't meaningfully move the derivative's extremum near culmination).
+  const riseSetPts = findStationaryPoints(timesJd, riseSetValues, evalRiseSetFn, { toleranceSeconds: RISE_SET_TOLERANCE_SECONDS, labelFor: riseSetLabelFor });
   const transitPts = findStationaryPoints(timesJd, altDerivValues, evalDerivFn, { toleranceSeconds: RISE_SET_TOLERANCE_SECONDS, labelFor: transitLabelFor });
 
   const events = [...riseSetPts, ...transitPts]
@@ -160,7 +190,7 @@ export function analyzeObserver({ target, atUtc, latDeg, lonDeg, elevationM = 0 
   let note = null;
   const hasRiseSet = events.some((e) => e.event === 'rise' || e.event === 'set');
   if (!hasRiseSet) {
-    note = altDegValues.every((a) => a > 0)
+    note = riseSetValues.every((v) => v > 0)
       ? "Circumpolar for this day/latitude — target does not set (based on this UTC day's scan)."
       : "Target does not rise above the horizon on this UTC day at this latitude (based on this day's scan).";
   }

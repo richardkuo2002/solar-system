@@ -236,15 +236,35 @@ requirement to state the topocentric model's scope.
 - **Sidereal time**: Greenwich Mean Sidereal Time via a low-precision
   IAU-1982-style polynomial (`src/core/topocentric.js#gmstDeg`) — adequate
   to sub-arcminute accuracy for civil dates, not observatory-grade.
-- **Observer position**: spherical Earth (the app's real mean radius +
-  the entered elevation) — **no oblateness**. Geodetic and geocentric
-  latitude are not distinguished; the difference between them (up to
-  ~0.2° at mid-latitudes on the real, oblate Earth) is within this mode's
-  stated approximation scope, not a bug.
-- **No aberration, no atmospheric refraction.** Altitude/azimuth near the
-  horizon can differ from what's visually observed by roughly the classical
-  ~34 arcminute refraction figure; reported rise/set times can be off by a
-  few minutes as a result.
+- **Observer position (v1.3: WGS-84 oblate Earth)**: `observerGeocentricPositionAu`
+  uses the standard geodetic-to-geocentric conversion (Meeus Ch. 11,
+  flattening f=1/298.257223563), not a spherical Earth — geodetic and
+  geocentric latitude are correctly distinguished, unlike v0.6-v1.2.
+- **Atmospheric refraction (v1.3: modeled).** `refractionArcmin` applies
+  Bennett's formula (Meeus Ch. 16, true-altitude form:
+  `1.02 / tan(h + 10.3/(h+5.11))` arcminutes), giving `apparentAltDeg`
+  alongside the geometric `altDeg`. Rise/set now solves for
+  `apparentAltDeg == -0.8333°` (the standard convention, accounting for
+  both refraction and the Sun/Moon's own angular radius), not a geometric
+  horizon crossing — verified against a real published sunrise/sunset
+  table for Kaohsiung, Taiwan (see `scripts/smoke-test.js`), matching to
+  within tens of seconds. Transit (culmination) is unaffected by
+  refraction and stays geometric.
+- **Still not modeled, with numbers** (below this project's stated
+  precision tier, or requiring a larger frame change than a one-line
+  correction):
+  - **Nutation** (~9-17″ depending on date) — already below the Meeus
+    lunar theory's own ~10″ error budget (`lunar-theory.js`), so adding it
+    to Observer Mode alone wouldn't improve overall consistency.
+  - **Aberration** (~20.5″, the annual aberration constant) — would need
+    the Sun's true longitude threaded into a function that currently only
+    takes a direction vector; a real (small) rewrite, not a one-line add.
+  - **Precession** (~0.36° accumulated by 2026 since J2000 — the largest
+    of the three deferred terms) — deliberately deferred because it's a
+    *frame* change (J2000-mean-equinox vs. of-date), not a local
+    correction: it would also affect `equatorialToEcliptic` and the star
+    catalog's fixed J2000 coordinates, and export reproducibility. Treated
+    as a v2 architecture question, not an oversight.
 - **Rise/transit/set** reuses the exact same `findStationaryPoints`
   coarse-scan-then-bisect solver v0.4/v0.5 already use (10-minute coarse
   sampling across the UTC calendar day, 60-second bisection tolerance) —
@@ -305,6 +325,36 @@ made eclipse detection meaningless). Simplifications, all deliberate:
   correctly *not* visible from Tokyo, where it was simply night-time at
   the relevant instant — a check robust to any model imprecision, not
   just path distance).
+
+## Surface Mode sky realism (v1.3)
+
+Everywhere else in the app, `core/scale.js`'s compression curves are
+deliberately non-realistic (real relative scale would crush the inner
+planets to sub-pixel dots). Surface Mode inherits those same curves for
+everything it renders — except the Sun and the current planet's moon(s),
+which get a **cosmetic-only override** so "look up from the ground"
+doesn't feel absurd:
+
+- The compression curves compress *distance* far more aggressively than
+  *size* (`compressMoonOrbit`'s `MOON_GAP_POWER=0.4` vs. `compressSize`'s
+  `SIZE_POWER=0.45`). Left uncorrected, the Moon's compressed apparent
+  angular diameter from Earth's surface would be ≈51° (real: 0.52°) — the
+  Sun's ≈14° (real: 0.53°).
+- While Surface Mode is active, `app.js#applySurfaceSkyProxies` repositions
+  the Sun mesh and the tracked planet's moon mesh(es) onto a fixed-radius
+  sky shell (`SKY_PROXY_DISTANCE`, inside the star shell) along the same
+  direction the normal compressed scene already computed that frame
+  (`compressPosition`/`compressMoonOrbit` preserve direction, only
+  compress magnitude — no new topocentric math needed), then scales each
+  mesh so its on-screen angular size matches `apparentAngularRadiusRad`
+  computed from its **real** (uncompressed) radius and distance.
+- This is purely a rendering-layer overlay: no analysis path (Observer
+  Mode, Event Toolkit, Eclipses) reads these overridden mesh transforms —
+  they all compute directly from AU-contract positions, unaffected.
+- Scope: only the Sun and the tracked planet's own moon(s). Other planets
+  visible from the surface keep their normal compressed size — a smaller,
+  less jarring effect, and arguably a reasonable "distant point of light"
+  cue to preserve.
 
 ## Known limitations (plain language)
 

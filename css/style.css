@@ -103,7 +103,16 @@ html, body {
   top: 52px;
   left: 12px;
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
+  max-width: 300px;
+}
+
+.surface-controls-hint {
+  flex-basis: 100%;
+  font-size: 11px;
+  color: #ccc;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.9);
 }
 
 .surface-controls select,
@@ -148,6 +157,15 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* The class rule above sets `display` directly, which otherwise beats the
+   browser's default `[hidden] { display: none }` UA-stylesheet rule (author
+   CSS always wins over UA CSS, regardless of selector order) — this is why
+   collapsing previously had no visible effect. Combined class+attribute
+   selector outranks the plain class rule, so this restores it. */
+.observer-panel-body[hidden] {
+  display: none;
 }
 
 .observer-panel-form {
@@ -293,6 +311,12 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* Same fix as .observer-panel-body[hidden] above — the plain class rule's
+   explicit `display` otherwise defeats the `hidden` attribute entirely. */
+.event-toolkit-body[hidden] {
+  display: none;
 }
 
 .event-toolkit-type-select {

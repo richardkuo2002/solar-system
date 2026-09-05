@@ -66,3 +66,15 @@ export function compressPosition(auPosition) {
   const factor = compressDistance(r) / r;
   return { x: auPosition.x * factor, y: auPosition.y * factor, z: auPosition.z * factor };
 }
+
+/**
+ * Real apparent angular radius (radians) of a body of radiusKm at
+ * distanceKm — the number the compression curves above deliberately do
+ * NOT preserve (they compress distance far more aggressively than size,
+ * see docs/accuracy.md's "Surface Mode sky realism" note). Used by v1.3's
+ * Surface Mode Sun/moon override, which needs the real angular size
+ * instead of the compressed scene's inflated one.
+ */
+export function apparentAngularRadiusRad(radiusKm, distanceKm) {
+  return Math.asin(radiusKm / distanceKm);
+}
