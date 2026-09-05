@@ -209,6 +209,41 @@ html, body {
   align-self: center;
 }
 
+.body-info-panel {
+  pointer-events: auto;
+  position: fixed;
+  bottom: 56px;
+  left: 12px;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  background: rgba(10, 10, 20, 0.75);
+  color: #eee;
+  border: 1px solid #444;
+  border-radius: 4px;
+  font: 13px system-ui, sans-serif;
+}
+
+.body-info-panel-title {
+  font-weight: 600;
+}
+
+.body-info-panel-results {
+  margin: 0;
+  padding: 6px 0;
+  white-space: pre-wrap;
+  font: 12px system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  color: #eee;
+}
+
+.body-info-panel-hint {
+  font-size: 11px;
+  color: #888;
+}
+
 .attribution-footer {
   pointer-events: auto;
   position: fixed;
