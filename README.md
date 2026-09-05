@@ -243,6 +243,12 @@ Sphere, compiled from NASA source imagery. Textures are downloaded by
 hand — re-run it any time to refresh them or pick up a body that had no
 working source URL yet (see the TODO list in `ATTRIBUTION.md`).
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) — local setup, code conventions
+(unit-bearing names, explicit coordinate provenance, test requirements for
+new analysis features), and asset/licensing rules.
+
 ## License
 
 MIT (code only — see [Assets](#assets) above)
