@@ -24,6 +24,7 @@ import {
   createTimeController, tick, togglePlayPause, setSpeed, reverse, jumpToDate,
 } from './core/time-controller.js';
 import { createCameraState, setMode, setFocusBody, enterGeocentric, computePose, CAMERA_MODES } from './core/camera-modes.js';
+import { encodeAppStateToParams, decodeAppStateFromParams } from './core/url-state.js';
 import {
   julianDateFromDate, dateFromJulianDate, moonLocalPosition, circularOrbitAngle,
   orbitalPeriodDaysFromSemiMajorAxisAu,
@@ -384,7 +385,18 @@ function buildBodyInfo(bodyKey) {
   };
 }
 
-let timeState = createTimeController({ startDate: new Date(), speedDaysPerSecond: 1 });
+// v0.8 shareable URL state — parsed once here (date only; mode/focus/surface
+// need real scenePositions/data-table validation, so those are applied
+// further down, right after the first updateAllPositions call). See
+// core/url-state.js for exactly what is/isn't included and why.
+const urlRestored = decodeAppStateFromParams(new URLSearchParams(window.location.search));
+// The one URL field that's actually unsafe to use unvalidated —
+// computePose's SURFACE_FIRST_PERSON branch does PLANETS[planet].radiusKm,
+// which throws on a bad key (unlike focus, whose consumers already fall
+// back to a safe {0,0,0} for an unknown body).
+const restoredSurfacePlanet = PLANET_ORDER.includes(urlRestored.planet) ? urlRestored.planet : 'earth';
+
+let timeState = createTimeController({ startDate: urlRestored.date ?? new Date(), speedDaysPerSecond: 1 });
 timeState.playing = true; // starts running so the "faster inner planets" effect is visible immediately
 
 const timeUI = createTimeControlsUI(document.getElementById('ui-root'), {
@@ -433,13 +445,20 @@ const viewModeUI = createViewModeUI(
 );
 viewModeUI.setActiveMode(cameraState.mode);
 
-createSurfaceControlsUI(document.getElementById('ui-root'), PLANET_ORDER, (planet, lat, lon) => {
-  cameraState = setMode(cameraState, CAMERA_MODES.SURFACE_FIRST_PERSON, { planet, lat, lon });
-  cameraRig.setMode(cameraState.mode);
-  cameraRig.applyPose(computePose(cameraState, scenePositions, bodyRotations));
-  viewModeUI.setActiveMode(cameraState.mode);
-  loadFullFor(planetMeshes[planet]);
-});
+const surfaceControlsUI = createSurfaceControlsUI(
+  document.getElementById('ui-root'),
+  PLANET_ORDER,
+  (planet, lat, lon) => {
+    cameraState = setMode(cameraState, CAMERA_MODES.SURFACE_FIRST_PERSON, { planet, lat, lon });
+    cameraRig.setMode(cameraState.mode);
+    cameraRig.applyPose(computePose(cameraState, scenePositions, bodyRotations));
+    viewModeUI.setActiveMode(cameraState.mode);
+    loadFullFor(planetMeshes[planet]);
+  },
+  urlRestored.mode === CAMERA_MODES.SURFACE_FIRST_PERSON
+    ? { planet: restoredSurfacePlanet, lat: urlRestored.lat ?? 0, lon: urlRestored.lon ?? 0 }
+    : undefined
+);
 
 // Observer Mode (v0.6) — pure 2D-panel feature, no 3D-scene visual
 // (unlike the Event Toolkit's line-of-sight line): RA/Dec, Alt/Az,
@@ -493,8 +512,41 @@ createEventToolkitPanel(document.getElementById('ui-root'), {
 });
 
 updateAllPositions(timeState.currentDate);
+
+// Apply the restored camera mode/focus/surface now — enterGeocentric needs
+// real scenePositions to snapshot its look direction (see its docstring),
+// which only exist after the updateAllPositions call above.
+if (urlRestored.mode === CAMERA_MODES.SURFACE_FIRST_PERSON) {
+  cameraState = setMode(cameraState, CAMERA_MODES.SURFACE_FIRST_PERSON, {
+    planet: restoredSurfacePlanet,
+    lat: urlRestored.lat ?? 0,
+    lon: urlRestored.lon ?? 0,
+  });
+} else if (urlRestored.mode === CAMERA_MODES.GEOCENTRIC) {
+  cameraState = enterGeocentric(cameraState, scenePositions, urlRestored.focus ?? 'mars');
+} else if (urlRestored.mode) {
+  cameraState = setMode(cameraState, urlRestored.mode);
+  if (urlRestored.focus) cameraState = setFocusBody(cameraState, urlRestored.focus);
+}
+cameraRig.setMode(cameraState.mode);
+viewModeUI.setActiveMode(cameraState.mode);
+
 cameraRig.applyPose(computePose(cameraState, scenePositions, bodyRotations));
 ephemerisHud.update(timeState.currentDate, bodyDisplayName(selectedBodyKey), bodyStates[selectedBodyKey] ?? null, moonHudInfo(selectedBodyKey)?.parentName ?? null);
+
+// v0.8 — keeps the address bar live-updated to a shareable URL for the
+// current date/camera state (history.replaceState: no new history entries).
+// Called unconditionally every frame below, but only actually touches the
+// URL when the encoded string changes (see url-state.js's rounding comment
+// for why this doesn't churn every frame during WASD-walking).
+let lastUrlQuery = '';
+function syncUrl() {
+  const query = encodeAppStateToParams({ currentDate: timeState.currentDate, cameraState }).toString();
+  if (query === lastUrlQuery) return;
+  lastUrlQuery = query;
+  window.history.replaceState(null, '', `?${query}`);
+}
+syncUrl();
 
 const clock = new THREE.Clock();
 
@@ -541,6 +593,7 @@ function animate() {
     cameraRig.applyPose(computePose(cameraState, scenePositions, bodyRotations));
   }
 
+  syncUrl();
   renderer.render(scene, camera);
 }
 animate();

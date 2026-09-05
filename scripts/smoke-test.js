@@ -38,6 +38,7 @@ import {
 } from '../src/core/topocentric.js';
 import { J2000_JD } from '../src/core/orbital-elements.js';
 import { analyzeObserver, observeAt, OBSERVER_TARGETS } from '../src/analysis/observer.js';
+import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/url-state.js';
 
 // kepler: eccentric anomaly solver satisfies Kepler's equation
 {
@@ -1212,6 +1213,43 @@ import { analyzeObserver, observeAt, OBSERVER_TARGETS } from '../src/analysis/ob
   }
   assert.deepEqual(STAR_COUNTS, { low: 2500, medium: 6000, high: 12000 });
   assert.equal(DEFAULT_STAR_QUALITY, 'medium');
+}
+
+// url-state (v0.8): round-trip encode->decode for each camera mode that
+// carries extra fields, and malformed/out-of-range/missing input degrades
+// to an empty (all-default) result rather than throwing.
+{
+  const date = new Date('2026-09-05T00:00:00Z');
+
+  // Heliocentric top-down + focus body round-trips.
+  let state = setFocusBody(createCameraState(CAMERA_MODES.HELIOCENTRIC_TOPDOWN), 'jupiter');
+  let params = encodeAppStateToParams({ currentDate: date, cameraState: state });
+  let decoded = decodeAppStateFromParams(params);
+  assert.equal(decoded.date.toISOString().slice(0, 10), '2026-09-05');
+  assert.equal(decoded.mode, CAMERA_MODES.HELIOCENTRIC_TOPDOWN);
+  assert.equal(decoded.focus, 'jupiter');
+
+  // Geocentric + focus body round-trips (focus lives at .geocentric.focusBody, not .focusBody).
+  state = enterGeocentric(createCameraState(), { earth: { x: 1, y: 0, z: 0 }, saturn: { x: 5, y: 0, z: 0 } }, 'saturn');
+  decoded = decodeAppStateFromParams(encodeAppStateToParams({ currentDate: date, cameraState: state }));
+  assert.equal(decoded.mode, CAMERA_MODES.GEOCENTRIC);
+  assert.equal(decoded.focus, 'saturn');
+
+  // Surface + planet/lat/lon round-trips (rounded to 2 decimals).
+  state = setMode(createCameraState(), CAMERA_MODES.SURFACE_FIRST_PERSON, { planet: 'mars', lat: 22.6273, lon: 120.3014 });
+  decoded = decodeAppStateFromParams(encodeAppStateToParams({ currentDate: date, cameraState: state }));
+  assert.equal(decoded.mode, CAMERA_MODES.SURFACE_FIRST_PERSON);
+  assert.equal(decoded.planet, 'mars');
+  assert.equal(decoded.lat, 22.63);
+  assert.equal(decoded.lon, 120.3);
+
+  // Malformed/garbage input: every field silently omitted, never thrown.
+  decoded = decodeAppStateFromParams(new URLSearchParams('mode=bogus&lat=999&lon=0&date=not-a-date'));
+  assert.deepEqual(decoded, {}, `garbage input must decode to no overrides, got ${JSON.stringify(decoded)}`);
+
+  // Missing params entirely.
+  decoded = decodeAppStateFromParams(new URLSearchParams(''));
+  assert.deepEqual(decoded, {});
 }
 
 console.log('PASS: smoke-test.js all assertions passed');
