@@ -74,6 +74,21 @@ export function enterGeocentric(state, bodyPositions, focusBody = 'mars') {
   return { ...state, mode: CAMERA_MODES.GEOCENTRIC, geocentric: { focusBody, yaw, pitch } };
 }
 
+/**
+ * Cycles GEOCENTRIC's focus to the next/previous entry in `candidateKeys`
+ * (an ordered list the caller provides — this module has no planet list of
+ * its own) and re-snapshots the look direction at the new target, exactly
+ * like first entering the mode via enterGeocentric — picking a new focus
+ * body is choosing a new "observation starting point", not a continuous
+ * movement, so there's no interpolation between targets.
+ */
+export function cycleGeocentricFocus(state, bodyPositions, candidateKeys, direction) {
+  if (candidateKeys.length === 0) return state;
+  const currentIdx = candidateKeys.indexOf(state.geocentric.focusBody);
+  const nextIdx = (((currentIdx === -1 ? 0 : currentIdx) + direction) % candidateKeys.length + candidateKeys.length) % candidateKeys.length;
+  return enterGeocentric(state, bodyPositions, candidateKeys[nextIdx]);
+}
+
 /** Pure — adjusts the geocentric look direction by mouse-drag deltas (no positional movement; position always tracks Earth). */
 export function rotateGeocentricView(state, dYaw, dPitch) {
   const maxPitch = Math.PI / 2 - 0.01;
@@ -89,6 +104,29 @@ export function rotateGeocentricView(state, dYaw, dPitch) {
 
 const DEG_TO_RAD = Math.PI / 180;
 const GLOBAL_UP = { x: 0, y: 1, z: 0 };
+
+// Stay clear of surfacePose's up-vector fallback at the exact poles
+// (normal parallel to GLOBAL_UP) — walking should slow to a crawl there,
+// not hit a degenerate "up" direction.
+const MAX_SURFACE_LAT = 89.9;
+
+function wrapLonDeg(lon) {
+  return (((lon + 180) % 360) + 360) % 360 - 180;
+}
+
+/**
+ * Pure — walks SURFACE_FIRST_PERSON's (lat, lon) by a fixed compass
+ * heading: W/+dLatDeg = north, S/-dLatDeg = south, D/+dLonDeg = east,
+ * A/-dLonDeg = west. Not relative to where the camera is currently
+ * looking — surface mode has no independent look-around yaw (it always
+ * looks straight up/outward, see surfacePose), so a fixed compass is the
+ * simplest walk model that doesn't require adding one.
+ */
+export function walkSurface(state, { dLatDeg = 0, dLonDeg = 0 }) {
+  const lat = Math.max(-MAX_SURFACE_LAT, Math.min(MAX_SURFACE_LAT, state.surface.lat + dLatDeg));
+  const lon = wrapLonDeg(state.surface.lon + dLonDeg);
+  return { ...state, surface: { ...state.surface, lat, lon } };
+}
 
 /**
  * Pose for standing on a sphere's surface at (lat, lon) looking straight up

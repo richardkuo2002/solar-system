@@ -318,6 +318,10 @@ const timeUI = createTimeControlsUI(document.getElementById('ui-root'), {
 timeUI.setPlayPauseLabel(timeState.playing);
 timeUI.setCurrentDateDisplay(timeState.currentDate);
 
+// GEOCENTRIC's WASD cycles through these — every planet except Earth,
+// since the camera always sits at Earth (see camera-rig.js#updateGeocentricCycle).
+const GEOCENTRIC_CYCLE_TARGETS = PLANET_ORDER.filter((key) => key !== 'earth');
+
 let cameraState = createCameraState(CAMERA_MODES.HELIOCENTRIC_TOPDOWN);
 const cameraRig = createCameraRig(camera, renderer.domElement);
 cameraRig.setMode(cameraState.mode);
@@ -429,13 +433,22 @@ function animate() {
     cameraState = cameraRig.updateFreeFlight(cameraState, delta);
     cameraRig.applyPose(computePose(cameraState, scenePositions, bodyRotations));
   } else if (cameraState.mode === CAMERA_MODES.HELIOCENTRIC_TOPDOWN) {
+    // WASD pans the orbit-around point (a new "starting point" for
+    // drag-to-orbit) — this mode otherwise never calls applyPose per
+    // frame, since OrbitControls owns camera position/target once entered.
+    cameraRig.updateTopDownPan(delta);
     cameraRig.orbitControls.update();
   } else if (cameraState.mode === CAMERA_MODES.SURFACE_FIRST_PERSON) {
-    // The planet under our feet keeps moving along its orbit — re-derive
+    // WASD "walks" (lat, lon) to a new standing point; the planet under
+    // our feet also keeps moving along its orbit either way, so re-derive
     // the pose every frame rather than once on mode entry.
+    cameraState = cameraRig.updateSurfaceWalk(cameraState, delta);
     cameraRig.applyPose(computePose(cameraState, scenePositions, bodyRotations));
   } else if (cameraState.mode === CAMERA_MODES.GEOCENTRIC) {
     cameraState = cameraRig.updateGeocentricLook(cameraState);
+    // WASD cycles which body Earth is tracking — a discrete pick of a new
+    // "observation starting point", re-aiming exactly like enterGeocentric.
+    cameraState = cameraRig.updateGeocentricCycle(cameraState, scenePositions, GEOCENTRIC_CYCLE_TARGETS);
     cameraRig.applyPose(computePose(cameraState, scenePositions, bodyRotations));
   }
 

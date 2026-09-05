@@ -25,16 +25,20 @@ retrograde motion).
   center, and frame are currently active (see
   [docs/accuracy.md](docs/accuracy.md) for the model, coverage, and known
   limitations).
-- **4 camera modes**:
+- **4 camera modes** — WASD works in all of them, but only Free-flight is a
+  true fly-anywhere move; in the other three it repositions that mode's own
+  "starting point" instead:
   - **Heliocentric top-down** — the classic solar-system-diagram view, with
-    mouse-orbit controls.
+    mouse-orbit controls; WASD pans the point the view orbits around.
   - **Free-flight** — WASD + mouse-look, fly anywhere in the scene.
   - **Surface first-person** — stand on any planet at a chosen latitude/
-    longitude and look up at the sky.
+    longitude and look up at the sky; WASD walks that latitude/longitude
+    (W/S = north/south, A/D = west/east).
   - **Geocentric** — camera fixed at Earth, holding a fixed look direction
     while Earth itself moves along its real orbit. This is what actually
     produces Mars's retrograde loop — it's real orbital dynamics, not a
-    scripted animation.
+    scripted animation. WASD cycles which planet it's tracking, re-aiming
+    at the new target.
 - **Time controls** — play/pause, speed multiplier, reverse, jump to any
   date.
 - Distances and sizes are **compressed on a power-law curve** (not

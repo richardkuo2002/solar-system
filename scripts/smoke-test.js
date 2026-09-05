@@ -21,7 +21,8 @@ import {
 } from '../src/core/time-controller.js';
 import {
   createCameraState, setMode, setFocusBody, setSurfaceLocation, setSurfacePlanet,
-  moveFreeFlight, enterGeocentric, rotateGeocentricView, computePose, CAMERA_MODES,
+  moveFreeFlight, enterGeocentric, rotateGeocentricView, cycleGeocentricFocus,
+  walkSurface, computePose, CAMERA_MODES,
 } from '../src/core/camera-modes.js';
 import { unwrapAnglesRad, centralDiffAngularVelocityRadPerDay } from '../src/analysis/longitude.js';
 import { classifyMotion, findStationaryPoints, analyzeMarsRetrograde } from '../src/analysis/retrograde.js';
@@ -368,6 +369,22 @@ import { analyzeObserver, observeAt, OBSERVER_TARGETS } from '../src/analysis/ob
   assert.equal(state.surface.planet, 'mars');
 }
 
+// camera-modes: walkSurface moves (lat, lon) by a fixed compass heading,
+// clamps latitude short of the poles, and wraps longitude into (-180, 180]
+{
+  let state = setSurfaceLocation(createCameraState(), 0, 0);
+  state = walkSurface(state, { dLatDeg: 10, dLonDeg: -5 });
+  assert.equal(state.surface.lat, 10, 'north (+dLatDeg) must increase latitude');
+  assert.equal(state.surface.lon, -5, 'west (-dLonDeg) must decrease longitude');
+
+  const clamped = walkSurface(setSurfaceLocation(createCameraState(), 89, 0), { dLatDeg: 5 });
+  assert.ok(clamped.surface.lat < 90, 'latitude must stay clamped short of the north pole');
+
+  const wrapped = walkSurface(setSurfaceLocation(createCameraState(), 0, 179), { dLonDeg: 5 });
+  assert.ok(wrapped.surface.lon >= -180 && wrapped.surface.lon <= 180, 'longitude must wrap, not run off past 180');
+  assert.ok(wrapped.surface.lon < 0, 'wrapping east past 180 must land on the negative (western) side, not jump back to 179');
+}
+
 // camera-modes: geocentric camera always tracks Earth's position, and the
 // initial look direction (from enterGeocentric) points at the chosen body
 {
@@ -383,6 +400,38 @@ import { analyzeObserver, observeAt, OBSERVER_TARGETS } from '../src/analysis/ob
   const dir = { x: pose.target.x - pose.position.x, y: pose.target.y - pose.position.y, z: pose.target.z - pose.position.z };
   const dirLen = Math.hypot(dir.x, dir.y, dir.z);
   assert.ok(dir.x / dirLen > 0.99, 'initial geocentric look direction should point toward the focus body');
+}
+
+// camera-modes: cycleGeocentricFocus steps through a candidate list forward
+// and backward, wrapping at both ends, and re-aims (via enterGeocentric)
+// at whatever the new focus body is
+{
+  const candidates = ['mercury', 'venus', 'mars'];
+  const bodyPositions = {
+    earth: { x: 0, y: 0, z: 0 },
+    mercury: { x: 1, y: 0, z: 0 },
+    venus: { x: 0, y: 1, z: 0 },
+    mars: { x: 0, y: 0, z: 1 },
+  };
+  let state = enterGeocentric(createCameraState(), bodyPositions, 'mercury');
+
+  state = cycleGeocentricFocus(state, bodyPositions, candidates, 1);
+  assert.equal(state.geocentric.focusBody, 'venus', 'cycling +1 from mercury must land on venus');
+  state = cycleGeocentricFocus(state, bodyPositions, candidates, 1);
+  assert.equal(state.geocentric.focusBody, 'mars', 'cycling +1 from venus must land on mars');
+  state = cycleGeocentricFocus(state, bodyPositions, candidates, 1);
+  assert.equal(state.geocentric.focusBody, 'mercury', 'cycling +1 past the end must wrap back to the start');
+
+  state = cycleGeocentricFocus(state, bodyPositions, candidates, -1);
+  assert.equal(state.geocentric.focusBody, 'mars', 'cycling -1 before the start must wrap to the end');
+
+  // Re-aiming: after cycling to mars (at +z from earth here), the look
+  // direction must point mostly along +z, not wherever it was pointing
+  // for the previous focus body.
+  const pose = computePose(state, bodyPositions);
+  const dir = { x: pose.target.x - pose.position.x, y: pose.target.y - pose.position.y, z: pose.target.z - pose.position.z };
+  const dirLen = Math.hypot(dir.x, dir.y, dir.z);
+  assert.ok(dir.z / dirLen > 0.99, 'cycling to a new focus body must re-aim toward it');
 }
 
 // camera-modes: geocentric look direction is fixed across a position update
