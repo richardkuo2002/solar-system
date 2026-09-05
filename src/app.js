@@ -11,7 +11,7 @@ import {
   buildPlanetMesh, buildOrbitPath, buildSun, buildMoonMesh, buildSaturnRing, buildAtmosphereShell, toScenePosition,
 } from './render/bodies.js';
 import { initTextureLoader } from './render/texture-loader.js';
-import { createTimeControlsUI, createViewModeUI, createSurfaceControlsUI } from './render/ui-controls.js';
+import { createTimeControlsUI, createViewModeUI, createSurfaceControlsUI, REAL_TIME_DAYS_PER_SECOND } from './render/ui-controls.js';
 import { createHoverLabels } from './render/hover-labels.js';
 import { createAttributionFooter } from './render/attribution-footer.js';
 import { createEphemerisHud } from './render/ephemeris-hud.js';
@@ -517,16 +517,14 @@ const urlRestored = decodeAppStateFromParams(new URLSearchParams(window.location
 // back to a safe {0,0,0} for an unknown body).
 const restoredSurfacePlanet = PLANET_ORDER.includes(urlRestored.planet) ? urlRestored.planet : 'earth';
 
-// v1.7 follow-up: the simulated clock now STARTS at true real time (1
+// v1.7 follow-up: the simulated clock STARTS at true real time (1
 // simulated second per real second), not the previous 1 simulated DAY per
 // real second (~86400x) default — "the timeline should basically be real
-// time." The speed dropdown (render/ui-controls.js's SPEED_OPTIONS,
-// labeled in days/second) is deliberately left untouched this round; a
-// real-time-anchored multiplier ladder (1x/10x/60x/...) replacing it is a
-// separate, larger follow-up. Until then, its initially-highlighted
-// "1 d/s" option doesn't reflect this starting speed — only picking a
-// preset actually changes speedDaysPerSecond.
-const REAL_TIME_DAYS_PER_SECOND = 1 / 86400;
+// time." v1.8.2 replaced the old days/second speed dropdown with a
+// real-time-anchored multiplier ladder (render/ui-controls.js's
+// SPEED_OPTIONS) whose own default option is this same constant, so the
+// dropdown and the actual starting speed now agree (previously a known,
+// documented mismatch).
 let timeState = createTimeController({ startDate: urlRestored.date ?? new Date(), speedDaysPerSecond: REAL_TIME_DAYS_PER_SECOND });
 timeState.playing = true; // starts running so the "faster inner planets" effect is visible immediately
 
@@ -547,6 +545,16 @@ const timeUI = createTimeControlsUI(document.getElementById('ui-root'), {
     timeUI.setCurrentDateDisplay(timeState.currentDate);
   },
 });
+
+// v1.8.2 — .left-column and .body-info-panel (css/style.css) must stop
+// above the time-controls bar; its real height can change (font/zoom,
+// the bar's own content) so it's measured live via ResizeObserver into a
+// CSS custom property instead of a second hardcoded guess — the same
+// staleness bug v1.8.1 already fixed once for .left-column's own top
+// offsets, here applied to the shared bottom edge instead.
+new ResizeObserver(([entry]) => {
+  document.documentElement.style.setProperty('--time-bar-clearance', `${entry.target.getBoundingClientRect().height + 24}px`); // +12px margin below the bar (css) + 12px gap above it
+}).observe(timeUI.element);
 timeUI.setPlayPauseLabel(timeState.playing);
 timeUI.setCurrentDateDisplay(timeState.currentDate);
 

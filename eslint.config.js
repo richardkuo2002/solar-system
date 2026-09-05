@@ -11,6 +11,7 @@ const browserGlobals = {
   localStorage: 'readonly', history: 'readonly', navigator: 'readonly',
   performance: 'readonly', fetch: 'readonly', setTimeout: 'readonly',
   clearTimeout: 'readonly', AbortController: 'readonly',
+  ResizeObserver: 'readonly',
 };
 
 // Node 18+ also has fetch/setTimeout/URLSearchParams as real globals —
