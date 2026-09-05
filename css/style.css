@@ -377,6 +377,52 @@ html, body {
   cursor: not-allowed;
 }
 
+.touch-joystick-base {
+  pointer-events: auto;
+  touch-action: none;
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: rgba(10, 10, 20, 0.5);
+  border: 1px solid #444;
+}
+
+.touch-joystick-stick {
+  pointer-events: none;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  border-radius: 50%;
+  background: rgba(150, 180, 220, 0.6);
+  border: 1px solid #99b8d6;
+}
+
+.touch-cycle-buttons {
+  pointer-events: auto;
+  position: fixed;
+  bottom: 20px;
+  right: 12px;
+  display: flex;
+  gap: 8px;
+}
+
+.touch-cycle-buttons button {
+  touch-action: none;
+  font: 20px system-ui, sans-serif;
+  width: 48px;
+  height: 48px;
+  background: rgba(10, 10, 20, 0.75);
+  color: #eee;
+  border: 1px solid #444;
+  border-radius: 4px;
+}
+
 .hover-label {
   position: fixed;
   pointer-events: none;

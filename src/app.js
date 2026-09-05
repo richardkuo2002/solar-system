@@ -14,6 +14,7 @@ import { createHoverLabels } from './render/hover-labels.js';
 import { createAttributionFooter } from './render/attribution-footer.js';
 import { createEphemerisHud } from './render/ephemeris-hud.js';
 import { createCameraRig } from './render/camera-rig.js';
+import { createTouchControls } from './render/touch-controls.js';
 import { buildAsteroidBelt } from './render/asteroid-belt.js';
 import { createEventToolkitPanel } from './render/event-toolkit-panel.js';
 import { createObserverPanel } from './render/observer-panel.js';
@@ -426,6 +427,11 @@ const GEOCENTRIC_CYCLE_TARGETS = PLANET_ORDER.filter((key) => key !== 'earth');
 let cameraState = createCameraState(CAMERA_MODES.HELIOCENTRIC_TOPDOWN);
 const cameraRig = createCameraRig(camera, renderer.domElement);
 cameraRig.setMode(cameraState.mode);
+// v0.10 — no-op on desktop (mouse-primary pointer), builds a virtual
+// joystick/look-drag/Prev-Next-buttons UI on touch devices. See
+// render/touch-controls.js's docstring for exactly which modes get which.
+const touchControls = createTouchControls(document.getElementById('ui-root'), canvas, cameraRig);
+touchControls.setMode(cameraState.mode);
 
 const viewModeUI = createViewModeUI(
   document.getElementById('ui-root'),
@@ -437,6 +443,7 @@ const viewModeUI = createViewModeUI(
       ? enterGeocentric(cameraState, scenePositions, 'mars') // Mars: the classic retrograde-motion example
       : setMode(cameraState, mode);
     cameraRig.setMode(cameraState.mode);
+    touchControls.setMode(cameraState.mode);
     cameraRig.applyPose(computePose(cameraState, scenePositions, bodyRotations));
     viewModeUI.setActiveMode(cameraState.mode);
     if (mode === CAMERA_MODES.GEOCENTRIC) loadFullFor(planetMeshes.mars);
@@ -451,6 +458,7 @@ createSurfaceControlsUI(
   (planet, lat, lon) => {
     cameraState = setMode(cameraState, CAMERA_MODES.SURFACE_FIRST_PERSON, { planet, lat, lon });
     cameraRig.setMode(cameraState.mode);
+    touchControls.setMode(cameraState.mode);
     cameraRig.applyPose(computePose(cameraState, scenePositions, bodyRotations));
     viewModeUI.setActiveMode(cameraState.mode);
     loadFullFor(planetMeshes[planet]);
@@ -529,6 +537,7 @@ if (urlRestored.mode === CAMERA_MODES.SURFACE_FIRST_PERSON) {
   if (urlRestored.focus) cameraState = setFocusBody(cameraState, urlRestored.focus);
 }
 cameraRig.setMode(cameraState.mode);
+touchControls.setMode(cameraState.mode);
 viewModeUI.setActiveMode(cameraState.mode);
 
 cameraRig.applyPose(computePose(cameraState, scenePositions, bodyRotations));
