@@ -282,18 +282,25 @@ html, body {
   align-self: center;
 }
 
-/* v1.8.2 — bottom/max-height used to hardcode `56px`, a guess at the
-   time-controls bar's height; wrong (or made wrong by a later change to
-   that bar, e.g. this version's redesign) meant this panel sat underneath
-   it. Reuses the same measured `--time-bar-clearance` custom property as
-   .left-column instead of a second guessed number. */
+/* v1.8.3 — used to be its own `position: fixed` stack anchored to the
+   bottom-left corner, growing UPWARD, independently of .left-column
+   (view-mode/surface/observer) growing DOWNWARD from the top-left corner
+   — two independently-sized stacks sharing the same corner with no
+   combined height budget, so they could still collide in the middle of
+   the screen when both were large (an expanded Observer Mode result +
+   a shown Planet Info Panel). Now a plain flex item inside .left-column
+   (app.js appends it there), sharing that column's single bounded
+   height and its siblings' `min-height: 0` shrink-to-fit behavior.
+   `order: 1` + `margin-top: auto` keep it visually last (bottom-most)
+   regardless of where app.js actually creates/appends it in the DOM. */
 .body-info-panel {
   pointer-events: auto;
-  position: fixed;
-  bottom: var(--time-bar-clearance);
-  left: 12px;
+  order: 1;
+  margin-top: auto;
   width: 300px;
-  max-height: calc(100vh - var(--time-bar-clearance) - 12px);
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 100%;
   overflow-y: auto;
   display: flex;
   flex-direction: column;

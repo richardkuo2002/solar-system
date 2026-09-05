@@ -54,11 +54,12 @@ retrograde motion).
     at the new target.
 - **Time controls** — play/pause, speed multiplier, reverse, jump to any
   date. Starts at true real time (v1.8: 1 simulated second per real
-  second, not the previous ~86400x default); the speed dropdown (v1.8.2)
-  is a real-time-anchored ladder — 1x/2x/5x, then two fixed rates kept
-  from before (0.1 d/s ≈ 8640x, 1 d/s ≈ 86400x) — rather than the old
-  days/second figures, which didn't match the new default and needed
-  mental math to translate into "how much faster than reality."
+  second, not the previous ~86400x default); the speed dropdown
+  (v1.8.2, extended v1.8.3) is a real-time-anchored ladder —
+  1x/2x/5x/100x/1000x, then two fixed rates kept from before
+  (0.1 d/s ≈ 8640x, 1 d/s ≈ 86400x) — rather than the old days/second
+  figures, which didn't match the new default and needed mental math to
+  translate into "how much faster than reality."
 - Distances and sizes are **compressed on a power-law curve** (not
   true-to-scale) so the whole system fits on screen at once — a standard
   approach for web solar-system visualizations.

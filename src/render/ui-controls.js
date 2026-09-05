@@ -7,17 +7,19 @@
 // known, documented mismatch at the time). Now anchored to real time
 // itself: 1x is real time (matches app.js's starting speed exactly, so
 // the dropdown and the actual clock agree on load), then small human-
-// scale multiples (2x, 5x) for watching things unfold slightly faster,
-// then the two old fixed rates kept for their existing usefulness
-// (0.1 d/s ≈ one Mercury orbit every ~880 real seconds; 1 d/s ≈ one
-// Earth year every ~365 real seconds) but now labeled by what they
-// actually are — a multiplier — instead of a days/second figure nobody
-// intuits speed from directly.
+// scale multiples (2x, 5x, 100x, 1000x) for watching things unfold
+// faster, then the two old fixed rates kept for their existing
+// usefulness (0.1 d/s ≈ one Mercury orbit every ~880 real seconds;
+// 1 d/s ≈ one Earth year every ~365 real seconds) but now labeled by
+// what they actually are — a multiplier — instead of a days/second
+// figure nobody intuits speed from directly.
 export const REAL_TIME_DAYS_PER_SECOND = 1 / 86400;
 const SPEED_OPTIONS = [
   { daysPerSecond: REAL_TIME_DAYS_PER_SECOND, label: '1x (real time)' },
   { daysPerSecond: 2 * REAL_TIME_DAYS_PER_SECOND, label: '2x' },
   { daysPerSecond: 5 * REAL_TIME_DAYS_PER_SECOND, label: '5x' },
+  { daysPerSecond: 100 * REAL_TIME_DAYS_PER_SECOND, label: '100x' },
+  { daysPerSecond: 1000 * REAL_TIME_DAYS_PER_SECOND, label: '1000x' },
   { daysPerSecond: 0.1, label: '0.1 d/s (8640x)' },
   { daysPerSecond: 1, label: '1 d/s (86400x)' },
 ];
