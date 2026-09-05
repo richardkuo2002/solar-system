@@ -5,6 +5,27 @@ All notable changes to this project. Format loosely follows
 milestones in `docs/ROADMAP.md` (local-only), with each version's exact
 scope and accuracy notes in [docs/accuracy.md](docs/accuracy.md).
 
+## v1.8.1 — 2026-09-05
+
+- **Fixed overlapping left-side UI panels** — the view-mode, surface
+  controls, and Observer Mode panels previously each hardcoded their own
+  `position: fixed; top: Npx`, guessed from every sibling's height above
+  it; that guess had gone stale since v1.3 added hint text, letting
+  Observer Mode silently overlap and eat clicks meant for the surface
+  panel's "Stand Here" button. Replaced with a single flex-column
+  wrapper so each panel's real rendered height pushes the next one down
+  automatically — this class of bug can't recur.
+- **Fixed unreadable Event Toolkit analysis visuals in Surface Mode** —
+  the existing Earth-to-target line-of-sight line is built from
+  compressed scene coordinates, a different direction than Surface
+  Mode's true-angular-direction sky proxies, and the Surface camera sits
+  almost on top of the line's own endpoint; showing it there was actively
+  misleading, not just unhelpful. Added a screen-space marker (orange
+  badge, reuses the constellation-label projection technique) that
+  points at the analyzed body's actual on-screen position instead,
+  shown only in Surface Mode; the line-of-sight line is now shown only
+  outside Surface Mode.
+
 ## v1.8 — 2026-09-05
 
 - **Event Toolkit scrub now locks the whole scene, not just the

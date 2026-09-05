@@ -44,6 +44,9 @@ retrograde motion).
     moon(s), and (v1.4) every other planet render at their **true real
     angular size** here (not the scene's usual compressed scale) — see
     [docs/accuracy.md](docs/accuracy.md#surface-mode-sky-realism-v13-extended-v14).
+    With an active Event Toolkit result, an orange marker (v1.8.1) points
+    at the analyzed body's actual on-screen position — real angular sizes
+    can floor to a ~1.5px dot, easy to lose among the stars otherwise.
   - **Geocentric** — camera fixed at Earth, holding a fixed look direction
     while Earth itself moves along its real orbit. This is what actually
     produces Mars's retrograde loop — it's real orbital dynamics, not a
