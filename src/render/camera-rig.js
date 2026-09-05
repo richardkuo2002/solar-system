@@ -11,6 +11,11 @@ import { CAMERA_MODES, moveFreeFlight, rotateGeocentricView, walkSurface, cycleG
 
 const MOVE_SPEED = 15; // scene units / second
 const MOUSE_SENSITIVITY = 0.0025;
+
+/** Clamp a scalar to [-1, 1] — used to combine keyboard's discrete ±1 with the touch joystick's continuous axis without either alone exceeding full speed. */
+function clamp11(x) {
+  return Math.max(-1, Math.min(1, x));
+}
 // Top-down's view spans much farther (Pluto/comets sit ~200+ scene units
 // out) than free-flight's walking-speed feel, so panning needs a faster
 // constant to feel responsive at that scale.
@@ -34,6 +39,11 @@ export function createCameraRig(camera, domElement) {
   // `keysDown` like the continuous-movement modes. `e.repeat` is ignored so
   // holding a key doesn't rapid-fire through the whole planet list.
   let pendingCycleDirections = [];
+  // v0.10 touch input — a continuous analog vector from the on-screen
+  // joystick (render/touch-controls.js), combined with keyboard's discrete
+  // ±1 via clamp11 in the update* methods below so keyboard and touch both
+  // work at once, neither excluding the other.
+  let touchMoveVector = { x: 0, y: 0 };
 
   window.addEventListener('keydown', (e) => {
     keysDown.add(e.code);
@@ -66,6 +76,23 @@ export function createCameraRig(camera, domElement) {
       // INTO geocentric shouldn't immediately replay stale WASD taps from
       // whatever mode you were just in.
       pendingCycleDirections = [];
+      touchMoveVector = { x: 0, y: 0 };
+    },
+
+    /** v0.10 — the on-screen joystick calls this continuously while dragging (and resets to {0,0} on release). */
+    setTouchMoveVector(x, y) {
+      touchMoveVector = { x, y };
+    },
+
+    /** v0.10 — the on-screen look-drag zone calls this with deltas scaled the same way mouse-drag already is; feeds the same accumulator updateFreeFlight/updateGeocentricLook already drain per-frame. */
+    addLookDelta(dYaw, dPitch) {
+      pendingYaw += dYaw;
+      pendingPitch += dPitch;
+    },
+
+    /** v0.10 — the on-screen Prev/Next buttons call this; feeds the same queue WASD-tap already pushes into. */
+    pushCycleDirection(direction) {
+      pendingCycleDirections.push(direction);
     },
 
     applyPose(pose) {
@@ -76,8 +103,8 @@ export function createCameraRig(camera, domElement) {
 
     /** Reads accumulated WASD/QE + mouse-drag input and returns the next cameraState (pure moveFreeFlight underneath). */
     updateFreeFlight(cameraState, deltaSeconds) {
-      const forward = ((keysDown.has('KeyW') ? 1 : 0) - (keysDown.has('KeyS') ? 1 : 0)) * MOVE_SPEED * deltaSeconds;
-      const strafe = ((keysDown.has('KeyD') ? 1 : 0) - (keysDown.has('KeyA') ? 1 : 0)) * MOVE_SPEED * deltaSeconds;
+      const forward = clamp11(((keysDown.has('KeyW') ? 1 : 0) - (keysDown.has('KeyS') ? 1 : 0)) + touchMoveVector.y) * MOVE_SPEED * deltaSeconds;
+      const strafe = clamp11(((keysDown.has('KeyD') ? 1 : 0) - (keysDown.has('KeyA') ? 1 : 0)) + touchMoveVector.x) * MOVE_SPEED * deltaSeconds;
       const vertical = ((keysDown.has('KeyE') ? 1 : 0) - (keysDown.has('KeyQ') ? 1 : 0)) * MOVE_SPEED * deltaSeconds;
       const dYaw = pendingYaw;
       const dPitch = pendingPitch;
@@ -101,8 +128,8 @@ export function createCameraRig(camera, domElement) {
      * move (pure walkSurface underneath).
      */
     updateSurfaceWalk(cameraState, deltaSeconds) {
-      const dLatDeg = ((keysDown.has('KeyW') ? 1 : 0) - (keysDown.has('KeyS') ? 1 : 0)) * SURFACE_WALK_SPEED_DEG_PER_SEC * deltaSeconds;
-      const dLonDeg = ((keysDown.has('KeyD') ? 1 : 0) - (keysDown.has('KeyA') ? 1 : 0)) * SURFACE_WALK_SPEED_DEG_PER_SEC * deltaSeconds;
+      const dLatDeg = clamp11(((keysDown.has('KeyW') ? 1 : 0) - (keysDown.has('KeyS') ? 1 : 0)) + touchMoveVector.y) * SURFACE_WALK_SPEED_DEG_PER_SEC * deltaSeconds;
+      const dLonDeg = clamp11(((keysDown.has('KeyD') ? 1 : 0) - (keysDown.has('KeyA') ? 1 : 0)) + touchMoveVector.x) * SURFACE_WALK_SPEED_DEG_PER_SEC * deltaSeconds;
       if (!dLatDeg && !dLonDeg) return cameraState;
       return walkSurface(cameraState, { dLatDeg, dLonDeg });
     },

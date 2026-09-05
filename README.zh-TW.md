@@ -102,6 +102,25 @@ npm run lint   # ESLint,recommended ruleset(v0.9)
 - 手動改壞的網址(不存在的模式、超出範圍的經緯度、無效日期)會安靜地
   改用預設值,不會讓頁面壞掉。
 
+## 手機觸控支援(Mobile Touch Controls,v0.10)
+
+在觸控裝置上(用 `(pointer: coarse)` 偵測)會自動出現虛擬搖桿與
+Prev/Next 按鈕——桌面版完全不受影響、不會多出任何 UI。
+
+- **Free-flight / Surface**——左下角虛擬搖桿控制移動(前進/側移,或
+  行星表面的經緯度走動),跟 WASD 同時可用,不是取代它。
+- **Free-flight / Geocentric**——在畫面上拖曳可以改變視角方向,跟滑鼠
+  拖曳一樣。
+- **Geocentric**——右下角 ◀/▶ 按鈕切換目前追蹤的行星(WASD 的觸控等效
+  操作)。
+- **Top-Down**——沒變:這個模式本來就用 `OrbitControls`,本身就有內建
+  touch 支援(單指旋轉、雙指縮放/平移)。
+- 點擊天體選取(Planet Info Panel)現在觸控裝置上也能用了——之前這個
+  功能只綁在滑鼠 hover 狀態上,觸控完全沒反應。
+- **已知限制**:Free-flight 的垂直移動(原本鍵盤 Q/E)沒有對應的觸控
+  控制;觸控筆電如果滑鼠是主要指標裝置,不會顯示觸控 UI(即使觸控實際
+  可用)。
+
 ## 資料來源
 
 - 軌道要素:JPL Solar System Dynamics 低精度克卜勒軌道要素表(Standish 1992),適用約 1800–2050 年。

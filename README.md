@@ -192,6 +192,28 @@ view — copy it at any time to get a link that restores the same scene:
   invalid date) silently falls back to defaults instead of crashing the
   page.
 
+## Mobile Touch Controls (v0.10)
+
+On a touch device (detected via `(pointer: coarse)`), a virtual joystick
+and Prev/Next buttons appear automatically — desktop stays exactly as
+before with zero extra UI.
+
+- **Free-flight / Surface** — a bottom-left virtual joystick drives
+  movement (forward/strafe, or lat/lon walking), working alongside WASD
+  rather than replacing it.
+- **Free-flight / Geocentric** — drag anywhere on the scene to look
+  around, same as a mouse-drag.
+- **Geocentric** — bottom-right ◀/▶ buttons cycle the tracked planet
+  (WASD's touch equivalent).
+- **Top-Down** — unchanged: this mode already used `OrbitControls`, which
+  has built-in touch support (one-finger rotate, two-finger pinch/pan).
+- Tapping a body to select it (Planet Info Panel) now works on touch too
+  — previously it silently did nothing, since selection was wired only to
+  mouse-hover state.
+- **Known limits**: Free-flight's vertical (Q/E) movement has no touch
+  control; a touchscreen laptop with a mouse as its primary pointer won't
+  show the touch UI even though touch works.
+
 ## Data sources
 
 - Orbital elements: JPL Solar System Dynamics low-precision Keplerian
