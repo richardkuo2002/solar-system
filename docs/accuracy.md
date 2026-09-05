@@ -56,11 +56,11 @@ returned.
   compression curve with no meaningful inverse back to AU. The HUD shows a
   moon's source as "Kepler propagation (circular approx.)" with its parent
   as center and "scene units (not AU)" instead of fabricating an AU
-  position. The Moon's own **analysis-path** position (Event Toolkit,
-  Observer Mode, Eclipses) is different as of v1.1 — see "The Moon's
-  analysis position (v1.1: Meeus lunar theory)" below; its **3D-scene**
-  position (`moonLocalPosition`) still uses this same circular
-  approximation, unchanged.
+  position. The Moon itself is the exception: since v1.1 its
+  **analysis-path** position and, since v1.5, its **3D-scene** position
+  too both use the Meeus lunar theory (real inclination/eccentricity/
+  phase) — see "The Moon's analysis position (v1.1: Meeus lunar theory)"
+  below.
 - Horizons requests fetch position + velocity only — no light-time,
   range-rate, or uncertainty data.
 
@@ -106,10 +106,15 @@ characteristics. Re-run periodically — the linear-rate propagation drifts
 further from truth the further the date is from J2000, especially past
 2050, when the table is no longer valid at all.
 
-## Mars Retrograde Lab (v0.4)
+## Retrograde Lab (v0.4, generalized to all planets in v1.5)
 
-The Retrograde Lab panel computes Mars's **geocentric ecliptic longitude**
-(`λ = atan2(Δy, Δx)` of the heliocentric Mars-minus-Earth AU vector) over a
+The Retrograde event type computes a planet's **geocentric ecliptic
+longitude** (`λ = atan2(Δy, Δx)` of the heliocentric target-minus-Earth AU
+vector — Mars only through v1.4; any of the 7 non-Earth planets since
+v1.5, the math was always body-agnostic and only the target string was
+hardcoded; verified against Jupiter's real 2022 retrograde loop, station
+dates matching published tables to ~2.5 hours, see
+`scripts/smoke-test.js`) over a
 user-chosen date range, and finds where its rate of change crosses zero
 (stationary points) to locate the retrograde interval between them. This is
 a **geometric** longitude, not a light-time-corrected apparent/visual
@@ -165,10 +170,9 @@ only labels one extra display lookup.
 Phase/illumination, Observer Mode, and Eclipse analysis all need a real
 heliocentric AU position for the Moon, which the live 3D scene has never
 had (`moonLocalPosition` only produces a parent-relative *scene*-unit
-position via a nonlinear display-compression curve — see "What is NOT
-modeled" above, and note it is **unaffected by this section**: it's still
-the old constant-angular-rate circular orbit, a separate approximation
-used only for the 3D scene's visual Moon).
+position via a nonlinear display-compression curve). **As of v1.5 the 3D
+scene's Moon uses this same Meeus lunar theory too** — see the update at
+the end of this section.
 
 Through v1.0, `moonHeliocentricPositionAu` used that *same* circular-orbit
 shape for the analysis path too (zero inclination, zero eccentricity, an
@@ -198,10 +202,19 @@ actual Moon (verified against Meeus's own published worked example, see
 - Not corrected for nutation (sub-arcminute, negligible at this project's
   precision level) or light-time (Earth-Moon light-time is ~1.3s, also
   negligible here).
-- This upgrade is analysis-only. The 3D scene's visual Moon still uses the
-  old circular approximation and can show the Moon at a different orbital
-  angle than the Event Toolkit/Observer Mode for the same calendar date —
-  a known, disclosed split between the two, not a bug in either.
+- ~~This upgrade is analysis-only.~~ **v1.5 closed the split**: the 3D
+  scene's visual Moon now derives its position from the same
+  Meeus/J2000-aligned source as the analysis path (both go through one
+  shared helper, `core/orbital-elements.js#moonGeocentricJ2000`, so they
+  provably can't drift apart) — real phase, real ~5° inclination
+  (the scene Moon is no longer pinned to the ecliptic plane), real
+  eccentric distance (fed into the same `compressMoonOrbit` display curve
+  in place of the old constant orbit radius; Surface Mode's rendered Moon
+  size follows the real perigee/apogee ±5.5% swing too). The scene and
+  the Event Toolkit/Observer Mode finally show the same Moon for the same
+  date. Every OTHER moon (Io, Europa, Ganymede, Callisto, Titan, Triton,
+  Charon) still uses the circular approximation — that sentence in "What
+  is NOT modeled" is now literally scoped to non-Moon moons.
 
 ### Export (JSON / CSV)
 
@@ -229,10 +242,24 @@ requirement to state the topocentric model's scope.
   geocentric position (derived from lat/lon/elevation + sidereal time) —
   exactly the roadmap's "geocentric position, then subtract the observer's
   position relative to Earth's center."
-- **Obliquity is treated as a constant**, not the real, slowly-varying
-  value — no precession, no nutation. Over civil timescales this is a
-  small effect, but it means Observer Mode's RA/Dec should not be compared
-  digit-for-digit against a planetarium app that models precession.
+- **Precession (v1.5: modeled — mean equinox of date).**
+  `precessEquatorialToDate` (`src/core/topocentric.js`) applies the
+  rigorous IAU 1976 rotation (Meeus Ch. 21, ζ/z/θ polynomials, verified
+  against Meeus's own worked Example 21.b in `scripts/smoke-test.js`) to
+  the target's equatorial vector before RA/Dec extraction — Observer
+  Mode's output frame is now the **mean equator/equinox of date**
+  (`TOPOCENTRIC_EQUATORIAL_MEAN_OF_DATE` in exported results). This also
+  fixed a real internal inconsistency: `gmstDeg`'s sidereal time is
+  inherently equinox-of-date, so hour angles built from a J2000-anchored
+  RA were silently mixing two equinox references (~0.36° by 2026) in
+  every rise/set/transit solve. The precession rotation is applied at
+  Observer Mode's output only — the ecliptic↔equatorial obliquity
+  rotation itself (`OBLIQUITY_DEG`) stays a fixed J2000 constant **on
+  purpose**: the star catalog renders fixed-J2000 Hipparcos coordinates
+  through the same `equatorialToEcliptic`, and a date-dependent obliquity
+  there would slowly rotate the whole star sphere with no corresponding
+  data correction. Do not "unify" those two — the asymmetry is the
+  correct design.
 - **Sidereal time**: Greenwich Mean Sidereal Time via a low-precision
   IAU-1982-style polynomial (`src/core/topocentric.js#gmstDeg`) — adequate
   to sub-arcminute accuracy for civil dates, not observatory-grade.
@@ -251,20 +278,15 @@ requirement to state the topocentric model's scope.
   within tens of seconds. Transit (culmination) is unaffected by
   refraction and stays geometric.
 - **Still not modeled, with numbers** (below this project's stated
-  precision tier, or requiring a larger frame change than a one-line
-  correction):
+  precision tier):
   - **Nutation** (~9-17″ depending on date) — already below the Meeus
     lunar theory's own ~10″ error budget (`lunar-theory.js`), so adding it
-    to Observer Mode alone wouldn't improve overall consistency.
+    to Observer Mode alone wouldn't improve overall consistency. This is
+    why the output frame is *mean* (not *true*) equinox of date.
   - **Aberration** (~20.5″, the annual aberration constant) — would need
     the Sun's true longitude threaded into a function that currently only
     takes a direction vector; a real (small) rewrite, not a one-line add.
-  - **Precession** (~0.36° accumulated by 2026 since J2000 — the largest
-    of the three deferred terms) — deliberately deferred because it's a
-    *frame* change (J2000-mean-equinox vs. of-date), not a local
-    correction: it would also affect `equatorialToEcliptic` and the star
-    catalog's fixed J2000 coordinates, and export reproducibility. Treated
-    as a v2 architecture question, not an oversight.
+  - ~~Precession~~ — modeled as of v1.5, see above.
 - **Rise/transit/set** reuses the exact same `findStationaryPoints`
   coarse-scan-then-bisect solver v0.4/v0.5 already use (10-minute coarse
   sampling across the UTC calendar day, 60-second bisection tolerance) —

@@ -1,6 +1,11 @@
 // Moon + the 4 Galilean moons + Titan + Triton. Elements are simplified
 // relative to the parent planet (orbit radius + period, near-circular
 // approximation) — full Standish-grade precision isn't needed for v1 moons.
+// v1.5: THE Moon's 3D-scene position no longer uses these orbitKm/periodDays
+// values (it's driven by the Meeus lunar theory, same as the analysis path
+// — see core/orbital-elements.js#moonLocalPositionMeeus); its radiusKm is
+// still used for rendering, and orbitKm/periodDays remain for the other
+// moons' circular approximation.
 // radiusKm/orbitKm/periodDays: NASA planetary fact sheets. Negative
 // periodDays = retrograde orbit (Triton) — same sign trick already used for
 // Venus/Uranus retrograde axial spin in planets.js, reusing

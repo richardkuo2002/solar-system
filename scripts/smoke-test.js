@@ -3,6 +3,7 @@ import { loadStarCatalog, constellationLineSegments, constellationLabelPositions
 import { solveEccentricAnomaly, elementsToPosition, normalizeAngle } from '../src/core/kepler.js';
 import {
   elementsAtDate, julianDateFromDate, dateFromJulianDate, circularOrbitAngle, moonLocalPosition,
+  moonLocalPositionMeeus, moonGeocentricJ2000,
   elementsVelocity, sampleOrbitPath, orbitalPeriodDaysFromSemiMajorAxisAu,
 } from '../src/core/orbital-elements.js';
 import { compressDistance, compressSize, compressPosition, compressMoonOrbit, apparentAngularRadiusRad, SATURN_RING_OUTER_KM } from '../src/core/scale.js';
@@ -23,7 +24,7 @@ import {
   walkSurface, computePose, CAMERA_MODES,
 } from '../src/core/camera-modes.js';
 import { unwrapAnglesRad, centralDiffAngularVelocityRadPerDay } from '../src/analysis/longitude.js';
-import { classifyMotion, findStationaryPoints, analyzeMarsRetrograde } from '../src/analysis/retrograde.js';
+import { classifyMotion, findStationaryPoints, analyzeRetrograde } from '../src/analysis/retrograde.js';
 import { elongationRad, signedElongationRad } from '../src/analysis/elongation.js';
 import { analyzeOppositionConjunction, OUTER_TARGETS } from '../src/analysis/opposition.js';
 import { analyzeGreatestElongation, analyzeInnerConjunction, INNER_TARGETS } from '../src/analysis/elongation-events.js';
@@ -38,7 +39,7 @@ import { toExportableJson, toExportableCsv } from '../src/analysis/export.js';
 import {
   gmstDeg, eclipticToEquatorial, raDecFromEquatorial, observerGeocentricPositionAu,
   hourAngleDeg, altAzFromDecHa, OBLIQUITY_DEG, equatorialToEcliptic, unitVectorFromRaDec,
-  refractionArcmin,
+  refractionArcmin, precessEquatorialToDate,
 } from '../src/core/topocentric.js';
 import { J2000_JD } from '../src/core/orbital-elements.js';
 import { analyzeObserver, observeAt, OBSERVER_TARGETS } from '../src/analysis/observer.js';
@@ -269,6 +270,27 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
     const r = Math.hypot(pos.x, pos.z);
     assert.ok(r > parentSceneRadius, `${key} must render outside its parent ${moonData.parent}`);
   }
+}
+
+// orbital-elements (v1.5): moonLocalPositionMeeus — THE Moon's 3D-scene
+// position now derives from the same Meeus/J2000-aligned source the
+// analysis path uses (moonGeocentricJ2000). Drift guard: the scene
+// position's ecliptic direction must exactly match the shared helper's
+// lon/lat, and the position lands outside Earth's scene radius with a
+// real (non-zero) out-of-plane component from the ~5deg inclination.
+{
+  const jd = julianDateFromDate(new Date('2026-01-01T00:00:00Z'));
+  const parentRadiusKm = PLANETS.earth.radiusKm;
+  const parentSceneRadius = compressSize(parentRadiusKm);
+  const pos = moonLocalPositionMeeus(jd, parentRadiusKm, parentSceneRadius);
+  const { lonRad, latRad } = moonGeocentricJ2000(jd);
+  assert.ok(Number.isFinite(pos.x) && Number.isFinite(pos.y) && Number.isFinite(pos.z));
+  const r = Math.hypot(pos.x, pos.y, pos.z);
+  assert.ok(r > parentSceneRadius, 'the Moon must render outside Earth');
+  // Scene axes: x = cos(lat)cos(lon), y = sin(lat) (ecliptic z -> scene up), z = cos(lat)sin(lon)
+  assert.ok(Math.abs(pos.x / r - Math.cos(latRad) * Math.cos(lonRad)) < 1e-12, 'scene direction x must match the shared J2000 lon/lat');
+  assert.ok(Math.abs(pos.y / r - Math.sin(latRad)) < 1e-12, 'scene direction y must match the shared J2000 lat');
+  assert.ok(Math.abs(pos.z / r - Math.cos(latRad) * Math.sin(lonRad)) < 1e-12, 'scene direction z must match the shared J2000 lon/lat');
 }
 
 // orbital-elements: Charon (Pluto's moon) produces a finite position
@@ -688,7 +710,7 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
   assert.notEqual(point.epochJd, 6);
 }
 
-// analysis/retrograde: analyzeMarsRetrograde offline reference case — a
+// analysis/retrograde: analyzeRetrograde offline reference case — a
 // real historical Mars retrograde window (Nov 2007-Jan 2008), forced to
 // ephemerisSource:'kepler' so this is fully deterministic and needs no
 // network (see docs/ROADMAP.md's v0.4 acceptance criterion re: an offline
@@ -697,7 +719,7 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
 // within a few days of the real astronomical stationary points for this
 // well-documented 2007-2008 retrograde, which is the point of the test.
 {
-  const result = analyzeMarsRetrograde({
+  const result = analyzeRetrograde({
     startUtc: '2007-09-01T00:00:00Z', endUtc: '2008-03-01T00:00:00Z',
     intervalHours: 6, ephemerisSource: 'kepler',
   });
@@ -730,7 +752,7 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
 // analysis/retrograde: a short window with no retrograde interval reports
 // "no stationary points found" rather than crashing or fabricating a result
 {
-  const result = analyzeMarsRetrograde({
+  const result = analyzeRetrograde({
     startUtc: '2007-09-01T00:00:00Z', endUtc: '2007-09-10T00:00:00Z',
     intervalHours: 6, ephemerisSource: 'kepler',
   });
@@ -1056,13 +1078,13 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
   assert.ok(phaseLines[1].includes('phase-illumination') && phaseLines[1].includes('12.5') && phaseLines[1].includes('0.94'));
 }
 
-// analysis/export: end-to-end with a real analyzeMarsRetrograde result
+// analysis/export: end-to-end with a real analyzeRetrograde result
 // (legacy v0.4 shape: observer is a string, frame/source are top-level,
 // start/end instead of result.events[]) — confirms export.js's dual-shape
 // accessor helpers actually work on the shape that ships today, not just
 // the newer nested one
 {
-  const result = analyzeMarsRetrograde({
+  const result = analyzeRetrograde({
     startUtc: '2007-09-01T00:00:00Z', endUtc: '2008-03-01T00:00:00Z',
     intervalHours: 6, ephemerisSource: 'kepler',
   });
@@ -1117,6 +1139,21 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
   const expectedZAu = expectedPolarRadiusKm / 149597870.7;
   assert.ok(Math.abs(pos.z - expectedZAu) < 1e-9, `expected polar radius, got z=${pos.z}`);
   assert.ok(Math.abs(pos.x) < 1e-9 && Math.abs(pos.y) < 1e-9, 'x/y must vanish at the pole');
+}
+
+// core/topocentric (v1.5): precessEquatorialToDate — Meeus's own worked
+// example (2nd ed., Example 21.b): theta Persei, proper-motion-corrected
+// J2000 position RA 41.054063deg / Dec +49.227750deg, precessed to
+// JD 2462088.69 (2028 Nov 13.19 TD), expected RA 41.547214deg /
+// Dec +49.348483deg. Matches to ~1e-6 deg (verified by running it).
+{
+  const v = unitVectorFromRaDec(41.054063, 49.227750);
+  const { raDeg, decDeg } = raDecFromEquatorial(precessEquatorialToDate(v, 2462088.69));
+  assert.ok(Math.abs(raDeg - 41.547214) < 1e-5, `Meeus 21.b RA: expected 41.547214, got ${raDeg}`);
+  assert.ok(Math.abs(decDeg - 49.348483) < 1e-5, `Meeus 21.b Dec: expected 49.348483, got ${decDeg}`);
+  // At exactly J2000 the rotation must be the identity.
+  const same = precessEquatorialToDate({ x: 0.3, y: -0.4, z: 0.86 }, J2000_JD);
+  assert.ok(Math.abs(same.x - 0.3) < 1e-15 && Math.abs(same.y - -0.4) < 1e-15 && Math.abs(same.z - 0.86) < 1e-15, 'precession at J2000 must be identity');
 }
 
 // core/topocentric: refractionArcmin — 0 at zenith, Bennett's well-known
@@ -1184,7 +1221,7 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
 }
 
 // analysis/observer: circumpolar and never-rises days report a note
-// instead of a fabricated rise/set, matching analyzeMarsRetrograde's
+// instead of a fabricated rise/set, matching analyzeRetrograde's
 // existing "no stationary points found" pattern
 {
   const circumpolar = analyzeObserver({ target: 'sun', atUtc: '2026-06-21T12:00:00Z', latDeg: 80, lonDeg: 0, elevationM: 0 });
@@ -1232,12 +1269,15 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
 // against the UTC calendar day that actually contains it (a UTC+8
 // location's local-evening event and the next local-morning event don't
 // share a UTC day, so this is two separate day-scans, not one). Tolerance
-// set by actually running this implementation (got ~26s and ~4s gaps) —
-// 3 minutes comfortably covers that with margin for this app's other
-// already-documented approximations (fixed obliquity, no nutation/
-// aberration, low-precision Kepler Sun position), not hand-assumed. Before
-// v1.3 (no refraction/oblateness), this same case was off by several
-// minutes — this test is what refraction/oblateness earn, not free.
+// set by actually running this implementation (v1.3 measured ~26s and ~4s;
+// after v1.5's precession-to-of-date the gaps re-measured at ~49s and ~79s
+// — the old J2000/of-date equinox mixing happened to partially cancel
+// other error terms here, so a frame-consistent answer moves individual
+// numbers slightly while being more correct overall) — 3 minutes
+// comfortably covers that with margin for this app's other documented
+// approximations (no nutation/aberration, low-precision Kepler Sun
+// position), not hand-assumed. Before v1.3 (no refraction/oblateness),
+// this same case was off by several minutes.
 {
   const kaohsiung = { latDeg: 22.6273, lonDeg: 120.3014, elevationM: 0 };
   const riseDay = analyzeObserver({ target: 'sun', atUtc: '2026-03-19T00:00:00Z', ...kaohsiung });
@@ -1303,6 +1343,32 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
   assert.throws(() => analyzeSolarEclipse({
     startUtc: '2024-01-01T00:00:00Z', endUtc: '2024-02-01T00:00:00Z', latDeg: 999, lonDeg: 0,
   }));
+}
+
+// analysis/retrograde (v1.5, generalized): real reference case — Jupiter's
+// 2022 retrograde loop (station retrograde 2022-07-28, station direct
+// 2022-11-23, per Nolle's retrograde tables / astro-seek). Same
+// calendar-window assertion style as the Mars case above.
+{
+  const result = analyzeRetrograde({
+    target: 'jupiter', startUtc: '2022-06-01T00:00:00Z', endUtc: '2023-01-15T00:00:00Z',
+    intervalHours: 6, ephemerisSource: 'kepler',
+  });
+  assert.equal(result.target, 'jupiter');
+  assert.ok(result.start && result.end, 'expected both stationary points in this known Jupiter retrograde window');
+  assert.equal(result.start.event, 'stationary-direct-to-retrograde');
+  assert.equal(result.end.event, 'stationary-retrograde-to-direct');
+  const firstDate = new Date(result.start.epochUtc);
+  const secondDate = new Date(result.end.epochUtc);
+  assert.ok(firstDate >= new Date('2022-07-01T00:00:00Z') && firstDate <= new Date('2022-08-15T00:00:00Z'),
+    `Jupiter station retrograde ${result.start.epochUtc} expected around late July 2022 (real: 2022-07-28)`);
+  assert.ok(secondDate >= new Date('2022-11-01T00:00:00Z') && secondDate <= new Date('2022-12-15T00:00:00Z'),
+    `Jupiter station direct ${result.end.epochUtc} expected around late Nov 2022 (real: 2022-11-23)`);
+}
+
+// analysis/retrograde (v1.5): invalid target throws; earth excluded.
+{
+  assert.throws(() => analyzeRetrograde({ target: 'earth', startUtc: '2022-01-01T00:00:00Z', endUtc: '2022-06-01T00:00:00Z' }));
 }
 
 // analysis/eclipse: angularSeparationDeg (v1.4, exported for reuse by

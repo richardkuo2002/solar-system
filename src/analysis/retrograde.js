@@ -1,6 +1,8 @@
-// Mars retrograde-motion analysis — v0.4 "Mars Retrograde Lab". Pure math,
-// zero DOM/THREE, Node-testable like core/. See docs/ROADMAP.md's v0.4
-// spec for the acceptance criteria this satisfies.
+// Retrograde-motion analysis — v0.4 "Mars Retrograde Lab", generalized to
+// every planet in v1.5 (the math was always body-agnostic; only the target
+// string was hardcoded). Pure math, zero DOM/THREE, Node-testable like
+// core/. See docs/ROADMAP.md's v0.4 spec for the acceptance criteria this
+// satisfies.
 
 import {
   sampleGeocentricLongitudeSeries, unwrapAnglesRad, centralDiffAngularVelocityRadPerDay,
@@ -8,7 +10,17 @@ import {
 } from './longitude.js';
 import { getBodyState } from '../core/ephemeris.js';
 import { dateFromJulianDate } from '../core/orbital-elements.js';
-import { PLANETS } from '../data/planets.js';
+import { PLANETS, PLANET_ORDER } from '../data/planets.js';
+
+// v1.5 — every planet's geocentric ecliptic longitude follows the same
+// atan2/unwrap/central-difference math regardless of whether it's
+// interior (Mercury/Venus, retrograde near inferior conjunction) or
+// exterior (Mars.., retrograde near opposition) — confirmed nothing here
+// was Mars-specific beyond the hardcoded target string. All 7 non-Earth
+// planets, not just the 3 outer ones analysis/opposition.js's
+// OUTER_TARGETS covers (that list also excludes Uranus/Neptune,
+// undocumented — not a gap worth repeating here).
+export const RETROGRADE_TARGETS = PLANET_ORDER.filter((k) => k !== 'earth');
 
 const DEFAULT_TOLERANCE_SECONDS = 60;
 const REFINE_HALF_STEP_DAYS = 0.01; // ~14 min — finer than the 6h coarse interval, used
@@ -20,17 +32,17 @@ export function classifyMotion(lambdaDotRadPerDay) {
   return lambdaDotRadPerDay < 0 ? 'retrograde' : 'direct';
 }
 
-function lambdaAtJd(jd, forceSource) {
+function lambdaAtJd(target, jd, forceSource) {
   const jsDate = dateFromJulianDate(jd);
   const earthState = getBodyState('earth', jsDate, PLANETS.earth.elements, { forceSource });
-  const marsState = getBodyState('mars', jsDate, PLANETS.mars.elements, { forceSource });
-  return geocentricEclipticLongitudeRad(marsState, earthState);
+  const targetState = getBodyState(target, jsDate, PLANETS[target].elements, { forceSource });
+  return geocentricEclipticLongitudeRad(targetState, earthState);
 }
 
 /** Central-difference dλ/dt at an arbitrary (non-grid) Julian Date. */
-function angularVelocityAtJd(jd, halfStepDays, forceSource) {
-  const before = lambdaAtJd(jd - halfStepDays, forceSource);
-  const after = lambdaAtJd(jd + halfStepDays, forceSource);
+function angularVelocityAtJd(target, jd, halfStepDays, forceSource) {
+  const before = lambdaAtJd(target, jd - halfStepDays, forceSource);
+  const after = lambdaAtJd(target, jd + halfStepDays, forceSource);
   let delta = after - before;
   if (delta > Math.PI) delta -= 2 * Math.PI;
   if (delta < -Math.PI) delta += 2 * Math.PI;
@@ -38,7 +50,7 @@ function angularVelocityAtJd(jd, halfStepDays, forceSource) {
 }
 
 // Default label matches v0.4's original retrograde-only vocabulary — kept
-// as the default so analyzeMarsRetrograde (which doesn't pass `labelFor`)
+// as the default so analyzeRetrograde (which doesn't pass `labelFor`)
 // is unaffected. Other event types (opposition/conjunction, greatest
 // elongation, ...) pass their own `labelFor` rather than string-matching
 // on retrograde vocabulary after the fact — see src/analysis/opposition.js
@@ -103,9 +115,9 @@ function forceSourceFor(ephemerisSource) {
   return undefined; // 'auto' / 'horizons' -> default cache-or-fetch-in-background behavior
 }
 
-function eventAt(epochJd, transition, forceSource) {
-  const lambdaRad = lambdaAtJd(epochJd, forceSource);
-  const lambdaDotRadPerDay = angularVelocityAtJd(epochJd, REFINE_HALF_STEP_DAYS, forceSource);
+function eventAt(target, epochJd, transition, forceSource) {
+  const lambdaRad = lambdaAtJd(target, epochJd, forceSource);
+  const lambdaDotRadPerDay = angularVelocityAtJd(target, epochJd, REFINE_HALF_STEP_DAYS, forceSource);
   return {
     event: transition === 'direct-to-retrograde' ? 'stationary-direct-to-retrograde' : 'stationary-retrograde-to-direct',
     epochJd,
@@ -116,11 +128,13 @@ function eventAt(epochJd, transition, forceSource) {
 }
 
 /**
- * Orchestrator: samples Mars's geocentric longitude across the requested
- * range, finds the two stationary points bracketing a retrograde interval,
- * and assembles the roadmap's result shape (with `source: 'horizons-live'`
- * replaced by whatever this codebase actually produces — see
- * docs/accuracy.md, that value is structurally unreachable here).
+ * Orchestrator: samples the target planet's geocentric longitude across
+ * the requested range, finds the two stationary points bracketing a
+ * retrograde interval, and assembles the roadmap's result shape (with
+ * `source: 'horizons-live'` replaced by whatever this codebase actually
+ * produces — see docs/accuracy.md, that value is structurally unreachable
+ * here). v1.5: generalized from Mars-only to any RETROGRADE_TARGETS
+ * planet — the math was never Mars-specific.
  *
  * The dense coarse scan + every bisection refinement always force
  * `ephemerisSource: 'kepler'` internally, regardless of the `ephemerisSource`
@@ -128,19 +142,22 @@ function eventAt(epochJd, transition, forceSource) {
  * body-state calls, and letting that fire a Horizons background fetch per
  * call would be an unwanted, unbounded side effect (see plan doc / README
  * limitations). `ephemerisSource` only selects the source used for one
- * extra Earth/Mars lookup that populates the result's top-level `source`
+ * extra target lookup that populates the result's top-level `source`
  * display metadata.
  */
-export function analyzeMarsRetrograde({ startUtc, endUtc, intervalHours = 6, ephemerisSource = 'kepler' }) {
-  const series = sampleGeocentricLongitudeSeries('mars', 'earth', startUtc, endUtc, intervalHours, { forceSource: 'kepler' });
+export function analyzeRetrograde({ target = 'mars', startUtc, endUtc, intervalHours = 6, ephemerisSource = 'kepler' }) {
+  if (!RETROGRADE_TARGETS.includes(target)) {
+    throw new Error(`target must be one of ${RETROGRADE_TARGETS.join(', ')}`);
+  }
+  const series = sampleGeocentricLongitudeSeries(target, 'earth', startUtc, endUtc, intervalHours, { forceSource: 'kepler' });
   const { timesJd, lambdaRad } = series;
   if (timesJd.length < 3) {
-    throw new Error('analyzeMarsRetrograde: date range too short to sample — need at least 3 points');
+    throw new Error('analyzeRetrograde: date range too short to sample — need at least 3 points');
   }
 
   const lambdaUnwrapped = unwrapAnglesRad(lambdaRad);
   const lambdaDotRadPerDay = centralDiffAngularVelocityRadPerDay(lambdaUnwrapped, timesJd);
-  const evalLambdaDotAt = (jd) => angularVelocityAtJd(jd, REFINE_HALF_STEP_DAYS, 'kepler');
+  const evalLambdaDotAt = (jd) => angularVelocityAtJd(target, jd, REFINE_HALF_STEP_DAYS, 'kepler');
   const stationary = findStationaryPoints(timesJd, lambdaDotRadPerDay, evalLambdaDotAt);
   // Pre-unwrapped, degree-valued series for the chart layer — same
   // `valueDeg` field name analysis/opposition.js's series uses, so
@@ -155,9 +172,9 @@ export function analyzeMarsRetrograde({ startUtc, endUtc, intervalHours = 6, eph
     // unaffected. export.js reads both this legacy shape and the newer
     // nested one via small accessor helpers rather than forcing a shape
     // migration here.
-    id: `mars-retrograde-${startUtc.slice(0, 4)}`,
+    id: `${target}-retrograde-${startUtc.slice(0, 4)}`,
     type: 'retrograde-interval',
-    target: 'mars',
+    target,
     observer: 'earth-geocenter',
     frame: 'GEOCENTRIC_ECLIPJ2000',
     input: { startUtc, endUtc, intervalHours },
@@ -169,15 +186,15 @@ export function analyzeMarsRetrograde({ startUtc, endUtc, intervalHours = 6, eph
   // Display-only source lookup (see the dense-scan mitigation note above) —
   // uses the requested source, not the forced-Kepler one driving the math.
   const midJsDate = new Date((new Date(startUtc).getTime() + new Date(endUtc).getTime()) / 2);
-  const displayMarsState = getBodyState('mars', midJsDate, PLANETS.mars.elements, { forceSource: forceSourceFor(ephemerisSource) });
+  const displayState = getBodyState(target, midJsDate, PLANETS[target].elements, { forceSource: forceSourceFor(ephemerisSource) });
 
   if (stationary.length < 2) {
     return {
       ...base,
-      source: displayMarsState.source,
+      source: displayState.source,
       start: null,
       end: null,
-      note: 'No stationary points found in range — this window likely contains no Mars retrograde interval.',
+      note: `No stationary points found in range — this window likely contains no ${target} retrograde interval.`,
       series: chartSeries,
     };
   }
@@ -187,9 +204,9 @@ export function analyzeMarsRetrograde({ startUtc, endUtc, intervalHours = 6, eph
 
   return {
     ...base,
-    source: displayMarsState.source,
-    start: eventAt(firstPoint.epochJd, firstPoint.transition, 'kepler'),
-    end: eventAt(secondPoint.epochJd, secondPoint.transition, 'kepler'),
+    source: displayState.source,
+    start: eventAt(target, firstPoint.epochJd, firstPoint.transition, 'kepler'),
+    end: eventAt(target, secondPoint.epochJd, secondPoint.transition, 'kepler'),
     series: chartSeries,
   };
 }

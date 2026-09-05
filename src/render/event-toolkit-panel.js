@@ -5,7 +5,7 @@
 // (Steps 2-3 of v0.5) means adding one more entry here, not a new DOM file.
 import { createLabPanel } from './lab-panel.js';
 import { makeCollapsible } from './collapsible-panel.js';
-import { analyzeMarsRetrograde } from '../analysis/retrograde.js';
+import { analyzeRetrograde, RETROGRADE_TARGETS } from '../analysis/retrograde.js';
 import { analyzeOppositionConjunction, OUTER_TARGETS } from '../analysis/opposition.js';
 import { analyzeGreatestElongation, analyzeInnerConjunction, INNER_TARGETS } from '../analysis/elongation-events.js';
 import { analyzePhaseIllumination, samplePhaseSeries, PHASE_TARGETS } from '../analysis/phase.js';
@@ -33,7 +33,7 @@ function formatRetrogradeEvent(event) {
 function formatRetrogradeResult(result) {
   if (result.note) return result.note;
   return [
-    `Source: ${result.source}  Frame: ${result.frame}`,
+    `Target: ${capitalize(result.target)}  Source: ${result.source}  Frame: ${result.frame}`,
     `Sampling: ${result.samples.intervalHours}h × ${result.samples.count} points`,
     `Solver: ${result.solver.method}, tolerance ${result.solver.toleranceSeconds}s`,
     '',
@@ -178,9 +178,10 @@ function formatOccultationResult(result) {
 export const EVENT_TYPES = [
   {
     key: 'retrograde',
-    label: 'Retrograde (Mars)',
-    fixedText: 'Target: Mars · Observer: Earth (geocenter) · Frame: Geocentric ECLIPJ2000',
+    label: 'Retrograde Motion',
+    fixedText: 'Observer: Earth (geocenter) · Frame: Geocentric ECLIPJ2000',
     fields: [
+      { key: 'target', type: 'select', label: 'Target', default: 'mars', options: RETROGRADE_TARGETS.map((t) => ({ value: t, label: capitalize(t) })) },
       { key: 'startUtc', type: 'date', label: 'Start date', default: '2007-09-01' },
       { key: 'endUtc', type: 'date', label: 'End date', default: '2008-03-01' },
       { key: 'intervalHours', type: 'number', label: 'Sample interval (hours)', default: 6, min: 1 },
@@ -188,12 +189,12 @@ export const EVENT_TYPES = [
     ],
     analyzeLabel: 'Analyze retrograde motion',
     chartKind: 'path+timeline',
-    analyze: (params) => analyzeMarsRetrograde(params),
+    analyze: (params) => analyzeRetrograde(params),
     formatResult: formatRetrogradeResult,
     getMarkers: (result) => [result.start?.epochJd, result.end?.epochJd].filter((v) => v != null),
     getHighlight: (result) => (result.start && result.end ? { startJd: result.start.epochJd, endJd: result.end.epochJd } : null),
     // for the shared line-of-sight visual — app.js reads this off the result, not the config
-    resultTarget: () => 'mars',
+    resultTarget: (result) => result.target,
   },
   {
     key: 'opposition',

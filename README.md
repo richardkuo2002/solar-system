@@ -104,16 +104,19 @@ The "Event Toolkit" panel (right column, below the ephemeris HUD) is the
 app's astronomical-phenomenon analysis tool — a dropdown picks the event
 type, and one shared results/chart layout renders whichever is selected.
 
-- **Retrograde (Mars)** (v0.4) — computes Mars's geocentric ecliptic
-  longitude (`λ = atan2(Δy, Δx)` of the heliocentric Mars-minus-Earth AU
-  vector) at each sample point, unwraps it for continuity across the
-  0°/360° boundary, takes its rate of change via central difference, then
-  finds the two zero-crossings (stationary points) via a coarse scan +
-  bisection refinement — never reporting a raw sample time as the answer.
-  Visuals: the Earth-to-Mars line-of-sight drawn into the main 3D scene
-  (best viewed in Heliocentric or Free-flight camera mode), Mars's
-  apparent path plotted against a reference grid, and a λ(t) timeline with
-  both stationary points and the retrograde interval marked.
+- **Retrograde Motion** (v0.4; any planet since v1.5) — computes the
+  target's geocentric ecliptic longitude (`λ = atan2(Δy, Δx)` of the
+  heliocentric target-minus-Earth AU vector) at each sample point, unwraps
+  it for continuity across the 0°/360° boundary, takes its rate of change
+  via central difference, then finds the two zero-crossings (stationary
+  points) via a coarse scan + bisection refinement — never reporting a raw
+  sample time as the answer. Works for all 7 non-Earth planets (Mercury's
+  famous retrograde included); tested against Mars's 2007-08 and Jupiter's
+  2022 real retrograde loops. Visuals: the Earth-to-target line-of-sight
+  drawn into the main 3D scene (best viewed in Heliocentric or Free-flight
+  camera mode), the apparent path plotted against a reference grid, and a
+  λ(t) timeline with both stationary points and the retrograde interval
+  marked.
 - **Opposition / Conjunction** (Mars, Jupiter, Saturn) — same
   coarse-scan-then-bisect solver, fed elongation's (Sun-Earth-planet
   angle) rate of change instead: a rising-to-falling flip is opposition, a
@@ -127,12 +130,10 @@ type, and one shared results/chart layout renders whichever is selected.
   Earth-distances.
 - **Phase / Illumination** (Moon, Mercury, Venus, Mars) — a single-epoch
   calculation (no solver): phase angle α (Sun-target-observer angle) and
-  illuminated fraction `k = (1 + cos(α)) / 2`. The Moon's phase uses a
-  Meeus lunar-theory position, separate from the live 3D scene's Moon
-  animation (which still uses a simpler circular approximation) — see
-  [docs/accuracy.md](docs/accuracy.md#the-moons-analysis-position-v11-meeus-lunar-theory)
-  for why they can show the Moon at slightly different orbital angles for
-  the same date.
+  illuminated fraction `k = (1 + cos(α)) / 2`. The Moon uses a Meeus
+  lunar-theory position — and since v1.5 the live 3D scene's Moon uses the
+  same source, so the two always agree for the same date (see
+  [docs/accuracy.md](docs/accuracy.md#the-moons-analysis-position-v11-meeus-lunar-theory)).
 - **Lunar / Solar Eclipse** (v1.1) — real eclipse geometry on top of the
   Meeus lunar theory above: lunar eclipses classify none/penumbral/
   partial/total from the Moon's offset from Earth's shadow axis vs. the
@@ -190,9 +191,9 @@ and click Observe:
   lat/lon/elevation and sidereal time, now using a **WGS-84 oblate**
   Earth model as of v1.3, not a sphere). Rise/set now accounts for
   **atmospheric refraction** (Bennett's formula, v1.3) on top of the
-  geometric altitude. Uses a **fixed** obliquity (no precession/nutation)
-  and **no** aberration — every one of those approximations, and the ones
-  that are now modeled, is documented in
+  geometric altitude. RA/Dec is reported in the **mean equinox of date**
+  (real IAU precession, v1.5) — nutation and aberration remain unmodeled;
+  every approximation, and the ones now modeled, is documented in
   [docs/accuracy.md](docs/accuracy.md#observer-mode-v06).
 
 ## Planet Info Panel (v0.7)
