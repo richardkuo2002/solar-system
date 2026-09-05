@@ -5,7 +5,7 @@ import {
 import { solveEccentricAnomaly, elementsToPosition, normalizeAngle } from '../src/core/kepler.js';
 import {
   elementsAtDate, julianDateFromDate, dateFromJulianDate, circularOrbitAngle, moonLocalPosition,
-  elementsVelocity, sampleOrbitPath,
+  elementsVelocity, sampleOrbitPath, orbitalPeriodDaysFromSemiMajorAxisAu,
 } from '../src/core/orbital-elements.js';
 import { compressDistance, compressSize, compressPosition, compressMoonOrbit, SATURN_RING_OUTER_KM } from '../src/core/scale.js';
 import { PLANETS, PLANET_ORDER } from '../src/data/planets.js';
@@ -226,6 +226,19 @@ import { analyzeObserver, observeAt, OBSERVER_TARGETS } from '../src/analysis/ob
   assert.ok(Math.abs(angleHalf - Math.PI) < 1e-6);
   const angleFull = circularOrbitAngle(27.32, 27.32);
   assert.ok(Math.abs(angleFull) < 1e-6 || Math.abs(angleFull - 2 * Math.PI) < 1e-6);
+}
+
+// orbital-elements: orbitalPeriodDaysFromSemiMajorAxisAu is Kepler's third
+// law, T(years) = a(AU)^1.5 — at a=1 AU (Earth's own definition of an AU)
+// this must come out to EXACTLY 365.25 days, not approximately. A real
+// reference case follows: Mars's actual elements.a[0] should derive a
+// period within a few days of Mars's real ~687-day orbit (confirmed by
+// running this function first — got 686.98 days — not hand-assumed).
+{
+  assert.equal(orbitalPeriodDaysFromSemiMajorAxisAu(1), 365.25, 'a=1 AU must give exactly one 365.25-day year');
+  const marsPeriodDays = orbitalPeriodDaysFromSemiMajorAxisAu(PLANETS.mars.elements.a[0]);
+  assert.ok(Math.abs(marsPeriodDays - 686.98) < 1,
+    `Mars's real orbital period is ~686.98 days, got ${marsPeriodDays}`);
 }
 
 // orbital-elements: moonLocalPosition produces a finite position, at the

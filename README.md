@@ -151,6 +151,26 @@ and click Observe:
   is documented in
   [docs/accuracy.md](docs/accuracy.md#observer-mode-v06).
 
+## Planet Info Panel (v0.7)
+
+Click any body (planet, moon, comet, dwarf planet, or the Sun) and the
+bottom-left panel shows its physical/orbital characteristics from data
+already in the app — no new astronomy, pure display:
+
+- **Mass** — shown only for the Sun and the 8 planets (well-known NASA
+  fact-sheet values); moons/comets/dwarf planets don't get a guessed
+  number, the field is simply omitted.
+- **Rotation period / axial tilt** — Sun and planets only.
+- **Orbital period** — for planets/comets/dwarf planets this is *derived*
+  via Kepler's third law (`T ≈ a^1.5`, the same approximation
+  `data/comets.js` already used for Halley's Comet) from their orbital
+  elements, since none of them store a period directly; for moons/Charon
+  it's their real `periodDays` value, used as-is. The panel labels which
+  is which.
+- **Orbital elements** (semi-major axis, eccentricity, inclination) for
+  anything with them; **orbit radius + parent body name** instead for
+  moons/Charon, which use a simpler circular-orbit model.
+
 ## Data sources
 
 - Orbital elements: JPL Solar System Dynamics low-precision Keplerian

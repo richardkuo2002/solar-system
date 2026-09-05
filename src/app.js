@@ -17,13 +17,17 @@ import { createCameraRig } from './render/camera-rig.js';
 import { buildAsteroidBelt } from './render/asteroid-belt.js';
 import { createEventToolkitPanel } from './render/event-toolkit-panel.js';
 import { createObserverPanel } from './render/observer-panel.js';
+import { createBodyInfoPanel } from './render/body-info-panel.js';
 import { createLineOfSightLine } from './render/retrograde-los-line.js';
 import { analyzeObserver } from './analysis/observer.js';
 import {
   createTimeController, tick, togglePlayPause, setSpeed, reverse, jumpToDate,
 } from './core/time-controller.js';
 import { createCameraState, setMode, setFocusBody, enterGeocentric, computePose, CAMERA_MODES } from './core/camera-modes.js';
-import { julianDateFromDate, dateFromJulianDate, moonLocalPosition, circularOrbitAngle } from './core/orbital-elements.js';
+import {
+  julianDateFromDate, dateFromJulianDate, moonLocalPosition, circularOrbitAngle,
+  orbitalPeriodDaysFromSemiMajorAxisAu,
+} from './core/orbital-elements.js';
 import { compressSize } from './core/scale.js';
 import { getBodyState, sunBodyState } from './core/ephemeris.js';
 import { PLANETS, PLANET_ORDER, SUN } from './data/planets.js';
@@ -197,14 +201,21 @@ for (const key of DWARF_PLANET_ORDER) nameToKey.set(DWARF_PLANETS[key].name, key
 
 let selectedBodyKey = 'sun';
 
+// v0.7 Planet Info Panel — click-driven only (see buildBodyInfo above):
+// every field it shows is static per body, so nothing here touches the
+// animate() loop, unlike ephemerisHud's per-frame time/source updates.
+const bodyInfoPanel = createBodyInfoPanel(document.getElementById('ui-root'));
+
 createHoverLabels(canvas, camera, pickableMeshes, loadFullFor, (mesh) => {
   const key = nameToKey.get(mesh.name);
   if (!key) return;
   selectedBodyKey = key;
   cameraState = setFocusBody(cameraState, key);
+  bodyInfoPanel.render(buildBodyInfo(key));
 });
 createAttributionFooter(document.getElementById('ui-root'));
 const ephemerisHud = createEphemerisHud(document.getElementById('ui-root'));
+bodyInfoPanel.render(buildBodyInfo(selectedBodyKey)); // shows the Sun immediately on load, matching ephemerisHud's own always-populated-from-load behavior
 
 // Background idle queue — everything not already eager-loaded (Sun/Earth/
 // Moon) or triggered by user interaction eventually loads full-res anyway,
@@ -293,6 +304,84 @@ function moonHudInfo(bodyKey) {
 function bodyDisplayName(bodyKey) {
   return PLANETS[bodyKey]?.name ?? COMETS[bodyKey]?.name ?? DWARF_PLANETS[bodyKey]?.name
     ?? MOONS[bodyKey]?.name ?? (bodyKey === 'charon' ? CHARON.name : null) ?? SUN.name;
+}
+
+/**
+ * v0.7 Planet Info Panel data — same table-fallback-chain as
+ * bodyDisplayName/moonHudInfo above, but returns every displayable field
+ * for whichever category bodyKey actually is. src/render/body-info-panel.js
+ * is purely presentational; this function owns "which table, which fields
+ * exist" so the panel never has to import a data table itself.
+ */
+function buildBodyInfo(bodyKey) {
+  const planetData = PLANETS[bodyKey];
+  if (planetData) {
+    return {
+      name: planetData.name,
+      category: 'planet',
+      radiusKm: planetData.radiusKm,
+      massKg: planetData.massKg,
+      massRelativeToEarth: planetData.massKg / PLANETS.earth.massKg,
+      rotationPeriodDays: planetData.rotationPeriodDays,
+      axialTiltDeg: planetData.axialTiltDeg,
+      orbitalPeriodDays: orbitalPeriodDaysFromSemiMajorAxisAu(planetData.elements.a[0]),
+      orbitalPeriodSource: 'kepler-derived',
+      semiMajorAxisAu: planetData.elements.a[0],
+      eccentricity: planetData.elements.e[0],
+      inclinationDeg: planetData.elements.i[0],
+    };
+  }
+  const cometData = COMETS[bodyKey];
+  if (cometData) {
+    return {
+      name: cometData.name,
+      category: 'comet',
+      radiusKm: cometData.radiusKm,
+      radiusNote: 'exaggerated for visibility — see ATTRIBUTION.md',
+      orbitalPeriodDays: orbitalPeriodDaysFromSemiMajorAxisAu(cometData.elements.a[0]),
+      orbitalPeriodSource: 'kepler-derived',
+      semiMajorAxisAu: cometData.elements.a[0],
+      eccentricity: cometData.elements.e[0],
+      inclinationDeg: cometData.elements.i[0],
+    };
+  }
+  const dwarfData = DWARF_PLANETS[bodyKey];
+  if (dwarfData) {
+    return {
+      name: dwarfData.name,
+      category: 'dwarf',
+      radiusKm: dwarfData.radiusKm,
+      orbitalPeriodDays: orbitalPeriodDaysFromSemiMajorAxisAu(dwarfData.elements.a[0]),
+      orbitalPeriodSource: 'kepler-derived',
+      semiMajorAxisAu: dwarfData.elements.a[0],
+      eccentricity: dwarfData.elements.e[0],
+      inclinationDeg: dwarfData.elements.i[0],
+    };
+  }
+  const moonData = MOONS[bodyKey] ?? (bodyKey === 'charon' ? CHARON : null);
+  if (moonData) {
+    const parentName = moonData.parent === 'pluto' ? DWARF_PLANETS.pluto.name : PLANETS[moonData.parent].name;
+    return {
+      name: moonData.name,
+      category: 'moon',
+      radiusKm: moonData.radiusKm,
+      orbitalPeriodDays: moonData.periodDays,
+      orbitalPeriodSource: 'data',
+      orbitRadiusKm: moonData.orbitKm,
+      parentName,
+    };
+  }
+  // Falls through here only for 'sun' (SUN has no key in any table above,
+  // same as bodyDisplayName's own fallback).
+  return {
+    name: SUN.name,
+    category: 'sun',
+    radiusKm: SUN.radiusKm,
+    massKg: SUN.massKg,
+    massRelativeToEarth: SUN.massKg / PLANETS.earth.massKg,
+    rotationPeriodDays: SUN.rotationPeriodDays,
+    axialTiltDeg: SUN.axialTiltDeg,
+  };
 }
 
 let timeState = createTimeController({ startDate: new Date(), speedDaysPerSecond: 1 });

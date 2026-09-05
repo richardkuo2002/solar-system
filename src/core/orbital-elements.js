@@ -104,6 +104,21 @@ export function circularOrbitAngle(daysSinceEpoch, periodDays) {
   return normalizeAngle((daysSinceEpoch / periodDays) * 2 * Math.PI);
 }
 
+/**
+ * Kepler's third law, T(years) = a(AU)^1.5 — the same approximation
+ * data/comets.js already uses to derive Halley's orbital period without a
+ * separately-published number (see that file's header comment). Used by
+ * the v0.7 Planet Info Panel (src/render/body-info-panel.js) for
+ * planets/comets/dwarf planets, whose data only stores orbital *elements*,
+ * never a period directly. Ignores elements.a's tiny rate-per-century
+ * drift (J2000 value only) — a rough "how long is a year here" figure, not
+ * ephemeris-grade timing (that's what the full Kepler propagation
+ * elsewhere in this app is for).
+ */
+export function orbitalPeriodDaysFromSemiMajorAxisAu(aAu) {
+  return Math.pow(aAu, 1.5) * 365.25;
+}
+
 // Titan's real orbit (~1.2M km) is well outside Saturn's real rings
 // (~137,000 km) — but compressMoonOrbit and compressSize are independently
 // tuned curves that don't preserve that ordering at Saturn's scale (Titan's
