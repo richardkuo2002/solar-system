@@ -1,7 +1,26 @@
 // DOM-only widgets. Holds no simulation state itself — emits callbacks into
 // app.js, which owns the actual timeController/camera state.
 
-const SPEED_OPTIONS = [0.1, 1, 10, 100, 365];
+// v1.8.2 — replaces the old days/second ladder (0.1/1/10/100/365, whose
+// pre-selected "1 d/s" option was actually 86400x real time and never
+// matched the true-real-time starting speed app.js set up in v1.8 — a
+// known, documented mismatch at the time). Now anchored to real time
+// itself: 1x is real time (matches app.js's starting speed exactly, so
+// the dropdown and the actual clock agree on load), then small human-
+// scale multiples (2x, 5x) for watching things unfold slightly faster,
+// then the two old fixed rates kept for their existing usefulness
+// (0.1 d/s ≈ one Mercury orbit every ~880 real seconds; 1 d/s ≈ one
+// Earth year every ~365 real seconds) but now labeled by what they
+// actually are — a multiplier — instead of a days/second figure nobody
+// intuits speed from directly.
+export const REAL_TIME_DAYS_PER_SECOND = 1 / 86400;
+const SPEED_OPTIONS = [
+  { daysPerSecond: REAL_TIME_DAYS_PER_SECOND, label: '1x (real time)' },
+  { daysPerSecond: 2 * REAL_TIME_DAYS_PER_SECOND, label: '2x' },
+  { daysPerSecond: 5 * REAL_TIME_DAYS_PER_SECOND, label: '5x' },
+  { daysPerSecond: 0.1, label: '0.1 d/s (8640x)' },
+  { daysPerSecond: 1, label: '1 d/s (86400x)' },
+];
 
 /**
  * Builds the time-control panel (play/pause, speed, reverse, jump-to-date)
@@ -28,11 +47,11 @@ export function createTimeControlsUI(container, callbacks) {
   reverseBtn.addEventListener('click', () => callbacks.onReverse());
 
   const speedSelect = document.createElement('select');
-  for (const speed of SPEED_OPTIONS) {
+  for (const { daysPerSecond, label } of SPEED_OPTIONS) {
     const option = document.createElement('option');
-    option.value = String(speed);
-    option.textContent = `${speed} d/s`;
-    if (speed === 1) option.selected = true;
+    option.value = String(daysPerSecond);
+    option.textContent = label;
+    if (daysPerSecond === REAL_TIME_DAYS_PER_SECOND) option.selected = true;
     speedSelect.appendChild(option);
   }
   speedSelect.addEventListener('change', () => {
@@ -55,6 +74,7 @@ export function createTimeControlsUI(container, callbacks) {
   container.appendChild(panel);
 
   return {
+    element: panel, // v1.8.2 — app.js measures this to keep other bottom-left panels clear of it (see css .time-controls / .left-column comments)
     setPlayPauseLabel(playing) {
       playPauseBtn.textContent = playing ? 'Pause' : 'Play';
     },

@@ -5,6 +5,23 @@ All notable changes to this project. Format loosely follows
 milestones in `docs/ROADMAP.md` (local-only), with each version's exact
 scope and accuracy notes in [docs/accuracy.md](docs/accuracy.md).
 
+## v1.8.2 — 2026-09-06
+
+- **Fixed bottom-left panels overlapping the time-controls bar** —
+  `.left-column` and `.body-info-panel` measure the bar's real height via
+  `ResizeObserver` instead of a hardcoded guess (`--time-bar-clearance`
+  CSS custom property), the same fix class as v1.8.1's `.left-column`
+  top offsets, applied to the shared bottom edge.
+- **Redesigned the time-controls bar** as a centered floating card
+  (border, rounded corners, width shrunk to content) matching every
+  other panel's look, instead of a borderless bar stretched to the full
+  viewport width.
+- **Speed dropdown is now a real-time-anchored multiplier ladder**
+  (1x/2x/5x, plus the previous two fixed rates relabeled as ≈8640x and
+  ≈86400x) instead of raw days/second values — the default option now
+  matches the clock's actual real-time starting speed (previously a
+  known, documented mismatch since v1.8).
+
 ## v1.8.1 — 2026-09-05
 
 - **Fixed overlapping left-side UI panels** — the view-mode, surface
