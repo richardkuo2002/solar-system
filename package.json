@@ -7,7 +7,10 @@
     "smoke": "node scripts/smoke-test.js",
     "test": "npm run smoke",
     "lint": "eslint .",
-    "fetch-textures": "node scripts/fetch-textures.mjs"
+    "fetch-textures": "node scripts/fetch-textures.mjs",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build --config src-tauri/tauri.build.conf.json"
   },
   "keywords": [
     "threejs",
@@ -22,6 +25,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@tauri-apps/cli": "^2.11.4",
     "eslint": "^10.10.0"
   }
 }

@@ -1,0 +1,6 @@
+{
+  "build": {
+    "frontendDist": "../web-dist",
+    "beforeBuildCommand": "node scripts/build-tauri-frontend.mjs"
+  }
+}
