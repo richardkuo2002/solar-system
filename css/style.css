@@ -127,6 +127,8 @@ html, body {
   top: 96px;
   left: 12px;
   width: 300px;
+  max-height: calc(100vh - 96px - 12px);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -215,6 +217,8 @@ html, body {
   bottom: 56px;
   left: 12px;
   width: 300px;
+  max-height: calc(100vh - 56px - 12px);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -262,6 +266,8 @@ html, body {
   position: fixed;
   top: 120px;
   right: 12px;
+  max-height: calc(100vh - 120px - 12px);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 6px;
