@@ -28,10 +28,13 @@ export async function createConstellationLines() {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(scaled, 3));
 
+  // Dim: v1.2's first pass at 0x445566/0.35 opacity read as visual noise
+  // mixed in with the star points (user feedback) — this is meant to be a
+  // barely-there guide for the eye, not a bright wireframe.
   const material = new THREE.LineBasicMaterial({
-    color: 0x445566,
+    color: 0x334455,
     transparent: true,
-    opacity: 0.35,
+    opacity: 0.18,
     depthWrite: false,
   });
 

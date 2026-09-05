@@ -85,6 +85,7 @@ Credit: Olaf Frohn, d3-celestial
 |---|---|---|
 | `stars.6.json` | ~5,000 Hipparcos-numbered stars, magnitude ≤ 6.5, RA/Dec + B-V color index | [stars.6.json](https://github.com/ofrohn/d3-celestial/blob/master/data/stars.6.json) |
 | `constellations.lines.json` | The 88 IAU constellations' traditional line figures, as RA/Dec coordinate pairs | [constellations.lines.json](https://github.com/ofrohn/d3-celestial/blob/master/data/constellations.lines.json) |
+| `constellations.json` | One named anchor point per constellation (name + RA/Dec + a 1-3 brightness/prominence rank) — used only for the name-label overlay (rank-1 constellations, ~22 of the 88) | [constellations.json](https://github.com/ofrohn/d3-celestial/blob/master/data/constellations.json) |
 
 `src/core/star-catalog.js` parses these into scene-frame positions (see its
 own header comment for the RA/Dec → ecliptic conversion and the
@@ -92,9 +93,9 @@ magnitude/B-V → brightness/color mapping, both original code, not part of
 the vendored data) — replacing the old seeded-PRNG procedural star field
 with real star positions.
 
-## Starfield background (three layers)
+## Starfield background (four layers)
 
-The night sky is three independent layers now, not one stretched photo:
+The night sky is four independent layers now, not one stretched photo:
 
 1. **Milky Way sky sphere** (`src/render/scene-setup.js#createMilkyWaySkySphere`)
    — an actual `THREE.Mesh` (unlit `MeshBasicMaterial`, `side: BackSide`,
@@ -113,7 +114,14 @@ The night sky is three independent layers now, not one stretched photo:
 3. **Constellation lines** (`src/core/star-catalog.js` +
    `src/render/constellation-lines.js`) — a dim `THREE.LineSegments` overlay
    connecting the catalog's stars into the 88 traditional figures, same data
-   source.
+   source. Deliberately faint (`0x334455`, 18% opacity) after user feedback
+   that an earlier, brighter pass read as visual noise mixed in with the
+   star points.
+4. **Constellation name labels** (`src/core/star-catalog.js` +
+   `src/render/constellation-labels.js`) — screen-space DOM text for only
+   the ~22 rank-1 (most recognizable) constellations, from `constellations.json`
+   above. All 88 were deliberately not labeled — that would trade one kind
+   of clutter for another.
 
 Switching the sky sphere from 2K to 8K was a deliberate accuracy-of-source
 check, not a blind upgrade: confirmed with a real HTTP request (not assumed)
@@ -156,9 +164,11 @@ network trace, so it doesn't include HTTP/TLS overhead or `index.html`/
 accepted trade for a visibly sharper Milky Way band.
 
 **v1.2's data payload**: replacing the procedural star field with the real
-catalog above adds `assets/stars/stars.6.json` (656,721 bytes, ~656 KB) and
-`assets/stars/constellations.lines.json` (27,136 bytes, ~26.5 KB) — both
-fetched once at load time alongside the texture manifest, ~683 KB total,
-where the old PRNG-generated star field cost zero additional bytes (no
-data file at all, generated at runtime from a fixed seed). Judged an
-acceptable trade for real, recognizable star positions over synthetic ones.
+catalog above adds `assets/stars/stars.6.json` (656,721 bytes, ~656 KB),
+`assets/stars/constellations.lines.json` (27,136 bytes, ~26.5 KB), and
+`assets/stars/constellations.json` (50,581 bytes, ~49.4 KB, for the name
+labels) — all three fetched once at load time alongside the texture
+manifest, ~734 KB total, where the old PRNG-generated star field cost zero
+additional bytes (no data file at all, generated at runtime from a fixed
+seed). Judged an acceptable trade for real, recognizable star positions
+over synthetic ones.

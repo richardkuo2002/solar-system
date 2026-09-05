@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { loadStarCatalog, constellationLineSegments } from '../src/core/star-catalog.js';
+import { loadStarCatalog, constellationLineSegments, constellationLabelPositions } from '../src/core/star-catalog.js';
 import { solveEccentricAnomaly, elementsToPosition, normalizeAngle } from '../src/core/kepler.js';
 import {
   elementsAtDate, julianDateFromDate, dateFromJulianDate, circularOrbitAngle, moonLocalPosition,
@@ -1306,6 +1306,27 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
     const r = Math.hypot(segs[i], segs[i + 1], segs[i + 2]);
     assert.ok(Math.abs(r - 1) < 1e-6, `segment endpoint must be on the unit sphere, got r=${r}`);
   }
+}
+
+// core/star-catalog: constellationLabelPositions filters to maxRank (default
+// 1, the ~22 most recognizable constellations — labeling all 88 would
+// recreate the clutter this was added to fix), and every returned position
+// is on the unit sphere.
+{
+  const fixture = {
+    features: [
+      { id: 'Ori', properties: { name: 'Orion', rank: '1' }, geometry: { type: 'Point', coordinates: [83, 5] } },
+      { id: 'Lac', properties: { name: 'Lacerta', rank: '3' }, geometry: { type: 'Point', coordinates: [340, 46] } },
+    ],
+  };
+  const defaultRank = constellationLabelPositions(fixture);
+  assert.equal(defaultRank.length, 1, 'default maxRank=1 keeps only rank-1 constellations');
+  assert.equal(defaultRank[0].name, 'Orion');
+  const r = Math.hypot(defaultRank[0].x, defaultRank[0].y, defaultRank[0].z);
+  assert.ok(Math.abs(r - 1) < 1e-6, `label position must be on the unit sphere, got r=${r}`);
+
+  const allRanks = constellationLabelPositions(fixture, 3);
+  assert.equal(allRanks.length, 2, 'maxRank=3 keeps both');
 }
 
 // url-state (v0.8): round-trip encode->decode for each camera mode that

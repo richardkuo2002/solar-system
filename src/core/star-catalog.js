@@ -135,3 +135,22 @@ export function constellationLineSegments(linesGeoJson) {
   }
   return new Float32Array(points);
 }
+
+/**
+ * Parses a d3-celestial-format constellations GeoJSON (FeatureCollection of
+ * Point features, `properties.name`/`properties.rank`) into name-label
+ * anchor points — unit-sphere ecliptic direction vectors, same conversion
+ * as the two functions above. `maxRank` (d3-celestial ranks 1-3, brightest
+ * first) defaults to 1: only the ~22 most recognizable constellations,
+ * since labeling all 88 would just trade one kind of clutter for another
+ * (the whole point of adding names was to make the sky *more* readable).
+ */
+export function constellationLabelPositions(constellationsGeoJson, maxRank = 1) {
+  return constellationsGeoJson.features
+    .filter((f) => Number(f.properties.rank) <= maxRank)
+    .map((f) => {
+      const [raDeg, decDeg] = f.geometry.coordinates;
+      const p = equatorialToEcliptic(unitVectorFromRaDec(raDeg, decDeg));
+      return { name: f.properties.name, x: p.x, y: p.y, z: p.z };
+    });
+}

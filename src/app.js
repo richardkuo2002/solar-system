@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { createRenderer, createScene, createCamera, createAmbientLight, wireResize, createMilkyWaySkySphere } from './render/scene-setup.js';
 import { createStarfield } from './render/starfield.js';
 import { createConstellationLines } from './render/constellation-lines.js';
+import { createConstellationLabels } from './render/constellation-labels.js';
 import {
   buildPlanetMesh, buildOrbitPath, buildSun, buildMoonMesh, buildSaturnRing, buildAtmosphereShell, toScenePosition,
 } from './render/bodies.js';
@@ -57,9 +58,10 @@ wireResize(camera, renderer);
 // bundler/build step to worry about.
 const milkyWay = createMilkyWaySkySphere();
 scene.add(milkyWay.mesh);
-const [starfield, constellationLines] = await Promise.all([
+const [starfield, constellationLines, constellationLabels] = await Promise.all([
   createStarfield({ pixelRatio: renderer.getPixelRatio() }),
   createConstellationLines(),
+  createConstellationLabels(),
 ]);
 scene.add(starfield.points);
 scene.add(constellationLines.lines);
@@ -101,7 +103,11 @@ const moonMeshesByParent = {}; // parentKey -> [{ key, mesh, moonData }]
 const pickableMeshes = [sunMesh]; // bodies the hover-label raycaster tests against — rings/orbit lines excluded
 for (const key of PLANET_ORDER) {
   const planetData = PLANETS[key];
-  const orbitLine = buildOrbitPath(planetData.elements, startJD);
+  // Each planet's own color (already used as its fallback flat-shaded mesh
+  // color, see data/planets.js) reused for its orbit line too, replacing
+  // the old shared 0x555566 grey for every planet — the point is telling
+  // orbits apart at a glance, not a new color scheme to maintain.
+  const orbitLine = buildOrbitPath(planetData.elements, startJD, 256, planetData.color);
   scene.add(orbitLine);
 
   const group = new THREE.Group();
@@ -576,6 +582,7 @@ function animate() {
   milkyWay.update(camera);
   starfield.update(camera);
   constellationLines.update(camera);
+  constellationLabels.update(camera);
 
   timeState = tick(timeState, delta);
   updateAllPositions(timeState.currentDate);
