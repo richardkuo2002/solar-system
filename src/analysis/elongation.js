@@ -22,6 +22,17 @@ export function elongationRad(targetState, observerState, sunState) {
 }
 
 /**
+ * Angular separation between two arbitrary bodies as seen from a third
+ * (v1.4, for planet-planet appulses) — structurally identical to
+ * elongationRad above (its "sunState" slot is really just "the other
+ * body"), given an honest name for call sites where neither body is the
+ * Sun.
+ */
+export function angularSeparationAtObserver(stateA, observerState, stateB) {
+  return elongationRad(stateA, observerState, stateB);
+}
+
+/**
  * Signed elongation for inner planets: positive = east of the Sun (evening
  * sky, sets after the Sun), negative = west (morning sky, rises before the
  * Sun). Sign comes from the z-component of (observer→Sun) × (observer→

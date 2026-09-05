@@ -28,9 +28,10 @@ retrograde motion).
   when online, falling back silently to local Kepler-equation math when
   offline or the API is unavailable — the render loop never blocks on a
   network call. An on-screen HUD always shows which source, reference
-  center, and frame are currently active (see
-  [docs/accuracy.md](docs/accuracy.md) for the model, coverage, and known
-  limitations).
+  center, and frame are currently active, plus (v1.4) a precision hint —
+  years from the Kepler elements' J2000 epoch — for Kepler-only bodies
+  (see [docs/accuracy.md](docs/accuracy.md) for the model, coverage, and
+  known limitations).
 - **4 camera modes** — WASD works in all of them, but only Free-flight is a
   true fly-anywhere move; in the other three it repositions that mode's own
   "starting point" instead:
@@ -39,7 +40,10 @@ retrograde motion).
   - **Free-flight** — WASD + mouse-look, fly anywhere in the scene.
   - **Surface first-person** — stand on any planet at a chosen latitude/
     longitude and look up at the sky; WASD walks that latitude/longitude
-    (W/S = north/south, A/D = west/east).
+    (W/S = north/south, A/D = west/east). The Sun, that planet's own
+    moon(s), and (v1.4) every other planet render at their **true real
+    angular size** here (not the scene's usual compressed scale) — see
+    [docs/accuracy.md](docs/accuracy.md#surface-mode-sky-realism-v13-extended-v14).
   - **Geocentric** — camera fixed at Earth, holding a fixed look direction
     while Earth itself moves along its real orbit. This is what actually
     produces Mars's retrograde loop — it's real orbital dynamics, not a
@@ -141,6 +145,20 @@ type, and one shared results/chart layout renders whichever is selected.
   geometric simplifications (spherical bodies, no atmospheric shadow
   enlargement, magnitude + one peak time rather than a full 4/5-contact
   circumstance table).
+- **Transit of Mercury/Venus** (v1.4) — the same disk-overlap geometry as
+  solar eclipses, with a planet instead of the Moon as the occulter,
+  triggered off inferior conjunctions. Tested against the real 2019-11-11
+  Mercury and 2012-06-06 Venus transits.
+- **Planetary Appulse** (v1.4) — how close two chosen planets get to each
+  other in Earth's sky (geocentric); finds every local minimum of their
+  angular separation in the date range. Tested against the real
+  2020-12-21 Jupiter-Saturn "Great Conjunction."
+- **Lunar Occultation of a Planet** (v1.4) — a planet passing behind the
+  Moon, for a specific observer, same site-specific reasoning as solar
+  eclipses/transits. Tested against the real 2021-11-08 occultation of
+  Venus visible from Japan. See
+  [docs/accuracy.md](docs/accuracy.md#lunar-occultations-v14) for why
+  limb-grazing events aren't resolvable at this model's precision.
 - **Export** — every event result can be saved as JSON or CSV via the
   panel's Export buttons, with full reproducibility metadata (event type,
   target, observer, frame/center/source, inputs, solver method/tolerance);
@@ -169,10 +187,12 @@ and click Observe:
   reported as such, not faked.
 - **Topocentric correction** — starts from the existing geocentric
   position, then subtracts the observer's own position (derived from
-  lat/lon/elevation and sidereal time). Uses a **fixed** obliquity (no
-  precession/nutation), a **spherical** Earth (no oblateness), and **no**
-  aberration or atmospheric refraction — every one of those approximations
-  is documented in
+  lat/lon/elevation and sidereal time, now using a **WGS-84 oblate**
+  Earth model as of v1.3, not a sphere). Rise/set now accounts for
+  **atmospheric refraction** (Bennett's formula, v1.3) on top of the
+  geometric altitude. Uses a **fixed** obliquity (no precession/nutation)
+  and **no** aberration — every one of those approximations, and the ones
+  that are now modeled, is documented in
   [docs/accuracy.md](docs/accuracy.md#observer-mode-v06).
 
 ## Planet Info Panel (v0.7)

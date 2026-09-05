@@ -322,14 +322,30 @@ function updateAllPositions(currentDate) {
 // real (uncompressed) radius/distance. Called right after updateAllPositions().
 const SKY_PROXY_DISTANCE = 2900; // inside the star shell (3000), well outside every real compressed body (starfield.js: all under 200 scene units)
 const BAKED_SUN_RADIUS = Math.min(compressSize(SUN.radiusKm), SUN_SIZE_CAP); // matches bodies.js#buildSun's geometry exactly
+
+// v1.4 — real planet angular radii are 1-2 orders of magnitude smaller than
+// the Moon's (Jupiter at opposition ~23", Mars typically ~2", vs. the
+// Moon's 933") — at this app's FOV that's sub-pixel, so true scale alone
+// would make them flicker/vanish rather than just look small. Floor the
+// apparent angular radius at a fixed minimum screen-pixel size, computed
+// from the camera's actual FOV/canvas height so it stays correct on
+// resize. A documented rendering simplification (same spirit as "flat
+// color before texture") — real relative sizes still show through
+// whenever a planet's true size exceeds the floor.
+const MIN_PROXY_PIXEL_RADIUS = 1.5;
+/** ecliptic-frame AU vector -> normalized scene-space direction (same axis swap as toScenePosition, without the radial compression — compression is only meaningful measured from the Sun). */
+function eclipticDeltaToSceneDirection(dAu) {
+  return new THREE.Vector3(dAu.x, dAu.z, dAu.y).normalize();
+}
+
 function applySurfaceSkyProxies() {
   const surfacePlanet = cameraState.mode === CAMERA_MODES.SURFACE_FIRST_PERSON ? cameraState.surface.planet : null;
 
   if (surfacePlanet) {
-    const sunDistanceKm = PLANETS[surfacePlanet].elements.a * KM_PER_AU;
+    const originAu = bodyStates[surfacePlanet].positionAu;
+    const sunDistanceKm = Math.hypot(originAu.x, originAu.y, originAu.z) * KM_PER_AU;
     const angularRadiusRad = apparentAngularRadiusRad(SUN.radiusKm, sunDistanceKm);
-    const planetPos = scenePositions[surfacePlanet];
-    const dir = new THREE.Vector3(planetPos.x, planetPos.y, planetPos.z).normalize().negate();
+    const dir = eclipticDeltaToSceneDirection({ x: -originAu.x, y: -originAu.y, z: -originAu.z });
     sunMesh.position.copy(dir).multiplyScalar(SKY_PROXY_DISTANCE);
     sunMesh.scale.setScalar((SKY_PROXY_DISTANCE * Math.tan(angularRadiusRad)) / BAKED_SUN_RADIUS);
   } else {
@@ -354,6 +370,32 @@ function applySurfaceSkyProxies() {
       const bakedMoonRadius = compressSize(moonData.radiusKm);
       mesh.position.copy(dir).multiplyScalar(SKY_PROXY_DISTANCE);
       mesh.scale.setScalar((SKY_PROXY_DISTANCE * Math.tan(angularRadiusRad)) / bakedMoonRadius);
+    }
+  }
+
+  // Other planets: same true-angular-size treatment, applied to the whole
+  // group (not just the mesh) so rings/atmosphere/moons move as one rigid
+  // body. Reset scale for all planets first (position self-corrects for
+  // free, same reasoning as moons above — updateAllPositions always sets
+  // it before this function runs).
+  for (const key of PLANET_ORDER) {
+    planetGroups[key].scale.setScalar(1);
+  }
+  if (surfacePlanet) {
+    const originAu = bodyStates[surfacePlanet].positionAu;
+    const radPerPixel = THREE.MathUtils.degToRad(camera.fov) / renderer.domElement.clientHeight;
+    const minAngularRadiusRad = MIN_PROXY_PIXEL_RADIUS * radPerPixel;
+    for (const key of PLANET_ORDER) {
+      if (key === surfacePlanet) continue;
+      const targetAu = bodyStates[key].positionAu;
+      const dAu = { x: targetAu.x - originAu.x, y: targetAu.y - originAu.y, z: targetAu.z - originAu.z };
+      const distanceKm = Math.hypot(dAu.x, dAu.y, dAu.z) * KM_PER_AU;
+      const realAngularRadiusRad = apparentAngularRadiusRad(PLANETS[key].radiusKm, distanceKm);
+      const angularRadiusRad = Math.max(realAngularRadiusRad, minAngularRadiusRad);
+      const dir = eclipticDeltaToSceneDirection(dAu);
+      const bakedRadius = compressSize(PLANETS[key].radiusKm);
+      planetGroups[key].position.copy(dir).multiplyScalar(SKY_PROXY_DISTANCE);
+      planetGroups[key].scale.setScalar((SKY_PROXY_DISTANCE * Math.tan(angularRadiusRad)) / bakedRadius);
     }
   }
 }
