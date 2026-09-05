@@ -55,6 +55,22 @@ Both also run automatically on every push/PR via GitHub Actions
   code can already do.** This project's dependency list is intentionally
   short.
 
+## Versioning
+
+Roughly semver, applied to this project's actual history:
+
+- **Patch (1.8 → 1.8.1)** — bug fixes, layout/overlap fixes, correcting
+  something that was already supposed to work. No new analysis event
+  type, no new interaction, no accuracy-model change.
+- **Minor (1.8 → 1.9)** — new capability (event type, camera mode, data
+  source) or a behavior change users need to relearn (e.g. v1.8's
+  scrub-locks-the-whole-scene, or a default speed change), or an
+  accuracy/precision upgrade (e.g. light-time correction, nutation).
+- **Major** — not used yet; reserved for an actual breaking change.
+
+When in doubt: if it only makes something that was wrong now correct,
+patch; if it adds or changes what the app can do, minor.
+
 ## Assets
 
 Textures under `assets/textures/` come from `scripts/fetch-textures.mjs`
