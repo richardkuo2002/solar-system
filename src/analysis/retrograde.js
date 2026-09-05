@@ -7,7 +7,7 @@ import {
   geocentricEclipticLongitudeRad, RAD_TO_DEG,
 } from './longitude.js';
 import { getBodyState } from '../core/ephemeris.js';
-import { julianDateFromDate, dateFromJulianDate } from '../core/orbital-elements.js';
+import { dateFromJulianDate } from '../core/orbital-elements.js';
 import { PLANETS } from '../data/planets.js';
 
 const DEFAULT_TOLERANCE_SECONDS = 60;

@@ -6,12 +6,22 @@
   "scripts": {
     "smoke": "node scripts/smoke-test.js",
     "test": "npm run smoke",
+    "lint": "eslint .",
     "fetch-textures": "node scripts/fetch-textures.mjs"
   },
-  "keywords": ["threejs", "solar-system", "simulation", "astronomy"],
+  "keywords": [
+    "threejs",
+    "solar-system",
+    "simulation",
+    "astronomy"
+  ],
   "author": "Richard Kuo",
   "license": "MIT",
   "dependencies": {
     "sharp": "^0.35.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.10.0"
   }
 }

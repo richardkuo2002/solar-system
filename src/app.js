@@ -445,7 +445,7 @@ const viewModeUI = createViewModeUI(
 );
 viewModeUI.setActiveMode(cameraState.mode);
 
-const surfaceControlsUI = createSurfaceControlsUI(
+createSurfaceControlsUI(
   document.getElementById('ui-root'),
   PLANET_ORDER,
   (planet, lat, lon) => {

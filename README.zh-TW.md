@@ -51,7 +51,13 @@ src/
 
 ```bash
 npm test
+npm run lint   # ESLint,recommended ruleset(v0.9)
 ```
+
+這兩個指令會在每次 push/PR 時透過 GitHub Actions 自動執行
+(`.github/workflows/ci.yml`);另外有一個 workflow
+(`.github/workflows/deploy.yml`)在 `main` 分支跑完同樣的 lint+test 之後,
+把網站部署到 GitHub Pages。
 
 ## 天文事件工具箱(Event Toolkit,v0.5)
 
