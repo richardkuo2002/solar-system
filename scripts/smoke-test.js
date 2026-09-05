@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import {
+  mulberry32, sampleUnitSphere, generateStarfield, STAR_COUNTS, DEFAULT_STAR_QUALITY,
+} from '../src/core/starfield-generator.js';
 import { solveEccentricAnomaly, elementsToPosition, normalizeAngle } from '../src/core/kepler.js';
 import {
   elementsAtDate, julianDateFromDate, dateFromJulianDate, circularOrbitAngle, moonLocalPosition,
@@ -1048,6 +1051,68 @@ import { analyzeObserver, observeAt, OBSERVER_TARGETS } from '../src/analysis/ob
     `Sun transit at the Tropic of Cancer on the June solstice should be ~90deg (zenith), got ${transit.altDeg}`);
   assert.equal(result.reference.source, 'kepler', 'never horizons-live — see docs/accuracy.md, structurally unreachable here');
   assert.equal(result.solver.method, 'bisection');
+}
+
+// starfield-generator: mulberry32 is deterministic (same seed -> same
+// sequence) and clearly not constant (a broken PRNG returning the same
+// value every call would still pass a naive "no crash" check).
+{
+  const seqA = Array.from({ length: 5 }, mulberry32(42));
+  const seqB = Array.from({ length: 5 }, mulberry32(42));
+  assert.deepEqual(seqA, seqB, 'same seed must produce the same sequence');
+  assert.ok(new Set(seqA).size > 1, 'sequence must not be constant');
+}
+
+// starfield-generator: sampleUnitSphere always lands exactly on the unit
+// sphere, and — the actual bug this function exists to avoid — a large
+// sample is NOT biased toward the cube's corners the way independently
+// sampling x/y/z in [-1,1] and normalizing would be. For true uniform
+// sampling, E[x^2] = E[y^2] = E[z^2] = 1/3 exactly (by symmetry); checking
+// all three land near 1/3 over a large sample catches that specific bug
+// (a corner-biased sampler pushes these apart, e.g. toward favoring
+// whichever axis the bias is worst along).
+{
+  const rand = mulberry32(7);
+  const N = 20000;
+  let sumX2 = 0, sumY2 = 0, sumZ2 = 0;
+  for (let i = 0; i < N; i++) {
+    const p = sampleUnitSphere(rand);
+    const r = Math.hypot(p.x, p.y, p.z);
+    assert.ok(Math.abs(r - 1) < 1e-9, `point must be exactly on the unit sphere, got r=${r}`);
+    sumX2 += p.x * p.x; sumY2 += p.y * p.y; sumZ2 += p.z * p.z;
+  }
+  const meanX2 = sumX2 / N, meanY2 = sumY2 / N, meanZ2 = sumZ2 / N;
+  for (const [label, m] of [['x^2', meanX2], ['y^2', meanY2], ['z^2', meanZ2]]) {
+    assert.ok(Math.abs(m - 1 / 3) < 0.02,
+      `uniform-sphere sampling requires E[${label}] ~ 1/3, got ${m} (N=${N}) — check for corner-bias`);
+  }
+}
+
+// starfield-generator: generateStarfield is deterministic per seed, every
+// array is the right length/shape, and every value stays in its documented
+// range (colors/brightness in [0,1], positions on the unit sphere).
+{
+  const a = generateStarfield({ count: 500, seed: 99 });
+  const b = generateStarfield({ count: 500, seed: 99 });
+  assert.deepEqual(Array.from(a.positions), Array.from(b.positions), 'same seed must reproduce identical positions');
+  assert.deepEqual(Array.from(a.colors), Array.from(b.colors), 'same seed must reproduce identical colors');
+  assert.equal(a.positions.length, 500 * 3);
+  assert.equal(a.colors.length, 500 * 3);
+  assert.equal(a.sizes.length, 500);
+  assert.equal(a.brightness.length, 500);
+  for (let i = 0; i < 500; i++) {
+    const r = Math.hypot(a.positions[i * 3], a.positions[i * 3 + 1], a.positions[i * 3 + 2]);
+    // 1e-5, not 1e-9 — positions round-trip through a Float32Array (~7
+    // significant decimal digits), unlike sampleUnitSphere's plain-double
+    // check above.
+    assert.ok(Math.abs(r - 1) < 1e-5, `every star position must be on the unit sphere, got r=${r}`);
+    assert.ok(a.brightness[i] >= 0 && a.brightness[i] <= 1, 'brightness must be in [0,1]');
+    for (const c of [a.colors[i * 3], a.colors[i * 3 + 1], a.colors[i * 3 + 2]]) {
+      assert.ok(c >= 0 && c <= 1, 'color channels must be in [0,1]');
+    }
+  }
+  assert.deepEqual(STAR_COUNTS, { low: 2500, medium: 6000, high: 12000 });
+  assert.equal(DEFAULT_STAR_QUALITY, 'medium');
 }
 
 console.log('PASS: smoke-test.js all assertions passed');

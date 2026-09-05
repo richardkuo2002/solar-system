@@ -25,7 +25,7 @@ export const TEXTURES = {
   uranus: `${BASE}/2k_uranus.jpg`,
   neptune: `${BASE}/2k_neptune.jpg`,
   moon: `${BASE}/2k_moon.jpg`,
-  stars: `${BASE}/2k_stars_milky_way.jpg`,
+  stars: `${BASE}/8k_stars_milky_way.jpg`,
   saturnRing: `${BASE}/2k_saturn_ring_alpha.png`,
   io: `${BASE}/io.jpg`,
   europa: `${BASE}/europa.png`,

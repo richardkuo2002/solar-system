@@ -3,7 +3,8 @@
 // for the whole project (a real retrograde-motion loop should be visible
 // for Mars if steps 2-7's orbital math is right).
 import * as THREE from 'three';
-import { createRenderer, createScene, createCamera, createAmbientLight, wireResize, applyStarfield } from './render/scene-setup.js';
+import { createRenderer, createScene, createCamera, createAmbientLight, wireResize, createMilkyWaySkySphere } from './render/scene-setup.js';
+import { createStarfield } from './render/starfield.js';
 import {
   buildPlanetMesh, buildOrbitPath, buildSun, buildMoonMesh, buildSaturnRing, buildAtmosphereShell, toScenePosition,
 } from './render/bodies.js';
@@ -35,7 +36,17 @@ const renderer = createRenderer(canvas);
 const scene = createScene();
 const camera = createCamera();
 wireResize(camera, renderer);
-applyStarfield(scene);
+
+// Two independent background layers (see scene-setup.js / render/starfield.js
+// for why): the Milky Way sky sphere carries only the large-scale galactic
+// band/dust-lane image now, and the procedural starfield carries individual,
+// per-star color/brightness/round-falloff detail the 2K/8K photo alone
+// can't provide at any zoom level. Both recenter on the camera every frame
+// in animate() below — never rebuilt, just repositioned.
+const milkyWay = createMilkyWaySkySphere();
+scene.add(milkyWay.mesh);
+const starfield = createStarfield({ pixelRatio: renderer.getPixelRatio() });
+scene.add(starfield.points);
 
 scene.add(createAmbientLight());
 
@@ -390,6 +401,9 @@ const clock = new THREE.Clock();
 function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
+
+  milkyWay.update(camera);
+  starfield.update(camera);
 
   timeState = tick(timeState, delta);
   updateAllPositions(timeState.currentDate);
