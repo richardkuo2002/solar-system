@@ -172,17 +172,56 @@ export function moonLocalPosition(moonData, parentRadiusKm, parentSceneRadius, c
 const GENERAL_PRECESSION_DEG_PER_CENTURY = 5029.0966 / 3600; // IAU precession in longitude, linear term
 const GENERAL_PRECESSION_DEG_PER_CENTURY_SQ = 1.11113 / 3600; // quadratic term (negligible over this app's date ranges, kept for completeness)
 
-export function moonHeliocentricPositionAu(moonData, parentPositionAu, currentJD) {
+/**
+ * Shared J2000-aligned geocentric Moon position (Meeus lunar theory +
+ * the general-precession correction above), the ONE source both the
+ * analysis path (moonHeliocentricPositionAu) and the 3D scene path
+ * (moonLocalPositionMeeus, v1.5) read — extracted so the two provably
+ * can't drift apart again (before v1.5 the scene used a separate circular
+ * approximation; see docs/accuracy.md's Moon section).
+ */
+export function moonGeocentricJ2000(currentJD) {
   const { lonDeg: lonOfDateDeg, latDeg, distanceKm } = moonEclipticPosition(currentJD);
   const T = (currentJD - J2000_JD) / 36525;
   const precessionDeg = GENERAL_PRECESSION_DEG_PER_CENTURY * T + GENERAL_PRECESSION_DEG_PER_CENTURY_SQ * T * T;
-  const lonRad = (lonOfDateDeg - precessionDeg) * DEG_TO_RAD;
-  const latRad = latDeg * DEG_TO_RAD;
+  return {
+    lonRad: (lonOfDateDeg - precessionDeg) * DEG_TO_RAD,
+    latRad: latDeg * DEG_TO_RAD,
+    distanceKm,
+  };
+}
+
+export function moonHeliocentricPositionAu(moonData, parentPositionAu, currentJD) {
+  const { lonRad, latRad, distanceKm } = moonGeocentricJ2000(currentJD);
   const distanceAu = distanceKm * AU_PER_KM;
   const cosLat = Math.cos(latRad);
   return {
     x: parentPositionAu.x + distanceAu * cosLat * Math.cos(lonRad),
     y: parentPositionAu.y + distanceAu * cosLat * Math.sin(lonRad),
     z: parentPositionAu.z + distanceAu * Math.sin(latRad),
+  };
+}
+
+/**
+ * Local-space (parent-relative) scene position for THE Moon at `currentJD`
+ * — v1.5's replacement for moonLocalPosition's circular approximation,
+ * driven by the same Meeus-derived J2000-aligned lon/lat/distance the
+ * analysis path uses (moonGeocentricJ2000 above), so the 3D scene's Moon
+ * and the Event Toolkit/Observer Mode Moon finally agree for the same
+ * date. Direction is real (including the ~5deg orbital inclination —
+ * y is no longer always 0); magnitude still goes through scale.js's
+ * compressMoonOrbit display curve (feeding the real time-varying
+ * distanceKm instead of the old constant orbitKm), same axis convention
+ * as toScenePosition (ecliptic z -> scene y). Every OTHER moon keeps
+ * moonLocalPosition's circular approximation, unchanged.
+ */
+export function moonLocalPositionMeeus(currentJD, parentRadiusKm, parentSceneRadius) {
+  const { lonRad, latRad, distanceKm } = moonGeocentricJ2000(currentJD);
+  const r = compressMoonOrbit(distanceKm, parentRadiusKm, parentSceneRadius);
+  const cosLat = Math.cos(latRad);
+  return {
+    x: r * cosLat * Math.cos(lonRad),
+    y: r * Math.sin(latRad),
+    z: r * cosLat * Math.sin(lonRad),
   };
 }

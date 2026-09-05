@@ -20,6 +20,7 @@ import { findStationaryPoints } from './retrograde.js';
 import {
   lstDeg, eclipticToEquatorial, raDecFromEquatorial,
   observerGeocentricPositionAu, hourAngleDeg, altAzFromDecHa, refractionArcmin,
+  precessEquatorialToDate,
 } from '../core/topocentric.js';
 
 // Standard rise/set convention: apparent altitude at the horizon (Meeus
@@ -72,11 +73,15 @@ function targetHeliocentricStateFor(targetKey, jsDate, forceSource) {
 }
 
 /** Geocentric-equatorial position (AU) of `target` as seen from Earth's
- *  center, before topocentric correction. */
+ *  center, before topocentric correction. v1.5: precessed to the mean
+ *  equinox of date — gmstDeg's sidereal time is inherently of-date, so a
+ *  J2000-anchored RA was silently mixing two equinox references in every
+ *  hour-angle/rise-set/transit calculation (~0.36deg by 2026). */
 function geocentricEquatorialAu(target, jsDate, forceSource) {
   const earthState = getBodyState('earth', jsDate, PLANETS.earth.elements, { forceSource });
   const targetState = target === 'sun' ? sunBodyState(jsDate) : targetHeliocentricStateFor(target, jsDate, forceSource);
-  return eclipticToEquatorial(sub(targetState.positionAu, earthState.positionAu));
+  const equatorialJ2000 = eclipticToEquatorial(sub(targetState.positionAu, earthState.positionAu));
+  return precessEquatorialToDate(equatorialJ2000, julianDateFromDate(jsDate));
 }
 
 /**
@@ -200,7 +205,7 @@ export function analyzeObserver({ target, atUtc, latDeg, lonDeg, elevationM = 0 
     type: 'observer',
     target,
     observer: { type: 'topocentric', bodyId: 'earth', latDeg, lonDeg, elevationM },
-    reference: { frame: 'TOPOCENTRIC_EQUATORIAL_FIXED_OBLIQUITY', center: 'OBSERVER', source: 'kepler' },
+    reference: { frame: 'TOPOCENTRIC_EQUATORIAL_MEAN_OF_DATE', center: 'OBSERVER', source: 'kepler' },
     input: { atUtc, latDeg, lonDeg, elevationM },
     result: {
       raDeg: now.raDeg, decDeg: now.decDeg, altDeg: now.altDeg, azDeg: now.azDeg,

@@ -140,6 +140,50 @@ export function refractionArcmin(trueAltDeg) {
   return 1.02 / Math.tan((h + 10.3 / (h + 5.11)) * DEG_TO_RAD);
 }
 
+// IAU 1976 precession polynomials (Meeus Ch. 21, eq. 21.2), arcseconds per
+// Julian century from J2000. Used by precessEquatorialToDate only — the
+// shared OBLIQUITY_DEG rotation above deliberately stays a fixed J2000
+// constant: the star catalog (core/star-catalog.js) renders fixed-J2000
+// Hipparcos coordinates through equatorialToEcliptic, and making the
+// obliquity date-dependent there would silently rotate the whole star
+// sphere over time with no corresponding data correction. Precession is
+// applied at Observer Mode's output only (analysis/observer.js).
+const ARCSEC_TO_DEG = 1 / 3600;
+
+/**
+ * Precesses a J2000 mean-equator/equinox equatorial vector to the mean
+ * equator/equinox of date at `jd` — rigorous IAU 1976 rotation (Meeus
+ * Ch. 21): R_z(-z) · R_y(theta) · R_z(-zeta). Also fixes an internal
+ * inconsistency: gmstDeg above is inherently equinox-of-date, so hour
+ * angles computed from a J2000-anchored RA were silently mixing two
+ * equinox references (~0.36deg by 2026) before v1.5.
+ */
+export function precessEquatorialToDate(v, jd) {
+  const T = (jd - J2000_JD) / 36525;
+  const zetaDeg = (2306.2181 * T + 0.30188 * T * T + 0.017998 * T * T * T) * ARCSEC_TO_DEG;
+  const zDeg = (2306.2181 * T + 1.09468 * T * T + 0.018203 * T * T * T) * ARCSEC_TO_DEG;
+  const thetaDeg = (2004.3109 * T - 0.42665 * T * T - 0.041833 * T * T * T) * ARCSEC_TO_DEG;
+
+  const zeta = zetaDeg * DEG_TO_RAD;
+  const z = zDeg * DEG_TO_RAD;
+  const theta = thetaDeg * DEG_TO_RAD;
+
+  // R_z(-zeta): rotate about z by +zeta (standard equinox convention)
+  const x1 = v.x * Math.cos(zeta) - v.y * Math.sin(zeta);
+  const y1 = v.x * Math.sin(zeta) + v.y * Math.cos(zeta);
+  const z1 = v.z;
+  // R_y(theta)
+  const x2 = x1 * Math.cos(theta) - z1 * Math.sin(theta);
+  const y2 = y1;
+  const z2 = x1 * Math.sin(theta) + z1 * Math.cos(theta);
+  // R_z(-z)
+  return {
+    x: x2 * Math.cos(z) - y2 * Math.sin(z),
+    y: x2 * Math.sin(z) + y2 * Math.cos(z),
+    z: z2,
+  };
+}
+
 /** Local hour angle H = LST - RA. Degrees, [0, 360). */
 export function hourAngleDeg(lstDegValue, raDeg) {
   return wrap360(lstDegValue - raDeg);

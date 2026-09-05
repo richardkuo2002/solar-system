@@ -29,7 +29,7 @@ import {
 import { createCameraState, setMode, setFocusBody, enterGeocentric, computePose, CAMERA_MODES } from './core/camera-modes.js';
 import { encodeAppStateToParams, decodeAppStateFromParams } from './core/url-state.js';
 import {
-  julianDateFromDate, dateFromJulianDate, moonLocalPosition, circularOrbitAngle,
+  julianDateFromDate, dateFromJulianDate, moonLocalPosition, moonLocalPositionMeeus, moonGeocentricJ2000, circularOrbitAngle,
   orbitalPeriodDaysFromSemiMajorAxisAu,
 } from './core/orbital-elements.js';
 import { compressSize, apparentAngularRadiusRad, SUN_SIZE_CAP } from './core/scale.js';
@@ -301,7 +301,13 @@ function updateAllPositions(currentDate) {
     bodyRotations[key] = rotationRad;
     const parentSceneRadius = compressSize(planetData.radiusKm);
     for (const { mesh, moonData } of moonMeshesByParent[key]) {
-      const localPos = moonLocalPosition(moonData, planetData.radiusKm, parentSceneRadius, currentJD, startJD);
+      // v1.5 — THE Moon uses the same Meeus lunar theory the analysis path
+      // uses (real phase/inclination/eccentric distance), so the scene and
+      // the Event Toolkit/Observer Mode finally show the same Moon for the
+      // same date. Every other moon keeps the circular approximation.
+      const localPos = moonData === MOONS.moon
+        ? moonLocalPositionMeeus(currentJD, planetData.radiusKm, parentSceneRadius)
+        : moonLocalPosition(moonData, planetData.radiusKm, parentSceneRadius, currentJD, startJD);
       mesh.position.set(localPos.x, localPos.y, localPos.z);
     }
   }
@@ -365,7 +371,14 @@ function applySurfaceSkyProxies() {
   }
   if (surfacePlanet) {
     for (const { mesh, moonData } of moonMeshesByParent[surfacePlanet]) {
-      const angularRadiusRad = apparentAngularRadiusRad(moonData.radiusKm, moonData.orbitKm);
+      // v1.5 — THE Moon's rendered position now uses its real time-varying
+      // distance (see moonLocalPositionMeeus), so its rendered angular size
+      // uses the same real distance too (perigee/apogee is a real ±5.5%
+      // size swing); other moons keep their constant circular orbitKm.
+      const distanceKm = moonData === MOONS.moon
+        ? moonGeocentricJ2000(julianDateFromDate(timeState.currentDate)).distanceKm
+        : moonData.orbitKm;
+      const angularRadiusRad = apparentAngularRadiusRad(moonData.radiusKm, distanceKm);
       const dir = mesh.position.clone().normalize();
       const bakedMoonRadius = compressSize(moonData.radiusKm);
       mesh.position.copy(dir).multiplyScalar(SKY_PROXY_DISTANCE);
