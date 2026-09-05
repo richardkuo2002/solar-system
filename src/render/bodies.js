@@ -6,7 +6,7 @@
 // managing its own texture cache.
 import * as THREE from 'three';
 import { sampleOrbitPath } from '../core/orbital-elements.js';
-import { compressPosition, compressSize, SUN_SIZE_CAP } from '../core/scale.js';
+import { compressPosition, compressSize, SUN_SIZE_CAP, SATURN_RING_OUTER_KM } from '../core/scale.js';
 
 /**
  * Sphere mesh for a planet/moon. `textureLoader.getInitial` always returns
@@ -91,9 +91,9 @@ export function buildAtmosphereShell(bodyData, textureKey, textureLoader, { opac
 
 // Real-world km, not scaled by compressSize's planet-radius curve tuning —
 // close enough for a v1 visual (main rings: C through A, skipping the
-// fainter/wider F-and-beyond rings).
+// fainter/wider F-and-beyond rings). Outer edge lives in core/scale.js
+// (also read by moonLocalPosition to keep Titan clear of the ring).
 const SATURN_RING_INNER_KM = 74500;
-const SATURN_RING_OUTER_KM = 136800;
 
 /**
  * Saturn's ring, as a flat annulus using the same compressSize() curve as

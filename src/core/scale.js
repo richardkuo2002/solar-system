@@ -25,6 +25,14 @@ export function compressSize(radiusKm) {
 export const MOON_GAP_SCALE = 0.068;
 export const MOON_GAP_POWER = 0.4;
 
+// Saturn's ring outer edge, real km (main rings: C through A). Lives here
+// (not render/bodies.js, which imports THREE) so moonLocalPosition below can
+// also read it, to keep Titan's compressed orbit outside the ring — the two
+// curves (compressSize for the ring, compressMoonOrbit for moon orbits) are
+// independently tuned and don't otherwise preserve real-world ordering at
+// Saturn's scale. render/bodies.js imports this instead of redeclaring it.
+export const SATURN_RING_OUTER_KM = 136800;
+
 /**
  * Compress a moon's orbit radius into scene units, relative to its parent
  * planet — NOT the same curve as compressDistance, which is tuned for
@@ -34,10 +42,15 @@ export const MOON_GAP_POWER = 0.4;
  * physically meaningful, scale-invariant number — the Moon orbits at ~60
  * Earth radii, Io at ~6 Jupiter radii) and always adds on top of the
  * parent's own scene radius, so a moon can never render inside its parent.
+ *
+ * `minSceneRadius` (optional): a floor on the result — used to keep Titan
+ * clear of Saturn's rings (see SATURN_RING_OUTER_KM above); 0 for every
+ * other moon, so this is a no-op for them.
  */
-export function compressMoonOrbit(orbitKm, parentRadiusKm, parentSceneRadius) {
+export function compressMoonOrbit(orbitKm, parentRadiusKm, parentSceneRadius, minSceneRadius = 0) {
   const radiiRatio = orbitKm / parentRadiusKm;
-  return parentSceneRadius + MOON_GAP_SCALE * Math.pow(radiiRatio, MOON_GAP_POWER);
+  const r = parentSceneRadius + MOON_GAP_SCALE * Math.pow(radiiRatio, MOON_GAP_POWER);
+  return Math.max(r, minSceneRadius);
 }
 
 /**

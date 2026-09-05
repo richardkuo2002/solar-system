@@ -3,7 +3,7 @@
 // expects. Pure math, Node-testable.
 
 import { normalizeAngle, elementsToPosition } from './kepler.js';
-import { compressMoonOrbit } from './scale.js';
+import { compressMoonOrbit, compressSize, SATURN_RING_OUTER_KM } from './scale.js';
 import { AU_PER_KM } from './units.js';
 
 const VELOCITY_HALF_DT_DAYS = 1 / 48; // ±30 min — small vs. the fastest
@@ -104,6 +104,13 @@ export function circularOrbitAngle(daysSinceEpoch, periodDays) {
   return normalizeAngle((daysSinceEpoch / periodDays) * 2 * Math.PI);
 }
 
+// Titan's real orbit (~1.2M km) is well outside Saturn's real rings
+// (~137,000 km) — but compressMoonOrbit and compressSize are independently
+// tuned curves that don't preserve that ordering at Saturn's scale (Titan's
+// compressed orbit would otherwise land inside the ring band). A 5% margin
+// past the ring's own compressed outer edge keeps Titan visibly clear.
+const SATURN_RING_CLEARANCE_MARGIN = 1.05;
+
 /**
  * Local-space (parent-relative) scene position for a moon at `currentJD`,
  * using the circular-orbit approximation above + scale.js's
@@ -113,7 +120,10 @@ export function circularOrbitAngle(daysSinceEpoch, periodDays) {
  */
 export function moonLocalPosition(moonData, parentRadiusKm, parentSceneRadius, currentJD, epochJD) {
   const angle = circularOrbitAngle(currentJD - epochJD, moonData.periodDays);
-  const r = compressMoonOrbit(moonData.orbitKm, parentRadiusKm, parentSceneRadius);
+  const minSceneRadius = moonData.parent === 'saturn'
+    ? compressSize(SATURN_RING_OUTER_KM) * SATURN_RING_CLEARANCE_MARGIN
+    : 0;
+  const r = compressMoonOrbit(moonData.orbitKm, parentRadiusKm, parentSceneRadius, minSceneRadius);
   return { x: r * Math.cos(angle), y: 0, z: r * Math.sin(angle) };
 }
 
