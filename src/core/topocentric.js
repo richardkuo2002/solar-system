@@ -62,6 +62,27 @@ export function raDecFromEquatorial(v) {
   return { raDeg, decDeg };
 }
 
+/** Unit vector (equatorial frame) from RA/Dec, degrees — inverse of raDecFromEquatorial. */
+export function unitVectorFromRaDec(raDeg, decDeg) {
+  const ra = raDeg * DEG_TO_RAD;
+  const dec = decDeg * DEG_TO_RAD;
+  return { x: Math.cos(dec) * Math.cos(ra), y: Math.cos(dec) * Math.sin(ra), z: Math.sin(dec) };
+}
+
+/**
+ * Rotates a geocentric-equatorial xyz vector to ECLIPJ2000 xyz by the fixed
+ * obliquity above — the inverse rotation of eclipticToEquatorial (rotation
+ * about the x-axis is orthogonal, so the inverse is the transpose: negate
+ * the sinE terms). Used for v1.2's star catalog, whose RA/Dec is
+ * equatorial, to align with the rest of this project's ecliptic frame.
+ */
+export function equatorialToEcliptic(v) {
+  const eps = OBLIQUITY_DEG * DEG_TO_RAD;
+  const cosE = Math.cos(eps);
+  const sinE = Math.sin(eps);
+  return { x: v.x, y: v.y * cosE + v.z * sinE, z: -v.y * sinE + v.z * cosE };
+}
+
 /**
  * Observer's geocentric position vector, equatorial frame, AU. Spherical
  * Earth (real radiusKm + elevationM) — NO oblateness, geodetic vs.

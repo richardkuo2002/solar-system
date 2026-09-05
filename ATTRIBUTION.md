@@ -69,9 +69,32 @@ Re-running `node scripts/fetch-textures.mjs` (see `README.md`) will pick
 these up automatically the moment a working URL exists, without any other
 code changes.
 
-## Starfield background (two layers)
+## Real star catalog + constellation lines (v1.2, BSD-3-Clause)
 
-The night sky is two independent layers now, not one stretched photo:
+`assets/stars/stars.6.json` and `assets/stars/constellations.lines.json` are
+vendored, unmodified, from **d3-celestial** (Olaf Frohn), fetched by
+`scripts/fetch-star-catalog.mjs`. `assets/stars/manifest.json` records the
+exact source URL for each file, same provenance-file role
+`assets/textures/manifest.json` plays for textures.
+
+Source: https://github.com/ofrohn/d3-celestial · License:
+[BSD-3-Clause](https://github.com/ofrohn/d3-celestial/blob/master/LICENSE) ·
+Credit: Olaf Frohn, d3-celestial
+
+| File | Content | Original URL |
+|---|---|---|
+| `stars.6.json` | ~5,000 Hipparcos-numbered stars, magnitude ≤ 6.5, RA/Dec + B-V color index | [stars.6.json](https://github.com/ofrohn/d3-celestial/blob/master/data/stars.6.json) |
+| `constellations.lines.json` | The 88 IAU constellations' traditional line figures, as RA/Dec coordinate pairs | [constellations.lines.json](https://github.com/ofrohn/d3-celestial/blob/master/data/constellations.lines.json) |
+
+`src/core/star-catalog.js` parses these into scene-frame positions (see its
+own header comment for the RA/Dec → ecliptic conversion and the
+magnitude/B-V → brightness/color mapping, both original code, not part of
+the vendored data) — replacing the old seeded-PRNG procedural star field
+with real star positions.
+
+## Starfield background (three layers)
+
+The night sky is three independent layers now, not one stretched photo:
 
 1. **Milky Way sky sphere** (`src/render/scene-setup.js#createMilkyWaySkySphere`)
    — an actual `THREE.Mesh` (unlit `MeshBasicMaterial`, `side: BackSide`,
@@ -80,16 +103,17 @@ The night sky is two independent layers now, not one stretched photo:
    dust lanes — dimmed (`material.color` multiplied by 0.55) so it reads as
    a backdrop, not the brightest thing on screen. Repositioned onto the
    camera every frame (position only, never rotated), so it never appears to
-   drift during free-flight.
-2. **Procedural star points** (`src/core/starfield-generator.js` +
-   `src/render/starfield.js`) — a `THREE.Points` layer of individually
-   colored/sized dots, generated from a fixed PRNG seed (not downloaded, not
-   a texture at all — no attribution entry needed). Deterministic: the same
-   seed always produces the same star positions/colors/sizes. See those two
-   files' own comments for the generation method (uniform sphere sampling,
-   brightness/color distribution) and the render-layer choices (custom
-   `ShaderMaterial` for a round per-star falloff instead of square point
-   sprites, low/medium/high quality tiers via `STAR_COUNTS`).
+   drift during free-flight. Its own orientation is not aligned to the real
+   sky — it stays a purely decorative backdrop even though the star points
+   and constellation lines above it are now real.
+2. **Real star catalog points** (`src/core/star-catalog.js` +
+   `src/render/starfield.js`) — a `THREE.Points` layer built from the real
+   catalog above (fetched at load time), not a PRNG. See "Real star catalog"
+   above for the data source.
+3. **Constellation lines** (`src/core/star-catalog.js` +
+   `src/render/constellation-lines.js`) — a dim `THREE.LineSegments` overlay
+   connecting the catalog's stars into the 88 traditional figures, same data
+   source.
 
 Switching the sky sphere from 2K to 8K was a deliberate accuracy-of-source
 check, not a blind upgrade: confirmed with a real HTTP request (not assumed)
@@ -129,9 +153,12 @@ network trace, so it doesn't include HTTP/TLS overhead or `index.html`/
 **This pass's texture-payload cost**: switching the starfield skybox from
 2K to 8K adds **+1,654,059 bytes (+1.58 MB)** to first load (251,454 ->
 1,905,513) — the single biggest line-item change here, and an explicit,
-accepted trade for a visibly sharper Milky Way band. The two new JS modules
-(`src/core/starfield-generator.js` + `src/render/starfield.js`, unminified —
-this project has no build/bundle step) add a further 9,545 bytes (~9.3 KB);
-the procedural star points themselves cost zero additional texture bytes
-(no image asset — every star's position/color/size is generated at runtime
-from a fixed PRNG seed).
+accepted trade for a visibly sharper Milky Way band.
+
+**v1.2's data payload**: replacing the procedural star field with the real
+catalog above adds `assets/stars/stars.6.json` (656,721 bytes, ~656 KB) and
+`assets/stars/constellations.lines.json` (27,136 bytes, ~26.5 KB) — both
+fetched once at load time alongside the texture manifest, ~683 KB total,
+where the old PRNG-generated star field cost zero additional bytes (no
+data file at all, generated at runtime from a fixed seed). Judged an
+acceptable trade for real, recognizable star positions over synthetic ones.

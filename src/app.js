@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { createRenderer, createScene, createCamera, createAmbientLight, wireResize, createMilkyWaySkySphere } from './render/scene-setup.js';
 import { createStarfield } from './render/starfield.js';
+import { createConstellationLines } from './render/constellation-lines.js';
 import {
   buildPlanetMesh, buildOrbitPath, buildSun, buildMoonMesh, buildSaturnRing, buildAtmosphereShell, toScenePosition,
 } from './render/bodies.js';
@@ -43,16 +44,25 @@ const scene = createScene();
 const camera = createCamera();
 wireResize(camera, renderer);
 
-// Two independent background layers (see scene-setup.js / render/starfield.js
-// for why): the Milky Way sky sphere carries only the large-scale galactic
-// band/dust-lane image now, and the procedural starfield carries individual,
-// per-star color/brightness/round-falloff detail the 2K/8K photo alone
-// can't provide at any zoom level. Both recenter on the camera every frame
-// in animate() below — never rebuilt, just repositioned.
+// Three independent background layers (see scene-setup.js / render/starfield.js
+// / render/constellation-lines.js for why): the Milky Way sky sphere carries
+// only the large-scale galactic band/dust-lane image, the real star catalog
+// carries individual, per-star color/brightness/round-falloff detail the
+// 2K/8K photo alone can't provide at any zoom level, and the constellation
+// lines overlay the traditional figures connecting them. All three recenter
+// on the camera every frame in animate() below — never rebuilt, just
+// repositioned. The latter two are fetched (see starfield.js/
+// constellation-lines.js), same top-level-await pattern the texture
+// manifest below already uses — this is a plain ES module entry point, no
+// bundler/build step to worry about.
 const milkyWay = createMilkyWaySkySphere();
 scene.add(milkyWay.mesh);
-const starfield = createStarfield({ pixelRatio: renderer.getPixelRatio() });
+const [starfield, constellationLines] = await Promise.all([
+  createStarfield({ pixelRatio: renderer.getPixelRatio() }),
+  createConstellationLines(),
+]);
 scene.add(starfield.points);
+scene.add(constellationLines.lines);
 
 scene.add(createAmbientLight());
 
@@ -565,6 +575,7 @@ function animate() {
 
   milkyWay.update(camera);
   starfield.update(camera);
+  constellationLines.update(camera);
 
   timeState = tick(timeState, delta);
   updateAllPositions(timeState.currentDate);
