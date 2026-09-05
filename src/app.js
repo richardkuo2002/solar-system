@@ -32,7 +32,8 @@ import {
   julianDateFromDate, dateFromJulianDate, moonLocalPosition, circularOrbitAngle,
   orbitalPeriodDaysFromSemiMajorAxisAu,
 } from './core/orbital-elements.js';
-import { compressSize } from './core/scale.js';
+import { compressSize, apparentAngularRadiusRad, SUN_SIZE_CAP } from './core/scale.js';
+import { KM_PER_AU } from './core/units.js';
 import { getBodyState, sunBodyState } from './core/ephemeris.js';
 import { PLANETS, PLANET_ORDER, SUN } from './data/planets.js';
 import { MOONS, MOON_ORDER } from './data/moons.js';
@@ -308,6 +309,53 @@ function updateAllPositions(currentDate) {
   const plutoSceneRadius = compressSize(plutoData.radiusKm);
   const charonLocalPos = moonLocalPosition(CHARON, plutoData.radiusKm, plutoSceneRadius, currentJD, startJD);
   charonMesh.position.set(charonLocalPos.x, charonLocalPos.y, charonLocalPos.z);
+}
+
+// v1.3 — Surface Mode true angular size for the Sun and the current planet's
+// moon(s). See docs/accuracy.md's "Surface Mode sky realism" note: the
+// compression curves in core/scale.js are tuned for the top-down overview,
+// not "look up from ground level" — left alone the Moon would fill ~half the
+// sky. compressPosition/compressMoonOrbit preserve DIRECTION, only compress
+// MAGNITUDE, so the positions updateAllPositions() already set this frame
+// already point the correct real-world direction — only each proxy's
+// distance-from-camera and render scale need overriding, using each body's
+// real (uncompressed) radius/distance. Called right after updateAllPositions().
+const SKY_PROXY_DISTANCE = 2900; // inside the star shell (3000), well outside every real compressed body (starfield.js: all under 200 scene units)
+const BAKED_SUN_RADIUS = Math.min(compressSize(SUN.radiusKm), SUN_SIZE_CAP); // matches bodies.js#buildSun's geometry exactly
+function applySurfaceSkyProxies() {
+  const surfacePlanet = cameraState.mode === CAMERA_MODES.SURFACE_FIRST_PERSON ? cameraState.surface.planet : null;
+
+  if (surfacePlanet) {
+    const sunDistanceKm = PLANETS[surfacePlanet].elements.a * KM_PER_AU;
+    const angularRadiusRad = apparentAngularRadiusRad(SUN.radiusKm, sunDistanceKm);
+    const planetPos = scenePositions[surfacePlanet];
+    const dir = new THREE.Vector3(planetPos.x, planetPos.y, planetPos.z).normalize().negate();
+    sunMesh.position.copy(dir).multiplyScalar(SKY_PROXY_DISTANCE);
+    sunMesh.scale.setScalar((SKY_PROXY_DISTANCE * Math.tan(angularRadiusRad)) / BAKED_SUN_RADIUS);
+  } else {
+    sunMesh.position.set(0, 0, 0);
+    sunMesh.scale.setScalar(1);
+  }
+
+  // Moons: reset every planet's moons to base scale first — undoes any
+  // leftover scale override from a previous Surface Mode visit (position
+  // self-corrects for free every frame via updateAllPositions's own
+  // unconditional moonLocalPosition call above, but nothing else ever
+  // resets mesh.scale, so scale needs an explicit reset here).
+  for (const key of PLANET_ORDER) {
+    for (const { mesh } of moonMeshesByParent[key]) {
+      mesh.scale.setScalar(1);
+    }
+  }
+  if (surfacePlanet) {
+    for (const { mesh, moonData } of moonMeshesByParent[surfacePlanet]) {
+      const angularRadiusRad = apparentAngularRadiusRad(moonData.radiusKm, moonData.orbitKm);
+      const dir = mesh.position.clone().normalize();
+      const bakedMoonRadius = compressSize(moonData.radiusKm);
+      mesh.position.copy(dir).multiplyScalar(SKY_PROXY_DISTANCE);
+      mesh.scale.setScalar((SKY_PROXY_DISTANCE * Math.tan(angularRadiusRad)) / bakedMoonRadius);
+    }
+  }
 }
 
 /** MOONS/CHARON keyed lookup + display name + parent name for the HUD's
@@ -586,6 +634,7 @@ function animate() {
 
   timeState = tick(timeState, delta);
   updateAllPositions(timeState.currentDate);
+  applySurfaceSkyProxies();
   timeUI.setCurrentDateDisplay(timeState.currentDate);
   ephemerisHud.update(timeState.currentDate, bodyDisplayName(selectedBodyKey), bodyStates[selectedBodyKey] ?? null, moonHudInfo(selectedBodyKey)?.parentName ?? null);
 

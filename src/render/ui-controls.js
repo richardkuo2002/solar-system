@@ -151,6 +151,17 @@ export function createSurfaceControlsUI(container, planetKeys, onGo, initial = {
   });
 
   panel.append(planetSelect, latInput, lonInput, goBtn);
+
+  // v1.3 — investigated a user report that fast time speeds feel dizzying
+  // in Surface Mode: it's correct behavior, not a bug (the default 1 d/s
+  // already means ~1 rotation/second for Earth; 365 d/s is 366/second).
+  // A hint, not an auto-override — silently overriding a speed the user
+  // explicitly chose would be worse than the tradeoff it's explaining.
+  const speedHint = document.createElement('small');
+  speedHint.className = 'surface-controls-hint';
+  speedHint.textContent = 'Tip: lower the time speed (e.g. 0.1 d/s) to watch the sky move smoothly.';
+  panel.appendChild(speedHint);
+
   container.appendChild(panel);
 
   return {

@@ -90,15 +90,54 @@ export function equatorialToEcliptic(v) {
  * is already folded into `lstDegValue` by the caller via lstDeg(jd, lonDeg)
  * — this function only needs latDeg + the combined LST.
  */
+// WGS-84 reference ellipsoid (Meeus Ch. 11) — deliberately NOT the same as
+// PLANETS.earth.radiusKm (the app's single mean radius, used everywhere
+// else for rendering/scale.js compression): geodetic-to-geocentric
+// conversion needs the real equatorial radius + flattening specifically,
+// a distinct concern from "one representative radius for a sphere".
+const EARTH_EQUATORIAL_RADIUS_KM = 6378.137;
+const WGS84_FLATTENING = 1 / 298.257223563;
+const ONE_MINUS_F = 1 - WGS84_FLATTENING;
+
+/**
+ * Observer's geocentric position vector, equatorial frame, AU — v1.3: now
+ * corrected for Earth's real oblateness (Meeus 11.1-11.2, WGS-84), not a
+ * sphere. Geodetic latitude in, geocentric latitude/radius handled
+ * internally; up to ~0.2deg from a spherical-Earth answer at mid
+ * latitudes (the number docs/accuracy.md already quoted as this mode's
+ * pre-v1.3 approximation scope).
+ */
 export function observerGeocentricPositionAu({ latDeg, elevationM = 0 }, lstDegValue) {
-  const rAu = (PLANETS.earth.radiusKm + elevationM / 1000) * AU_PER_KM;
   const latRad = latDeg * DEG_TO_RAD;
   const lstRad = lstDegValue * DEG_TO_RAD;
+  const elevationKm = elevationM / 1000;
+
+  const u = Math.atan(ONE_MINUS_F * Math.tan(latRad));
+  const rhoSinPhiPrime = ONE_MINUS_F * Math.sin(u) + (elevationKm / EARTH_EQUATORIAL_RADIUS_KM) * Math.sin(latRad);
+  const rhoCosPhiPrime = Math.cos(u) + (elevationKm / EARTH_EQUATORIAL_RADIUS_KM) * Math.cos(latRad);
+
+  const rXYKm = rhoCosPhiPrime * EARTH_EQUATORIAL_RADIUS_KM;
+  const rZKm = rhoSinPhiPrime * EARTH_EQUATORIAL_RADIUS_KM;
   return {
-    x: rAu * Math.cos(latRad) * Math.cos(lstRad),
-    y: rAu * Math.cos(latRad) * Math.sin(lstRad),
-    z: rAu * Math.sin(latRad),
+    x: rXYKm * Math.cos(lstRad) * AU_PER_KM,
+    y: rXYKm * Math.sin(lstRad) * AU_PER_KM,
+    z: rZKm * AU_PER_KM,
   };
+}
+
+// Bennett's atmospheric refraction formula (Meeus Ch. 16), true-altitude
+// form — the standard amateur-astronomy-precision approximation, valid to
+// h > -1deg or so, assuming 1010mbar/10degC (this project doesn't expose
+// pressure/temperature inputs, matching its "much better than nothing,
+// not observatory-grade" precision tier everywhere else). Returns 0 below
+// -1deg rather than extrapolating into the formula's singularity.
+const REFRACTION_MIN_ALT_DEG = -1;
+
+/** Atmospheric refraction, arcminutes, for a TRUE (geometric) altitude in degrees. */
+export function refractionArcmin(trueAltDeg) {
+  if (trueAltDeg < REFRACTION_MIN_ALT_DEG) return 0;
+  const h = trueAltDeg;
+  return 1.02 / Math.tan((h + 10.3 / (h + 5.11)) * DEG_TO_RAD);
 }
 
 /** Local hour angle H = LST - RA. Degrees, [0, 360). */

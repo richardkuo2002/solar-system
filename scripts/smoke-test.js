@@ -5,7 +5,7 @@ import {
   elementsAtDate, julianDateFromDate, dateFromJulianDate, circularOrbitAngle, moonLocalPosition,
   elementsVelocity, sampleOrbitPath, orbitalPeriodDaysFromSemiMajorAxisAu,
 } from '../src/core/orbital-elements.js';
-import { compressDistance, compressSize, compressPosition, compressMoonOrbit, SATURN_RING_OUTER_KM } from '../src/core/scale.js';
+import { compressDistance, compressSize, compressPosition, compressMoonOrbit, apparentAngularRadiusRad, SATURN_RING_OUTER_KM } from '../src/core/scale.js';
 import { PLANETS, PLANET_ORDER } from '../src/data/planets.js';
 import { MOONS, MOON_ORDER } from '../src/data/moons.js';
 import { COMETS, COMET_ORDER } from '../src/data/comets.js';
@@ -35,6 +35,7 @@ import { toExportableJson, toExportableCsv } from '../src/analysis/export.js';
 import {
   gmstDeg, eclipticToEquatorial, raDecFromEquatorial, observerGeocentricPositionAu,
   hourAngleDeg, altAzFromDecHa, OBLIQUITY_DEG, equatorialToEcliptic, unitVectorFromRaDec,
+  refractionArcmin,
 } from '../src/core/topocentric.js';
 import { J2000_JD } from '../src/core/orbital-elements.js';
 import { analyzeObserver, observeAt, OBSERVER_TARGETS } from '../src/analysis/observer.js';
@@ -218,6 +219,16 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
   assert.ok(titanUnclamped < ringOuterScene, 'sanity: unclamped Titan orbit really would fall inside the ring');
   const titanClamped = compressMoonOrbit(1221870, saturnRadiusKm, saturnSceneRadius, ringOuterScene * 1.05);
   assert.ok(titanClamped > ringOuterScene, 'Titan orbit must clear Saturn\'s ring once floored');
+}
+
+// scale: apparentAngularRadiusRad (v1.3) — the real Moon's angular radius
+// as seen from Earth is the well-known ~0.259deg (i.e. ~0.52deg angular
+// diameter), from its real radius/distance, independent of any
+// compression curve above.
+{
+  const moonAngularRadiusDeg = apparentAngularRadiusRad(1737.4, 384400) * (180 / Math.PI);
+  assert.ok(Math.abs(moonAngularRadiusDeg - 0.259) < 0.01,
+    `expected the Moon's real angular radius ~0.259deg, got ${moonAngularRadiusDeg}`);
 }
 
 // orbital-elements: circularOrbitAngle wraps to [0, 2*PI) and completes one
@@ -1080,13 +1091,42 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
   assert.ok(Math.abs(decDeg) < 1e-6);
 }
 
-// core/topocentric: observerGeocentricPositionAu at the equator, sea
-// level, LST=0 gives exactly {earthRadiusKm*AU_PER_KM, 0, 0}
+// core/topocentric: observerGeocentricPositionAu (v1.3, WGS-84 oblate
+// Earth) at the equator, sea level, LST=0 gives exactly
+// {equatorialRadiusKm*AU_PER_KM, 0, 0} — the real WGS-84 equatorial
+// radius (6378.137km), not the app's rendering-only mean radius
+// (PLANETS.earth.radiusKm, 6371km) the pre-v1.3 spherical model used.
 {
   const pos = observerGeocentricPositionAu({ latDeg: 0, elevationM: 0 }, 0);
-  const expectedRAu = PLANETS.earth.radiusKm / 149597870.7;
-  assert.ok(Math.abs(pos.x - expectedRAu) < 1e-12);
+  const expectedRAu = 6378.137 / 149597870.7;
+  assert.ok(Math.abs(pos.x - expectedRAu) < 1e-12, `expected equatorial radius, got x=${pos.x}`);
   assert.ok(Math.abs(pos.y) < 1e-12 && Math.abs(pos.z) < 1e-12);
+}
+
+// core/topocentric: observerGeocentricPositionAu at the pole (lat=90) —
+// u=atan(0.99664719*tan(90deg))=90deg, rhoSinPhiPrime=0.99664719,
+// rhoCosPhiPrime=0 — gives the WGS-84 POLAR radius (b = a*(1-f) =
+// 6356.752km), on the z-axis only, independent of LST (a pole has no
+// meaningful longitude).
+{
+  const pos = observerGeocentricPositionAu({ latDeg: 90, elevationM: 0 }, 123);
+  const expectedPolarRadiusKm = 6378.137 * (1 - 1 / 298.257223563);
+  const expectedZAu = expectedPolarRadiusKm / 149597870.7;
+  assert.ok(Math.abs(pos.z - expectedZAu) < 1e-9, `expected polar radius, got z=${pos.z}`);
+  assert.ok(Math.abs(pos.x) < 1e-9 && Math.abs(pos.y) < 1e-9, 'x/y must vanish at the pole');
+}
+
+// core/topocentric: refractionArcmin — 0 at zenith, Bennett's well-known
+// ~34' figure at the true-altitude horizon, and 0 (not extrapolated into
+// the formula's singularity) below -1deg.
+{
+  assert.ok(Math.abs(refractionArcmin(90)) < 0.01, `expected ~0' at zenith, got ${refractionArcmin(90)}'`);
+  // ~28.2' at h=0, not the more commonly quoted ~34' figure — that's
+  // Bennett's APPARENT-altitude form (different coefficients); this is the
+  // TRUE-altitude form (Meeus's 1.02/10.3/5.11 version), the one that maps
+  // in the direction this codebase actually needs (geometric -> apparent).
+  assert.ok(Math.abs(refractionArcmin(0) - 28.2) < 1, `expected ~28.2' at the horizon, got ${refractionArcmin(0)}'`);
+  assert.equal(refractionArcmin(-5), 0, 'clamped to 0 well below the horizon');
 }
 
 // core/topocentric: hourAngleDeg wraps correctly
@@ -1180,6 +1220,33 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
     `Sun transit at the Tropic of Cancer on the June solstice should be ~90deg (zenith), got ${transit.altDeg}`);
   assert.equal(result.reference.source, 'kepler', 'never horizons-live — see docs/accuracy.md, structurally unreachable here');
   assert.equal(result.solver.method, 'bisection');
+}
+
+// analysis/observer: real reference case (v1.3) — Kaohsiung (this app's
+// own Observer Mode default lat/lon), sunrise/sunset per timeanddate.com's
+// published table for 2026-03-20 local time: sunrise 06:02 (UTC+8 ->
+// 2026-03-19T22:02Z), sunset 18:09 (-> 2026-03-20T10:09Z). Each is checked
+// against the UTC calendar day that actually contains it (a UTC+8
+// location's local-evening event and the next local-morning event don't
+// share a UTC day, so this is two separate day-scans, not one). Tolerance
+// set by actually running this implementation (got ~26s and ~4s gaps) —
+// 3 minutes comfortably covers that with margin for this app's other
+// already-documented approximations (fixed obliquity, no nutation/
+// aberration, low-precision Kepler Sun position), not hand-assumed. Before
+// v1.3 (no refraction/oblateness), this same case was off by several
+// minutes — this test is what refraction/oblateness earn, not free.
+{
+  const kaohsiung = { latDeg: 22.6273, lonDeg: 120.3014, elevationM: 0 };
+  const riseDay = analyzeObserver({ target: 'sun', atUtc: '2026-03-19T00:00:00Z', ...kaohsiung });
+  const setDay = analyzeObserver({ target: 'sun', atUtc: '2026-03-20T00:00:00Z', ...kaohsiung });
+  const rise = riseDay.result.events.find((e) => e.event === 'rise');
+  const set = setDay.result.events.find((e) => e.event === 'set');
+  assert.ok(rise, 'expected a sunrise event');
+  assert.ok(set, 'expected a sunset event');
+  const riseGapSeconds = Math.abs(new Date(rise.epochUtc) - new Date('2026-03-19T22:02:00Z')) / 1000;
+  const setGapSeconds = Math.abs(new Date(set.epochUtc) - new Date('2026-03-20T10:09:00Z')) / 1000;
+  assert.ok(riseGapSeconds < 180, `sunrise should be within 3min of the published almanac time, got ${riseGapSeconds}s off`);
+  assert.ok(setGapSeconds < 180, `sunset should be within 3min of the published almanac time, got ${setGapSeconds}s off`);
 }
 
 // analysis/eclipse: real reference case — the 2022-11-08 total lunar
