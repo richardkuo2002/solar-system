@@ -6,7 +6,7 @@
 // Node-testable like core/.
 
 import { sub, dot, length } from '../core/vector3.js';
-import { getBodyState, sunBodyState } from '../core/ephemeris.js';
+import { getBodyState, sunBodyState, getLightTimeCorrectedState } from '../core/ephemeris.js';
 import { julianDateFromDate, moonHeliocentricPositionAu } from '../core/orbital-elements.js';
 import { createBodyState } from '../core/body-state.js';
 import { PLANETS } from '../data/planets.js';
@@ -35,8 +35,12 @@ export function illuminatedFraction(phaseAngleRadValue) {
 
 // The Moon has no `elements`/Horizons entry (see docs/accuracy.md) — its
 // body-state is synthesized here from the same moonHeliocentricPositionAu
-// approximation the shared groundwork added, not from getBodyState.
-function targetStateFor(targetKey, jsDate, forceSource) {
+// approximation the shared groundwork added, not from getBodyState. Not
+// light-time corrected — the Moon's ~1.3s light-time is below this
+// project's precision tier, same scope decision as analysis/observer.js.
+// `earthPositionAu` (heliocentric) is the light-time observer proxy for
+// the planet branch (v1.7) — unused for the Moon branch.
+function targetStateFor(targetKey, jsDate, forceSource, earthPositionAu) {
   if (targetKey === 'moon') {
     const earthState = getBodyState('earth', jsDate, PLANETS.earth.elements, { forceSource: 'kepler' });
     const currentJD = julianDateFromDate(jsDate);
@@ -48,7 +52,7 @@ function targetStateFor(targetKey, jsDate, forceSource) {
       validity: { startUtc: null, endUtc: null, note: 'Approximate — see docs/accuracy.md' },
     });
   }
-  return getBodyState(targetKey, jsDate, PLANETS[targetKey].elements, { forceSource });
+  return getLightTimeCorrectedState(targetKey, jsDate, PLANETS[targetKey].elements, earthPositionAu, { forceSource });
 }
 
 function forceSourceFor(ephemerisSource) {
@@ -77,8 +81,8 @@ export function analyzePhaseIllumination({ target, atUtc, ephemerisSource = 'kep
   }
 
   const forceSource = forceSourceFor(ephemerisSource);
-  const targetState = targetStateFor(target, jsDate, forceSource);
   const earthState = getBodyState('earth', jsDate, PLANETS.earth.elements, { forceSource: target === 'moon' ? 'kepler' : forceSource });
+  const targetState = targetStateFor(target, jsDate, forceSource, earthState.positionAu);
   const sunState = sunBodyState(jsDate);
 
   const phaseRad = phaseAngleRad(targetState, earthState, sunState);
@@ -115,8 +119,8 @@ export function samplePhaseSeries(target, startUtc, endUtc, intervalHours, { eph
   const valueDeg = []; // illuminated fraction * 100, so the shared timeline chart's y-axis reads as a percentage
   for (let ms = startMs; ms <= endMs; ms += stepMs) {
     const jsDate = new Date(ms);
-    const targetState = targetStateFor(target, jsDate, forceSource);
     const earthState = getBodyState('earth', jsDate, PLANETS.earth.elements, { forceSource: target === 'moon' ? 'kepler' : forceSource });
+    const targetState = targetStateFor(target, jsDate, forceSource, earthState.positionAu);
     const sunState = sunBodyState(jsDate);
     timesJd.push(julianDateFromDate(jsDate));
     valueDeg.push(illuminatedFraction(phaseAngleRad(targetState, earthState, sunState)) * 100);

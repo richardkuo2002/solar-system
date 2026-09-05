@@ -41,10 +41,15 @@ returned.
 
 - No planetary perturbations (no N-body gravity between planets) — pure
   two-body Kepler orbits around the Sun.
-- No light-time correction to the target, no relativistic correction.
-  (Observer Mode does model the observer-motion half of the apparent
-  displacement — annual aberration, v1.6 — but the light-travel-time
-  offset of the target's own position remains unmodeled everywhere.)
+- No relativistic correction (light deflection near the Sun's limb).
+  Light-time correction to the target (the light-travel-time offset of
+  the target's own position) is modeled as of v1.7 for Observer Mode,
+  Planetary Appulse, Phase/Illumination, and Retrograde's refined
+  stationary-point epochs (`core/ephemeris.js#getLightTimeCorrectedState`)
+  — see "Nutation + annual aberration" / light-time in the Observer Mode
+  section below for the exact scope and what's still excluded (elongation
+  extrema, the lunar-eclipse path, and every dense-scan chart's raw
+  apparent-path plot).
 - Comets and dwarf planets use the *same* low-precision element
   propagation as planets, even though the Standish table was fit to the 8
   major planets — treat comet/dwarf-planet positions as illustrative, not
@@ -119,12 +124,15 @@ hardcoded; verified against Jupiter's real 2022 retrograde loop, station
 dates matching published tables to ~2.5 hours, see
 `scripts/smoke-test.js`) over a
 user-chosen date range, and finds where its rate of change crosses zero
-(stationary points) to locate the retrograde interval between them. This is
-a **geometric** longitude, not a light-time-corrected apparent/visual
-position — consistent with the "no light-time correction" limitation
-already noted above, so it should not be read as exactly what an observer
-would see through a telescope at that instant, though the offset is small
-relative to the multi-week timescale of a retrograde loop.
+(stationary points) to locate the retrograde interval between them. The
+**refined stationary-point epochs** (`result.start`/`result.end`) are
+light-time corrected as of v1.7 (a slowly-varying term in λ that shifts
+where dλ/dt crosses zero, by seconds — sharpens the epoch, never changes
+which coarse bracket it's found in). The **coarse scan and chart series**
+(the apparent-path plot, `series.xAu`/`yAu`) stay uncorrected geometric
+longitude, so the chart itself should not be read as exactly what an
+observer would see through a telescope at any given instant, though the
+offset is small relative to the multi-week timescale of a retrograde loop.
 
 The dense scan this requires (hundreds of body-state lookups across a
 multi-month range) always uses Kepler propagation internally, regardless of
@@ -297,12 +305,32 @@ requirement to state the topocentric model's scope.
   the Sun's true longitude threaded in" — that was wrong; the velocity
   form needs no such plumbing. Observer Mode's output frame is now the
   standard **apparent place** (`TOPOCENTRIC_EQUATORIAL_APPARENT`).
+- **Light-time correction (v1.7: modeled).** `getLightTimeCorrectedState`
+  (`src/core/ephemeris.js`) evaluates the target not "now" but at the
+  retarded epoch its light left, given the distance implied by 2 fixed
+  Newton-style iterations (converges to sub-second accuracy for every
+  body in this app's range — Moon ~1.3s up to Neptune's ~4 light-hours;
+  a 3rd iteration changes nothing measurable). Applied in
+  `geocentricEquatorialAu` (Observer Mode's target-position fetch) using
+  Earth's heliocentric position as the observer proxy — a distinct effect
+  from annual aberration above (light-time corrects for the TARGET's
+  motion since it emitted the light; aberration corrects for the
+  OBSERVER's motion while receiving it — both apply, neither substitutes
+  for the other). Also applied to `analysis/appulse.js` (differential
+  light-time between two planets matters for a sub-degree separation
+  minimum), `analysis/phase.js`, and `analysis/retrograde.js`'s
+  stationary-point epochs. NOT applied to the Sun (fixed at this frame's
+  origin — retarding it is a no-op) or the Moon (~1.3s, below both the
+  60s solver tolerance and the lunar theory's own ~10″ budget), nor to
+  `analysis/opposition.js`/`elongation-events.js` (elongation extrema
+  shift by arcseconds, below their solver tolerance) or the lunar-eclipse
+  path in `eclipse.js` (same Moon reasoning).
 - **Still not modeled** (below this precision tier; add if Observer Mode
   ever claims sub-arcsecond): full IAU 1980 106-term nutation
   (abbreviated series is ~0.5″ worst-case off), date-dependent mean
   obliquity (<0.01″ inside a 17″ rotation), barycentric-vs-heliocentric
-  Earth velocity (~0.04″), light-time to the target, relativistic light
-  deflection (~0.004″ away from the Sun's limb).
+  Earth velocity (~0.04″), relativistic light deflection (~0.004″ away
+  from the Sun's limb).
 - **Rise/transit/set** reuses the exact same `findStationaryPoints`
   coarse-scan-then-bisect solver v0.4/v0.5 already use (10-minute coarse
   sampling across the UTC calendar day, 60-second bisection tolerance) —
@@ -450,7 +478,11 @@ between the two chosen planets in the date range and reports it — no
 Conjunction event type already reports every crossing regardless of size.
 Reference-case test: the 2020-12-21 Jupiter-Saturn "Great Conjunction"
 (closest since 1623), separation reproduced to ≈0.0001° of the real
-≈0.1°.
+≈0.1°. **v1.7**: the two planets' positions are now light-time corrected
+(`getLightTimeCorrectedState`) — their differential light-time (e.g.
+Jupiter vs. Saturn differ by ~0.1 day near opposition) is exactly what a
+sub-degree separation minimum is sensitive to, unlike opposition/
+conjunction's arcsecond-level elongation shift.
 
 ## Lunar Occultations (v1.4)
 
@@ -475,6 +507,30 @@ ephemeris with zero new data files.
   occultation of Venus, visible from Japan — reproduced timing within a
   few minutes of the real ~04:40–05:59 UTC visibility window reported by
   in-the-sky.org.
+
+## Moon Conjunction (v1.7)
+
+The general phenomenon Lunar Occultations above is the special case of:
+how close a planet gets to the Moon in the sky, for a specific observer
+(`analysis/moon-conjunction.js`). Deliberately **topocentric**, not
+geocentric like Planetary Appulse — the Moon's own parallax (~1-2°, per
+Lunar Occultations above) is *larger* than many of the separations this
+event type reports, so a geocentric Moon-planet "conjunction of 0.3°"
+could really be 1.3° or more for an actual observer; Planetary Appulse's
+geocentric math would misreport this in a way it doesn't for planet-
+planet pairs (whose mutual parallax from Earth is negligible by
+comparison). Reuses `analysis/observer.js#observeAt` for both bodies and
+`analysis/eclipse.js#angularSeparationDeg` for their separation — no new
+position or solver plumbing, same minimum-finding technique as Planetary
+Appulse and Lunar Occultation. Every local minimum is reported (no
+"counts as a conjunction" threshold), each flagged `wouldOccult: true`
+when the two disks actually overlap (i.e. also a Lunar Occultation event
+— see that section for full per-observer eclipse-style circumstances).
+Reference-case tests: the same 2021-11-08 Moon-Venus occultation Lunar
+Occultations tests (confirms `wouldOccult: true` on a known-real
+occultation), and the 2022-05-27 Moon-Venus conjunction (in-the-sky.org:
+Moon passes 12′/0.2° south of Venus at the geocentric RA-match moment,
+visible from Tehran at dawn).
 
 ## Known limitations (plain language)
 

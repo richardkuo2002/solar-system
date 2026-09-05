@@ -160,15 +160,29 @@ type, and one shared results/chart layout renders whichever is selected.
   Venus visible from Japan. See
   [docs/accuracy.md](docs/accuracy.md#lunar-occultations-v14) for why
   limb-grazing events aren't resolvable at this model's precision.
+- **Moon Conjunction** (v1.7) — the general case Lunar Occultation is the
+  special case of: how close a planet gets to the Moon in a specific
+  observer's sky, topocentric (not geocentric like Planetary Appulse,
+  since the Moon's own parallax is larger than many of the separations
+  reported here). Every closest approach is flagged if it's also close
+  enough to be an occultation. Tested against the same real 2021-11-08
+  occultation of Venus plus the real 2022-05-27 Moon-Venus conjunction.
 - **Export** — every event result can be saved as JSON or CSV via the
   panel's Export buttons, with full reproducibility metadata (event type,
   target, observer, frame/center/source, inputs, solver method/tolerance);
-  the dense per-sample chart data is intentionally not included.
-- **Limitations** — geometric quantities only, no light-time correction;
-  the apparent-path view plots raw AU coordinates, not a sky-projected
-  RA/Dec view; results outside the Standish table's ~1800–2050 validity
-  window are increasingly approximate; every dense scan always uses Kepler
-  propagation internally regardless of the source dropdown (see
+  the dense per-sample chart data is intentionally not included. Each
+  visible chart can also be saved as a PNG (v1.7) via its own Download
+  button.
+- **Limitations** — geometric quantities only; light-time correction to
+  the target is modeled for Observer Mode, Planetary Appulse, Phase/
+  Illumination, and Retrograde's refined epochs (v1.7), but not for
+  Opposition/Conjunction, Greatest Elongation, or eclipses/transits/
+  occultations' dense scans (arcsecond-level effect, below their solver
+  tolerance — see [docs/accuracy.md](docs/accuracy.md)); the apparent-path
+  view plots raw AU coordinates, not a sky-projected RA/Dec view; results
+  outside the Standish table's ~1800–2050 validity window are increasingly
+  approximate; every dense scan always uses Kepler propagation internally
+  regardless of the source dropdown (see
   [docs/accuracy.md](docs/accuracy.md) for why).
 
 ## Observer Mode (v0.6)
@@ -192,9 +206,10 @@ and click Observe:
   Earth model as of v1.3, not a sphere). Rise/set now accounts for
   **atmospheric refraction** (Bennett's formula, v1.3) on top of the
   geometric altitude. RA/Dec is a full **apparent place** — real IAU
-  precession (v1.5) plus nutation and annual aberration (v1.6), reported
-  in the true equinox of date; every approximation, and the ones now
-  modeled, is documented in
+  precession (v1.5), nutation and annual aberration (v1.6), and now
+  light-time correction to the target (v1.7), reported in the true
+  equinox of date; every approximation, and the ones now modeled, is
+  documented in
   [docs/accuracy.md](docs/accuracy.md#observer-mode-v06).
 
 ## Planet Info Panel (v0.7)
@@ -250,9 +265,11 @@ before with zero extra UI.
 - Tapping a body to select it (Planet Info Panel) now works on touch too
   — previously it silently did nothing, since selection was wired only to
   mouse-hover state.
-- **Known limits**: Free-flight's vertical (Q/E) movement has no touch
-  control; a touchscreen laptop with a mouse as its primary pointer won't
-  show the touch UI even though touch works.
+- **Free-flight vertical movement** (v1.7) — bottom-right ▲/▼ buttons are
+  Q/E's touch equivalent, press-and-hold (not tap) since vertical motion
+  is continuous, closing what had been a known gap since v0.10.
+- **Known limits**: a touchscreen laptop with a mouse as its primary
+  pointer won't show the touch UI even though touch works.
 
 ## Data sources
 

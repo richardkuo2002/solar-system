@@ -133,6 +133,35 @@ export function createTouchControls(container, canvas, cameraRig) {
   canvas.addEventListener('touchend', endLookTouch, { passive: true });
   canvas.addEventListener('touchcancel', endLookTouch, { passive: true });
 
+  // --- Vertical up/down buttons (v1.7 — Free-flight's Q/E touch equivalent,
+  // closing the one documented v0.10 gap). Press-and-hold, not a discrete
+  // tap like the cycle buttons below: vertical movement is continuous, so
+  // touchstart sets the accumulator and touchend/touchcancel clears it,
+  // mirroring the joystick's press-while-held model rather than the
+  // cycle-buttons' one-shot click model. Shown only in Free-flight — not
+  // Surface (also in MOVE_MODES), where "vertical" has no meaning. ---
+  const verticalButtons = document.createElement('div');
+  verticalButtons.className = 'touch-vertical-buttons';
+  const upBtn = document.createElement('button');
+  upBtn.textContent = '▲';
+  const downBtn = document.createElement('button');
+  downBtn.textContent = '▼';
+  verticalButtons.append(upBtn, downBtn);
+  verticalButtons.hidden = true;
+  container.appendChild(verticalButtons);
+
+  let upPressed = false;
+  let downPressed = false;
+  function updateVertical() {
+    cameraRig.setTouchVertical((upPressed ? 1 : 0) - (downPressed ? 1 : 0));
+  }
+  upBtn.addEventListener('touchstart', () => { upPressed = true; updateVertical(); }, { passive: true });
+  upBtn.addEventListener('touchend', () => { upPressed = false; updateVertical(); }, { passive: true });
+  upBtn.addEventListener('touchcancel', () => { upPressed = false; updateVertical(); }, { passive: true });
+  downBtn.addEventListener('touchstart', () => { downPressed = true; updateVertical(); }, { passive: true });
+  downBtn.addEventListener('touchend', () => { downPressed = false; updateVertical(); }, { passive: true });
+  downBtn.addEventListener('touchcancel', () => { downPressed = false; updateVertical(); }, { passive: true });
+
   // --- Prev/Next buttons (Geocentric's WASD-cycle equivalent) ---
   const cycleButtons = document.createElement('div');
   cycleButtons.className = 'touch-cycle-buttons';
@@ -150,8 +179,14 @@ export function createTouchControls(container, canvas, cameraRig) {
     setMode(mode) {
       currentMode = mode;
       joystickBase.hidden = !MOVE_MODES.has(mode);
+      verticalButtons.hidden = mode !== CAMERA_MODES.FREE_FLIGHT;
       cycleButtons.hidden = mode !== CAMERA_MODES.GEOCENTRIC;
       if (!MOVE_MODES.has(mode)) resetJoystick();
+      if (mode !== CAMERA_MODES.FREE_FLIGHT) {
+        upPressed = false;
+        downPressed = false;
+        cameraRig.setTouchVertical(0);
+      }
       // Don't fight a live drag mid-switch, just stop recognizing new ones.
       if (!LOOK_MODES.has(mode)) lookTouchId = null;
     },
