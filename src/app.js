@@ -24,7 +24,7 @@ import { createBodyInfoPanel } from './render/body-info-panel.js';
 import { createLineOfSightLine } from './render/retrograde-los-line.js';
 import { analyzeObserver } from './analysis/observer.js';
 import {
-  createTimeController, tick, togglePlayPause, setSpeed, reverse, jumpToDate,
+  createTimeController, tick, togglePlayPause, setSpeed, reverse, jumpToDate, pause,
 } from './core/time-controller.js';
 import { createCameraState, setMode, setFocusBody, enterGeocentric, computePose, CAMERA_MODES } from './core/camera-modes.js';
 import { encodeAppStateToParams, decodeAppStateFromParams } from './core/url-state.js';
@@ -516,7 +516,17 @@ const urlRestored = decodeAppStateFromParams(new URLSearchParams(window.location
 // back to a safe {0,0,0} for an unknown body).
 const restoredSurfacePlanet = PLANET_ORDER.includes(urlRestored.planet) ? urlRestored.planet : 'earth';
 
-let timeState = createTimeController({ startDate: urlRestored.date ?? new Date(), speedDaysPerSecond: 1 });
+// v1.7 follow-up: the simulated clock now STARTS at true real time (1
+// simulated second per real second), not the previous 1 simulated DAY per
+// real second (~86400x) default — "the timeline should basically be real
+// time." The speed dropdown (render/ui-controls.js's SPEED_OPTIONS,
+// labeled in days/second) is deliberately left untouched this round; a
+// real-time-anchored multiplier ladder (1x/10x/60x/...) replacing it is a
+// separate, larger follow-up. Until then, its initially-highlighted
+// "1 d/s" option doesn't reflect this starting speed — only picking a
+// preset actually changes speedDaysPerSecond.
+const REAL_TIME_DAYS_PER_SECOND = 1 / 86400;
+let timeState = createTimeController({ startDate: urlRestored.date ?? new Date(), speedDaysPerSecond: REAL_TIME_DAYS_PER_SECOND });
 timeState.playing = true; // starts running so the "faster inner planets" effect is visible immediately
 
 const timeUI = createTimeControlsUI(document.getElementById('ui-root'), {
@@ -606,20 +616,24 @@ const observerPanel = createObserverPanel(document.getElementById('ui-root'), {
 // Event Toolkit (v0.5, replaces v0.4's single-purpose Retrograde Lab) —
 // visual block 1 (line-of-sight) lives in the main scene (see
 // render/retrograde-los-line.js's docstring for why there's no second
-// camera/viewport). Follows the live simulation clock's Earth/target
-// positions each frame by default; scrubbing a lab's timeline instead
-// freezes it at the scrubbed epoch until the next Analyze run. Only one
-// lab can be scrubbing at a time, so one shared override variable covers
-// every event type — `activeTargetKey` tracks which body the currently
-// displayed result is about (set on every successful analysis).
+// camera/viewport). `activeTargetKey` tracks which body the currently
+// displayed result is about (set on every successful analysis) so the
+// per-frame line-of-sight update below knows which scenePositions entry
+// to draw to.
+//
+// v1.7: scrubbing a lab's chart now pauses AND jumps the actual simulated
+// clock (`timeState`) to the scrubbed epoch, staying there after the drag
+// ends — not a separate line-of-sight-only override like pre-v1.7. Once
+// the master clock itself is at the scrubbed date, `scenePositions` (filled
+// every frame from `timeState.currentDate`) already reflects it directly,
+// so the line-of-sight line below just reads scenePositions like normal —
+// no second position source to keep in sync.
 const lineOfSight = createLineOfSightLine(scene);
-let scrubOverrideScenePositions = null; // {earth, [activeTargetKey]} or null (= follow live time)
 let activeTargetKey = 'mars';
 
 createEventToolkitPanel(document.getElementById('ui-root'), {
   onAnalyzed(result, targetKey) {
     activeTargetKey = targetKey;
-    scrubOverrideScenePositions = null;
     // Phase/illumination's 'moon' target has no heliocentric-AU scenePositions
     // entry (moons are parent-relative scene positions only, see
     // core/orbital-elements.js) — the shared line-of-sight visual only
@@ -627,14 +641,10 @@ createEventToolkitPanel(document.getElementById('ui-root'), {
     lineOfSight.line.visible = targetKey in scenePositions;
   },
   onCursorChange(cursorJd) {
-    if (!(activeTargetKey in PLANETS)) return; // e.g. 'moon' — nothing to scrub the line-of-sight visual to
-    const jsDate = dateFromJulianDate(cursorJd);
-    const earthState = getBodyState('earth', jsDate, PLANETS.earth.elements, { forceSource: 'kepler' });
-    const targetState = getBodyState(activeTargetKey, jsDate, PLANETS[activeTargetKey].elements, { forceSource: 'kepler' });
-    scrubOverrideScenePositions = {
-      earth: toScenePosition(earthState.positionAu),
-      [activeTargetKey]: toScenePosition(targetState.positionAu),
-    };
+    timeState = jumpToDate(pause(timeState), dateFromJulianDate(cursorJd));
+    updateAllPositions(timeState.currentDate);
+    timeUI.setPlayPauseLabel(timeState.playing);
+    timeUI.setCurrentDateDisplay(timeState.currentDate);
   },
 });
 
@@ -694,11 +704,7 @@ function animate() {
   ephemerisHud.update(timeState.currentDate, bodyDisplayName(selectedBodyKey), bodyStates[selectedBodyKey] ?? null, moonHudInfo(selectedBodyKey)?.parentName ?? null);
 
   if (activeTargetKey in scenePositions) {
-    if (scrubOverrideScenePositions) {
-      lineOfSight.update(scrubOverrideScenePositions.earth, scrubOverrideScenePositions[activeTargetKey]);
-    } else {
-      lineOfSight.update(scenePositions.earth, scenePositions[activeTargetKey]);
-    }
+    lineOfSight.update(scenePositions.earth, scenePositions[activeTargetKey]);
   }
 
   if (cameraState.mode === CAMERA_MODES.FREE_FLIGHT) {

@@ -5,6 +5,19 @@ All notable changes to this project. Format loosely follows
 milestones in `docs/ROADMAP.md` (local-only), with each version's exact
 scope and accuracy notes in [docs/accuracy.md](docs/accuracy.md).
 
+## v1.8 — 2026-09-05
+
+- **Event Toolkit scrub now locks the whole scene, not just the
+  line-of-sight line** — dragging a result's chart scrubber pauses the
+  main simulated clock and jumps every planet/camera-relevant position to
+  the scrubbed epoch, staying there after release. Previously only the
+  line-of-sight visual froze while the rest of the scene kept advancing on
+  the live clock, so the two could visibly disagree.
+- **Simulated clock now starts at true real time** (1 simulated second
+  per real second), not the previous default of 1 simulated day per real
+  second (~86400x). The speed dropdown's presets are unchanged; a
+  real-time-anchored multiplier ladder is a separate future follow-up.
+
 ## v1.7 — 2026-09-05
 
 - **Light-time correction** — Observer Mode, Planetary Appulse, Phase/
