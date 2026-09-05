@@ -80,7 +80,14 @@ const TARGETS = {
   '2k_saturn_ring_alpha.png': { body: 'saturn', role: 'ring', candidates: [SSS + '2k_saturn_ring_alpha.png'], ...SSS_LICENSE },
   '2k_uranus.jpg': { body: 'uranus', role: 'albedo', candidates: [SSS + '2k_uranus.jpg'], ...SSS_LICENSE },
   '2k_neptune.jpg': { body: 'neptune', role: 'albedo', candidates: [SSS + '2k_neptune.jpg'], ...SSS_LICENSE },
-  '2k_stars_milky_way.jpg': { body: 'starfield', role: 'skybox', candidates: [SSS + '2k_stars_milky_way.jpg'], ...SSS_LICENSE },
+  // 8K, not 2K: this is the sky-sphere background layer now (see
+  // src/render/scene-setup.js#createMilkyWaySkySphere) — individual stars
+  // are a separate procedural THREE.Points layer (src/render/starfield.js),
+  // so this file only needs to look sharp for the diffuse galactic
+  // band/dust lanes, which the 2K version visibly didn't at full-screen
+  // zoom. Same host/license as everything else here (confirmed a real
+  // 8192x4096 JPEG at this URL, not a redirect/404 page, before switching).
+  '8k_stars_milky_way.jpg': { body: 'starfield', role: 'skybox', candidates: [SSS + '8k_stars_milky_way.jpg'], ...SSS_LICENSE },
   'io.jpg': { body: 'io', role: 'albedo', candidates: [SA + 'jupiter/io/io_rgb_cyl.jpg'], ...SA_LICENSE },
   'europa.png': { body: 'europa', role: 'albedo', candidates: [SA + 'jupiter/europa/europa_rgb_cyl_juno.png', SA + 'jupiter/europa/europa_rgb_cyl.jpg'], ...SA_LICENSE },
   'ganymede.jpg': { body: 'ganymede', role: 'albedo', candidates: [SA + 'jupiter/ganymede/ganymede_4k.jpg', SA + 'jupiter/ganymede/ganymede_rgb_cyl.jpg'], ...SA_LICENSE },

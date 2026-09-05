@@ -153,16 +153,16 @@
     "originalFilename": "2k_neptune.jpg",
     "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp."
   },
-  "2k_stars_milky_way.jpg": {
+  "8k_stars_milky_way.jpg": {
     "body": "starfield",
     "role": "skybox",
-    "sourceUrl": "https://www.solarsystemscope.com/textures/download/2k_stars_milky_way.jpg",
+    "sourceUrl": "https://www.solarsystemscope.com/textures/download/8k_stars_milky_way.jpg",
     "source": "Solar System Scope",
     "license": "CC BY 4.0",
     "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
     "credit": "Solar System Scope (solarsystemscope.com)",
-    "originalFilename": "2k_stars_milky_way.jpg",
-    "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp."
+    "originalFilename": "8k_stars_milky_way.jpg",
+    "modified": "Downloaded via scripts/fetch-textures.mjs; 512px preview generated with sharp but unused — scene-setup.js loads the full file directly (see ATTRIBUTION.md)."
   },
   "io.jpg": {
     "body": "io",
