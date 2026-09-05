@@ -80,7 +80,13 @@ Horizons parsing/fallback logic directly under Node:
 
 ```bash
 npm test
+npm run lint   # ESLint, recommended ruleset (v0.9)
 ```
+
+Both run automatically on every push/PR via GitHub Actions
+(`.github/workflows/ci.yml`); a separate workflow
+(`.github/workflows/deploy.yml`) deploys `main` to GitHub Pages the same
+way, gated on the same lint+test job passing first.
 
 ## Event Toolkit (v0.5)
 
