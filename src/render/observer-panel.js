@@ -8,6 +8,7 @@
 // color/font/padding values via a new `.observer-panel*` class prefix for
 // visual consistency, not the JS builder itself.
 import { drawAltitudeCurveCanvas } from './event-charts.js';
+import { makeCollapsible } from './collapsible-panel.js';
 
 const TARGET_OPTIONS = [
   { value: 'sun', label: 'Sun' },
@@ -89,6 +90,10 @@ export function createObserverPanel(container, { onObserve } = {}) {
   title.textContent = 'Observer Mode';
   panel.appendChild(title);
 
+  const body = document.createElement('div');
+  body.className = 'observer-panel-body';
+  panel.appendChild(body);
+
   const form = document.createElement('div');
   form.className = 'observer-panel-form';
 
@@ -148,21 +153,22 @@ export function createObserverPanel(container, { onObserve } = {}) {
     });
   });
   form.appendChild(observeBtn);
-  panel.appendChild(form);
-  panel.appendChild(errorText);
+  body.appendChild(form);
+  body.appendChild(errorText);
 
   const resultsText = document.createElement('pre');
   resultsText.className = 'observer-panel-results';
   resultsText.textContent = 'No observation run yet.';
-  panel.appendChild(resultsText);
+  body.appendChild(resultsText);
 
   const canvas = document.createElement('canvas');
   canvas.width = 272;
   canvas.height = 140;
   canvas.className = 'observer-panel-canvas';
-  panel.appendChild(canvas);
+  body.appendChild(canvas);
 
   container.appendChild(panel);
+  makeCollapsible(title, body);
 
   function setError(message) {
     errorText.hidden = !message;

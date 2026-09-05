@@ -4,6 +4,7 @@
 // createLabPanel builder (render/lab-panel.js) — adding a new event type
 // (Steps 2-3 of v0.5) means adding one more entry here, not a new DOM file.
 import { createLabPanel } from './lab-panel.js';
+import { makeCollapsible } from './collapsible-panel.js';
 import { analyzeMarsRetrograde } from '../analysis/retrograde.js';
 import { analyzeOppositionConjunction, OUTER_TARGETS } from '../analysis/opposition.js';
 import { analyzeGreatestElongation, analyzeInnerConjunction, INNER_TARGETS } from '../analysis/elongation-events.js';
@@ -268,6 +269,18 @@ export function createEventToolkitPanel(container, callbacks) {
   const wrapper = document.createElement('div');
   wrapper.className = 'event-toolkit';
 
+  // A dedicated top-level title, separate from each event type's own
+  // lab-panel title (which changes text per selected type) — this one is
+  // the collapse toggle for the whole toolkit, dropdown included.
+  const title = document.createElement('div');
+  title.className = 'event-toolkit-title';
+  title.textContent = 'Event Toolkit';
+  wrapper.appendChild(title);
+
+  const body = document.createElement('div');
+  body.className = 'event-toolkit-body';
+  wrapper.appendChild(body);
+
   const typeSelect = document.createElement('select');
   typeSelect.className = 'event-toolkit-type-select';
   for (const eventType of EVENT_TYPES) {
@@ -276,11 +289,12 @@ export function createEventToolkitPanel(container, callbacks) {
     option.textContent = eventType.label;
     typeSelect.appendChild(option);
   }
-  wrapper.appendChild(typeSelect);
+  body.appendChild(typeSelect);
 
   const panelMount = document.createElement('div');
-  wrapper.appendChild(panelMount);
+  body.appendChild(panelMount);
   container.appendChild(wrapper);
+  makeCollapsible(title, body);
 
   function mount(eventTypeKey) {
     panelMount.replaceChildren();

@@ -12,5 +12,12 @@
     "license": "BSD-3-Clause",
     "licenseUrl": "https://github.com/ofrohn/d3-celestial/blob/master/LICENSE",
     "credit": "Olaf Frohn, d3-celestial (https://github.com/ofrohn/d3-celestial)"
+  },
+  "constellations.json": {
+    "sourceUrl": "https://raw.githubusercontent.com/ofrohn/d3-celestial/master/data/constellations.json",
+    "source": "d3-celestial (ofrohn)",
+    "license": "BSD-3-Clause",
+    "licenseUrl": "https://github.com/ofrohn/d3-celestial/blob/master/LICENSE",
+    "credit": "Olaf Frohn, d3-celestial (https://github.com/ofrohn/d3-celestial)"
   }
 }

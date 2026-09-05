@@ -6,9 +6,11 @@
 // does not duplicate any of this).
 //
 // Source: ofrohn/d3-celestial (BSD-3-Clause) — stars.6.json (~9096 stars,
-// Hipparcos-numbered, mag<=6.5) and constellations.lines.json (88
+// Hipparcos-numbered, mag<=6.5), constellations.lines.json (88
 // constellations' traditional line figures, stored as literal [lon,lat]
-// coordinate pairs — no cross-catalog ID join needed).
+// coordinate pairs — no cross-catalog ID join needed), and
+// constellations.json (one named point per constellation, used for the
+// v1.2.1 name-label overlay).
 //
 // Safe to re-run: skips files already on disk unless --force is passed.
 //
@@ -35,6 +37,7 @@ const LICENSE = {
 const TARGETS = {
   'stars.6.json': BASE + 'stars.6.json',
   'constellations.lines.json': BASE + 'constellations.lines.json',
+  'constellations.json': BASE + 'constellations.json',
 };
 
 const MAX_BYTES = 5 * 1024 * 1024; // both files are ~1-2MB; reject anything wildly off

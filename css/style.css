@@ -144,6 +144,12 @@ html, body {
   font-weight: 600;
 }
 
+.observer-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .observer-panel-form {
   display: flex;
   flex-direction: column;
@@ -272,6 +278,21 @@ html, body {
   flex-direction: column;
   gap: 6px;
   width: 340px;
+}
+
+.event-toolkit-title {
+  padding: 8px 12px;
+  background: rgba(10, 10, 20, 0.75);
+  color: #eee;
+  border: 1px solid #444;
+  border-radius: 4px;
+  font: 600 13px system-ui, sans-serif;
+}
+
+.event-toolkit-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .event-toolkit-type-select {
@@ -433,4 +454,26 @@ html, body {
   border: 1px solid #444;
   border-radius: 4px;
   font: 12px system-ui, sans-serif;
+}
+
+.collapsible-title {
+  cursor: pointer;
+  user-select: none;
+}
+
+.constellation-labels {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1; /* under hover-label/panels, above the canvas */
+}
+
+.constellation-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  color: #7f93b8;
+  font: 11px system-ui, sans-serif;
+  letter-spacing: 0.5px;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.9);
+  white-space: nowrap;
 }
