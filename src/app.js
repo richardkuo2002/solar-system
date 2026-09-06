@@ -721,10 +721,20 @@ let activeTargetKey = 'mars';
 let analysisHasScenePosition = false;
 
 createEventToolkitPanel(document.getElementById('ui-root'), {
-  onAnalyzed(result, targetKey) {
+  // v1.10 — clicking Analyze now jumps the main clock straight to the
+  // result's first event epoch, the same pause+jump the scrubber already
+  // does (see the v1.7 comment above), instead of leaving the scene
+  // sitting at whatever date it was on before you ran the analysis.
+  onAnalyzed(result, targetKey, primaryEpochJd) {
     activeTargetKey = targetKey;
     analysisHasScenePosition = targetKey in scenePositions;
     analysisTargetMarker.setLabel(bodyDisplayName(targetKey));
+    if (primaryEpochJd != null) {
+      timeState = jumpToDate(pause(timeState), dateFromJulianDate(primaryEpochJd));
+      updateAllPositions(timeState.currentDate);
+      timeUI.setPlayPauseLabel(timeState.playing);
+      timeUI.setCurrentDateDisplay(timeState.currentDate);
+    }
   },
   onCursorChange(cursorJd) {
     timeState = jumpToDate(pause(timeState), dateFromJulianDate(cursorJd));

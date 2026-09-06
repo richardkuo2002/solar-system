@@ -112,10 +112,11 @@ way, gated on the same lint+test job passing first.
 The "Event Toolkit" panel (right column, below the ephemeris HUD) is the
 app's astronomical-phenomenon analysis tool — a dropdown picks the event
 type, and one shared results/chart layout renders whichever is selected.
-Dragging a result's chart scrubber (v1.8) pauses the main simulated clock
-and jumps the whole scene — not just the line-of-sight visual — to the
-scrubbed epoch, staying there after you release so you can inspect that
-exact moment; resume playback with the time-controls Play button. Each
+Clicking Analyze (v1.10) or dragging a result's chart scrubber (v1.8)
+pauses the main simulated clock and jumps the whole scene — not just the
+line-of-sight visual — to the event's epoch (or the scrubbed one),
+staying there after you release so you can inspect that exact moment;
+resume playback with the time-controls Play button. Each
 event type remembers its own last-used inputs across reloads via the
 browser's local storage (v1.9) — separate from, and not affected by, the
 URL Shareable State feature below.

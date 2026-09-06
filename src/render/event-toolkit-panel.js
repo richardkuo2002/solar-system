@@ -449,7 +449,7 @@ export const EVENT_TYPES = [
 /**
  * @param {HTMLElement} container
  * @param {object} callbacks
- * @param {(result:object, targetKey:string) => void} callbacks.onAnalyzed  fired after a successful analysis
+ * @param {(result:object, targetKey:string, primaryEpochJd:number|null) => void} callbacks.onAnalyzed  fired after a successful analysis; `primaryEpochJd` is the event type's first marker epoch (v1.10), or `null` if it found none
  * @param {(cursorJd:number) => void} [callbacks.onCursorChange]
  */
 export function createEventToolkitPanel(container, callbacks) {
@@ -504,7 +504,11 @@ export function createEventToolkitPanel(container, callbacks) {
         try {
           const result = eventType.analyze(params);
           labPanel.renderResult(result, result.series);
-          callbacks.onAnalyzed?.(result, eventType.resultTarget(result));
+          // v1.10 — pass the first marker epoch (if any) so app.js can jump
+          // the main simulated clock straight to it, the same way scrubbing
+          // already does, instead of leaving the scene sitting wherever it
+          // was before Analyze was clicked.
+          callbacks.onAnalyzed?.(result, eventType.resultTarget(result), eventType.getMarkers(result)[0] ?? null);
         } catch (err) {
           labPanel.setError(err.message);
         } finally {
