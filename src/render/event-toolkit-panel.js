@@ -14,6 +14,7 @@ import { analyzeTransit } from '../analysis/transit.js';
 import { analyzeAppulse, APPULSE_TARGETS } from '../analysis/appulse.js';
 import { analyzeLunarOccultation, OCCULTATION_TARGETS } from '../analysis/occultation.js';
 import { analyzeMoonConjunction, MOON_CONJUNCTION_TARGETS } from '../analysis/moon-conjunction.js';
+import { analyzeBestObservationNight, BEST_NIGHT_TARGETS } from '../analysis/best-night.js';
 
 const SOURCE_OPTIONS = [
   { value: 'auto', label: 'Auto' },
@@ -215,6 +216,25 @@ function formatOccultationResult(result) {
     }
   }
   lines.push('', 'Note: geometric approximation — spherical Moon/planet, no atmospheric refraction, no limb profile. Limb-grazing events are unresolvable at this model\'s precision. See docs/accuracy.md.');
+  return lines.join('\n');
+}
+
+function formatBestNightResult(result) {
+  const lines = [
+    `Target: ${capitalize(result.target)}  Source: ${result.reference.source}  Frame: ${result.reference.frame}`,
+    `Sampling: nightly × candidates found: ${result.result.events.length}`,
+    `Solver: ${result.solver.method}, status: ${result.solver.status}`,
+    '',
+  ];
+  if (result.result.events.length === 0) {
+    lines.push('No night in this range clears the visibility/darkness thresholds — try a different date range or location.');
+  } else {
+    for (const event of result.result.events) {
+      lines.push(`#${event.rank}  ${event.epochUtc.slice(0, 10)}  score ${event.score.toFixed(0)} (${event.classification})`);
+      lines.push(`  peak alt ${event.peakAltitudeDeg.toFixed(0)}°, distance ${event.distanceAu.toFixed(2)} AU, moon ${event.moonAboveHorizon ? `${(event.moonIlluminatedFraction * 100).toFixed(0)}% illuminated, above horizon` : 'below horizon'}`);
+    }
+  }
+  lines.push('', 'Note: a ranking heuristic (altitude + Earth-distance proxy + Moon interference), not a real limiting-magnitude/sky-brightness prediction — distance bounds are a circular-orbit approximation, Moon interference is evaluated only at the target\'s peak-altitude moment. See docs/accuracy.md.');
   return lines.join('\n');
 }
 
@@ -440,6 +460,26 @@ export const EVENT_TYPES = [
     chartKind: 'timeline',
     analyze: (params) => analyzeMoonConjunction(params),
     formatResult: formatMoonConjunctionResult,
+    getMarkers: (result) => result.result.events.map((e) => e.epochJd),
+    getHighlight: () => null,
+    resultTarget: (result) => result.target,
+  },
+  {
+    key: 'best-night',
+    label: 'Best Observation Night',
+    fixedText: 'Observer: a specific location on Earth\'s surface · Frame: Geocentric ECLIPJ2000',
+    fields: [
+      { key: 'target', type: 'select', label: 'Target', default: 'jupiter', options: BEST_NIGHT_TARGETS.map((t) => ({ value: t, label: capitalize(t) })) },
+      { key: 'startUtc', type: 'date', label: 'Start date', default: '2024-10-01' },
+      { key: 'endUtc', type: 'date', label: 'End date', default: '2024-12-01' },
+      { key: 'latDeg', type: 'number', label: 'Observer latitude (deg)', default: 35.6892, min: -90, max: 90 },
+      { key: 'lonDeg', type: 'number', label: 'Observer longitude (deg)', default: 51.3890, min: -180, max: 180 },
+      { key: 'elevationM', type: 'number', label: 'Observer elevation (m)', default: 0, min: 0 },
+    ],
+    analyzeLabel: 'Find best nights',
+    chartKind: 'timeline',
+    analyze: (params) => analyzeBestObservationNight(params),
+    formatResult: formatBestNightResult,
     getMarkers: (result) => result.result.events.map((e) => e.epochJd),
     getHighlight: () => null,
     resultTarget: (result) => result.target,

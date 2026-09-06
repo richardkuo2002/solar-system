@@ -5,6 +5,31 @@ All notable changes to this project. Format loosely follows
 milestones in `docs/ROADMAP.md` (local-only), with each version's exact
 scope and accuracy notes in [docs/accuracy.md](docs/accuracy.md).
 
+## v1.11 — 2026-09-06
+
+- **Best Observation Night Finder** — new Event Toolkit type: for a
+  planet and an observer location, scans a date range night-by-night and
+  ranks the top nights 0-100 from target altitude during real
+  astronomical darkness (Sun below -18°), an Earth-distance proxy (closer
+  = higher score, from orbit geometry — no real magnitude model exists in
+  this codebase), and Moon interference (illuminated fraction, only
+  counted while the Moon is actually above the horizon). A ranking
+  heuristic, not a photometric prediction — see
+  [docs/accuracy.md](docs/accuracy.md#best-observation-night-finder-v111).
+- Reuses the existing multi-event `formatResult`-as-text-list pattern and
+  `chartKind: 'timeline'` chart — no new panel/list UI, and no changes to
+  `lab-panel.js` at all, so v1.9's input persistence and v1.10's
+  jump-to-epoch-on-Analyze both apply to this event type automatically.
+- New pure `scoreNight` scoring function (unit-tested with synthetic
+  inputs) and a `MAX_NIGHTS_TO_SCAN` guard (3660 nights, ~10 years —
+  calibrated against a real timing measurement, same v1.8.5 precedent as
+  `lab-panel.js`'s `MAX_SAMPLES` guard) so an oversized range fails fast
+  instead of freezing.
+- `analysis/export.js`'s CSV export gained a `?? e.score` fallback so this
+  event type's scores show up in the exported CSV.
+
+`npm test`/`npm run lint` all pass.
+
 ## v1.10 — 2026-09-06
 
 - **Clicking Analyze now jumps the main scene's clock to the result**,

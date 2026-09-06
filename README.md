@@ -185,6 +185,15 @@ URL Shareable State feature below.
   reported here). Every closest approach is flagged if it's also close
   enough to be an occultation. Tested against the same real 2021-11-08
   occultation of Venus plus the real 2022-05-27 Moon-Venus conjunction.
+- **Best Observation Night Finder** (v1.11) — for a planet and an observer
+  location, scans a date range night-by-night and ranks the top nights
+  0-100 from three ingredients: how high the target gets during real
+  astronomical darkness (Sun below -18°), an Earth-distance proxy (closer
+  = brighter, from each planet's orbit geometry, not a real magnitude
+  model), and whether the Moon is up and bright enough to interfere. A
+  ranking heuristic, not a photometric prediction — see
+  [docs/accuracy.md](docs/accuracy.md#best-observation-night-finder-v111)
+  for every simplification.
 - **Export** — every event result can be saved as JSON or CSV via the
   panel's Export buttons, with full reproducibility metadata (event type,
   target, observer, frame/center/source, inputs, solver method/tolerance);

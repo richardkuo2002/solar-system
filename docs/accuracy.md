@@ -409,6 +409,57 @@ made eclipse detection meaningless). Simplifications, all deliberate:
   the syzygy-vs-shadow-axis simplification above — in practice contacts
   come back within a few minutes).
 
+## Best Observation Night Finder (v1.11)
+
+`src/analysis/best-night.js` ranks nights in a date range for observing a
+planet from a specific location — a heuristic scoring tool, not a
+photometric prediction (no magnitude/albedo/sky-brightness model exists
+anywhere in this codebase, nor is one added here). Simplifications, all
+deliberate:
+
+- **"Night" is a fixed UTC noon-to-noon window**, not the observer's real
+  local-timezone night — this app has no timezone lookup anywhere (lat/lon
+  + UTC only), and a noon-to-noon UTC window is guaranteed to contain any
+  local midnight regardless of longitude, so this is exact enough for
+  "which calendar night," even though the reported peak-altitude epoch's
+  clock time is in UTC, not local time.
+- **Fixed thresholds, not configurable**: astronomical darkness requires
+  the Sun's geometric altitude at or below -18° (standard convention, but
+  no other threshold — nautical -12°, civil -6° — is offered);
+  "observable" requires the target's apparent altitude at or above 15°.
+  Both are hardcoded constants, not exposed as Event Toolkit fields.
+- **Moon interference is evaluated only at the target's own peak-altitude
+  moment**, not integrated across the whole dark window — a target that
+  peaks while the Moon is below the horizon scores full darkness credit
+  even if the Moon rises brightly an hour later (or had just set an hour
+  earlier). A real sky-brightness model would integrate over the whole
+  observing window; this doesn't.
+- **Distance/brightness proxy uses circular-orbit bounds**
+  (`|aTarget - aEarth|` to `aTarget + aEarth`, from each planet's stored
+  semi-major axis), not each planet's real eccentric-orbit min/max
+  distance — a planet at a highly eccentric point in its orbit can score
+  slightly off from where a precise ephemeris-based distance bound would
+  place it.
+- **Score is a unitless 0-100 ranking number** — three weighted terms
+  (altitude 55, distance-closeness 25, Moon-darkness 20) added together,
+  not a derived apparent-magnitude or limiting-magnitude value. Two
+  targets' scores aren't meant to be compared to each other (a scored 70
+  for Saturn doesn't mean "as bright as" a scored 70 for Venus) — only
+  ranking one target's own candidate nights against each other is
+  meaningful.
+- **No test-against-real-almanac reference case** — unlike the eclipse/
+  transit tests (NASA/Espenak published times), no authoritative published
+  "best night to observe Jupiter" dataset exists to check against.
+  `scripts/smoke-test.js` instead checks structural invariants (`scoreNight`'s
+  scoring rules with synthetic inputs; a real short-range integration run's
+  results are sorted, bounded, and internally consistent) and cross-checks
+  against Jupiter's real 2024-12-07 opposition producing a non-empty,
+  high-scoring result for a range that spans it.
+- A range whose night count would exceed `MAX_NIGHTS_TO_SCAN` (3660, ~10
+  years — see the constant's own comment for the timing measurement this
+  is based on) throws immediately rather than freezing the main thread,
+  the same v1.8.5 precedent as `lab-panel.js`'s `MAX_SAMPLES` guard.
+
 ## Moon orbit spacing (v1.8.4)
 
 `compressMoonOrbit`'s ratio-based curve (see below) is tuned per-planet,

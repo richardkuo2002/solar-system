@@ -50,6 +50,7 @@ import { J2000_JD } from '../src/core/orbital-elements.js';
 import { analyzeObserver, observeAt, OBSERVER_TARGETS } from '../src/analysis/observer.js';
 import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/url-state.js';
 import { applySavedDefaults } from '../src/core/event-toolkit-persistence.js';
+import { scoreNight, analyzeBestObservationNight, MAX_NIGHTS_TO_SCAN } from '../src/analysis/best-night.js';
 
 // kepler: eccentric anomaly solver satisfies Kepler's equation
 {
@@ -1928,6 +1929,82 @@ import { applySavedDefaults } from '../src/core/event-toolkit-persistence.js';
   // A key this field set doesn't have is simply ignored, not an error.
   result = applySavedDefaults(fields, { nonexistentKey: 'whatever' });
   assert.deepEqual(result, fields);
+}
+
+// analysis/best-night (v1.11): scoreNight is pure — no ephemeris call — so
+// every scoring rule is directly checkable with synthetic inputs.
+{
+  const base = { peakAltitudeDeg: 45, moonAboveHorizon: false, moonIlluminatedFraction: 0.5, distanceAu: 1, minDistanceAu: 0.5, maxDistanceAu: 2 };
+
+  // Moon below horizon gives full darkness credit regardless of illuminated fraction.
+  const belowFull = scoreNight({ ...base, moonAboveHorizon: false, moonIlluminatedFraction: 1 });
+  const belowNew = scoreNight({ ...base, moonAboveHorizon: false, moonIlluminatedFraction: 0 });
+  assert.equal(belowFull, belowNew, 'moon below horizon must score identically regardless of phase');
+
+  // Moon above horizon at full illumination gives zero darkness credit (lower than new moon above horizon).
+  const aboveFull = scoreNight({ ...base, moonAboveHorizon: true, moonIlluminatedFraction: 1 });
+  const aboveNew = scoreNight({ ...base, moonAboveHorizon: true, moonIlluminatedFraction: 0 });
+  assert.ok(aboveFull < aboveNew, 'a risen full moon must score worse than a risen new moon');
+  assert.ok(aboveNew <= belowFull + 1e-9, 'a risen new moon must not out-score a set moon (both should tie at max darkness credit)');
+
+  // Distance at the bounds gives max/zero closeness credit.
+  const closest = scoreNight({ ...base, distanceAu: 0.5 });
+  const farthest = scoreNight({ ...base, distanceAu: 2 });
+  assert.ok(closest > farthest, 'distance at minDistanceAu must score higher than at maxDistanceAu');
+
+  // Altitude of 90deg/0deg gives max/zero altitude credit.
+  const highAlt = scoreNight({ ...base, peakAltitudeDeg: 90 });
+  const lowAlt = scoreNight({ ...base, peakAltitudeDeg: 0 });
+  assert.ok(highAlt > lowAlt, 'higher peak altitude must score higher');
+
+  // Output always in [0, 100] across a spread of inputs, including the
+  // degenerate minDistanceAu===maxDistanceAu case (closeness undefined -> 0).
+  for (const input of [
+    { peakAltitudeDeg: 90, moonAboveHorizon: false, moonIlluminatedFraction: 0, distanceAu: 0.5, minDistanceAu: 0.5, maxDistanceAu: 2 },
+    { peakAltitudeDeg: 0, moonAboveHorizon: true, moonIlluminatedFraction: 1, distanceAu: 2, minDistanceAu: 0.5, maxDistanceAu: 2 },
+    { peakAltitudeDeg: 45, moonAboveHorizon: true, moonIlluminatedFraction: 0.5, distanceAu: 1, minDistanceAu: 1, maxDistanceAu: 1 },
+  ]) {
+    const score = scoreNight(input);
+    assert.ok(score >= 0 && score <= 100, `score must be in [0,100], got ${score} for ${JSON.stringify(input)}`);
+  }
+}
+
+// analysis/best-night: integration run over a real (short) range for a
+// real target/location — no NASA-almanac-grade reference case exists for
+// "best observation night" (unlike eclipses/transits), so this checks
+// structural invariants instead of exact dates. Jupiter Oct-Dec 2024
+// spans its real 2024-12-07 opposition, so a non-empty, well-scored
+// result is expected, not just "doesn't crash."
+{
+  const result = analyzeBestObservationNight({
+    target: 'jupiter', startUtc: '2024-10-01T00:00:00Z', endUtc: '2024-12-01T00:00:00Z',
+    latDeg: 35.6892, lonDeg: 51.3890, elevationM: 1200,
+  });
+  assert.ok(result.result.events.length > 0, 'expected at least one candidate night for Jupiter approaching its real Dec 2024 opposition');
+  const scores = result.result.events.map((e) => e.score);
+  for (let i = 1; i < scores.length; i += 1) {
+    assert.ok(scores[i] <= scores[i - 1], 'events must be sorted descending by score');
+  }
+  for (const event of result.result.events) {
+    assert.ok(event.score >= 0 && event.score <= 100, `event score must be in [0,100], got ${event.score}`);
+    assert.ok(event.distanceAu > 0, 'distanceAu must be a positive real distance');
+  }
+  assert.equal(result.series.timesJd.length, result.series.valueDeg.length, 'series arrays must be the same length');
+  const expectedNights = Math.round((new Date('2024-12-01') - new Date('2024-10-01')) / 86400000);
+  assert.equal(result.series.timesJd.length, expectedNights, 'must scan exactly one point per calendar night in range');
+}
+
+// analysis/best-night: guards — oversized range fails fast, invalid lat/lon throws.
+{
+  assert.throws(() => analyzeBestObservationNight({
+    target: 'saturn', startUtc: '2000-01-01T00:00:00Z', endUtc: '2030-01-01T00:00:00Z',
+    latDeg: 40.71, lonDeg: -74.0, elevationM: 10,
+  }), new RegExp(`max ${MAX_NIGHTS_TO_SCAN}`), 'an oversized range must throw naming the MAX_NIGHTS_TO_SCAN cap');
+
+  assert.throws(() => analyzeBestObservationNight({
+    target: 'mars', startUtc: '2024-01-01T00:00:00Z', endUtc: '2024-02-01T00:00:00Z',
+    latDeg: 999, lonDeg: 0,
+  }), /latDeg/, 'an invalid latitude must throw');
 }
 
 console.log('PASS: smoke-test.js all assertions passed');
