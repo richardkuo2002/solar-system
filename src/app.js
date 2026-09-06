@@ -27,7 +27,7 @@ import { analyzeObserver } from './analysis/observer.js';
 import {
   createTimeController, tick, togglePlayPause, setSpeed, reverse, jumpToDate, pause,
 } from './core/time-controller.js';
-import { createCameraState, setMode, setFocusBody, enterGeocentric, computePose, CAMERA_MODES } from './core/camera-modes.js';
+import { createCameraState, setMode, setFocusBody, enterGeocentric, computePose, analysisVisualState, CAMERA_MODES } from './core/camera-modes.js';
 import { encodeAppStateToParams, decodeAppStateFromParams } from './core/url-state.js';
 import {
   julianDateFromDate, dateFromJulianDate, moonLocalPosition, moonLocalPositionMeeus, moonGeocentricJ2000, circularOrbitAngle,
@@ -249,6 +249,17 @@ for (const key of PLANET_ORDER) nameToKey.set(PLANETS[key].name, key);
 for (const key of MOON_ORDER) nameToKey.set(MOONS[key].name, key);
 for (const key of COMET_ORDER) nameToKey.set(COMETS[key].name, key);
 for (const key of DWARF_PLANET_ORDER) nameToKey.set(DWARF_PLANETS[key].name, key);
+
+// v1.8.5 — every valid bodyKey a URL's `focus` param could legitimately
+// name (sun/planets/moons/comets/dwarf planets); used below to validate
+// urlRestored.focus the same way restoredSurfacePlanet already validates
+// urlRestored.planet (see that comment) — an unvalidated focus doesn't
+// crash (setFocusBody/enterGeocentric already fall back safely for the
+// current frame), but it persists into cameraState.geocentric.focusBody,
+// where cycleGeocentricFocus's indexOf() silently resets to index 0 on
+// the first WASD press, and syncUrl() re-encodes the bad key back into
+// the address bar — a broken URL that perpetuates itself once shared.
+const validFocusKeys = new Set(nameToKey.values());
 
 let selectedBodyKey = 'sun';
 
@@ -735,10 +746,14 @@ if (urlRestored.mode === CAMERA_MODES.SURFACE_FIRST_PERSON) {
     lon: urlRestored.lon ?? 0,
   });
 } else if (urlRestored.mode === CAMERA_MODES.GEOCENTRIC) {
-  cameraState = enterGeocentric(cameraState, scenePositions, urlRestored.focus ?? 'mars');
+  // Geocentric's focus must additionally be a WASD-cycleable planet (not
+  // e.g. "sun" or a moon) — validated against the same list WASD cycling
+  // itself uses, not just validFocusKeys' broader "is this any known body".
+  const restoredGeocentricFocus = GEOCENTRIC_CYCLE_TARGETS.includes(urlRestored.focus) ? urlRestored.focus : 'mars';
+  cameraState = enterGeocentric(cameraState, scenePositions, restoredGeocentricFocus);
 } else if (urlRestored.mode) {
   cameraState = setMode(cameraState, urlRestored.mode);
-  if (urlRestored.focus) cameraState = setFocusBody(cameraState, urlRestored.focus);
+  if (validFocusKeys.has(urlRestored.focus)) cameraState = setFocusBody(cameraState, urlRestored.focus);
 }
 cameraRig.setMode(cameraState.mode);
 touchControls.setMode(cameraState.mode);
@@ -778,19 +793,14 @@ function animate() {
   timeUI.setCurrentDateDisplay(timeState.currentDate);
   ephemerisHud.update(timeState.currentDate, bodyDisplayName(selectedBodyKey), bodyStates[selectedBodyKey] ?? null, moonHudInfo(selectedBodyKey)?.parentName ?? null);
 
-  // v1.8.1: the two analysis visuals are mutually exclusive by camera
-  // mode — line-of-sight everywhere except Surface Mode (where its
-  // compressed-scenePositions direction would be wrong, see the comment
-  // above createEventToolkitPanel), the screen-space marker only in
-  // Surface Mode (and only when NOT standing on the analyzed body itself
-  // — nothing meaningful to point at then).
-  const surfacePlanetKey = cameraState.mode === CAMERA_MODES.SURFACE_FIRST_PERSON ? cameraState.surface.planet : null;
-  const showLineOfSight = analysisHasScenePosition && !surfacePlanetKey;
+  // v1.8.1 — the two analysis visuals are mutually exclusive by camera
+  // mode; decision extracted to core/camera-modes.js#analysisVisualState
+  // (v1.8.5) so it's Node-testable without a DOM/THREE scene.
+  const { showLineOfSight, showTargetMarker } = analysisVisualState(cameraState, analysisHasScenePosition, activeTargetKey);
   lineOfSight.line.visible = showLineOfSight;
   if (showLineOfSight) {
     lineOfSight.update(scenePositions.earth, scenePositions[activeTargetKey]);
   }
-  const showTargetMarker = analysisHasScenePosition && surfacePlanetKey && activeTargetKey !== surfacePlanetKey;
   analysisTargetMarker.update(camera, showTargetMarker ? planetGroups[activeTargetKey] : null);
 
   if (cameraState.mode === CAMERA_MODES.FREE_FLIGHT) {

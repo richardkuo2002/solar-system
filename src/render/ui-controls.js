@@ -14,7 +14,12 @@
 // what they actually are — a multiplier — instead of a days/second
 // figure nobody intuits speed from directly.
 export const REAL_TIME_DAYS_PER_SECOND = 1 / 86400;
-const SPEED_OPTIONS = [
+// v1.8.5 — exported (was module-private) so scripts/smoke-test.js can
+// assert the default option actually matches REAL_TIME_DAYS_PER_SECOND
+// without needing a DOM to inspect the rendered <select>; this is the
+// exact bug class v1.8.2 fixed (a stale default that didn't match the
+// clock's real starting speed) — now it has a regression test.
+export const SPEED_OPTIONS = [
   { daysPerSecond: REAL_TIME_DAYS_PER_SECOND, label: '1x (real time)' },
   { daysPerSecond: 2 * REAL_TIME_DAYS_PER_SECOND, label: '2x' },
   { daysPerSecond: 5 * REAL_TIME_DAYS_PER_SECOND, label: '5x' },

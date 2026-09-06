@@ -5,6 +5,36 @@ All notable changes to this project. Format loosely follows
 milestones in `docs/ROADMAP.md` (local-only), with each version's exact
 scope and accuracy notes in [docs/accuracy.md](docs/accuracy.md).
 
+## v1.8.5 — 2026-09-06
+
+Follow-up to a repo-wide risk audit (security, correctness, dependencies,
+performance, CI, accessibility, test coverage) — addresses three of its
+findings, plus makes unit testing a standing per-version checklist item
+(see `CONTRIBUTING.md`/`docs/ROADMAP.md`).
+
+- **Fixed the Event Toolkit's sample interval having no enforced upper
+  bound** — `field.min`/`max` were previously only `<input>` HTML
+  attributes, never actually checked before running the analysis; a fine
+  enough interval over a wide enough date range could block the main
+  thread for several seconds (measured: ~4.2s at 0.001h/2 months,
+  ~7.2s at 1h across the full 1800-2050 range), freezing the whole
+  animation loop. Now clamps to each field's declared min/max and rejects
+  (with an error message, not a freeze) any request estimated over 50,000
+  samples.
+- **Fixed an asymmetric validation gap on the URL's `focus` param** — the
+  `planet` param was already validated against known keys;
+  `focus` wasn't, so an invalid value didn't crash (existing consumers
+  fall back safely) but persisted into `cameraState.geocentric.focusBody`,
+  where cycling with WASD would silently reset to the first candidate,
+  and got re-encoded back into the shareable URL — a broken link that
+  perpetuated itself. Now validated the same way `planet` already is.
+- **Closed 3 test-coverage gaps from v1.8.1-v1.8.3** — extracted the
+  line-of-sight/target-marker visibility decision out of `app.js`'s
+  `animate()` into a pure, unit-tested `core/camera-modes.js#analysisVisualState`;
+  exported `ui-controls.js`'s `SPEED_OPTIONS` so a test can assert its
+  default option actually matches `REAL_TIME_DAYS_PER_SECOND` (the exact
+  mismatch v1.8.2 fixed, now with a regression test behind it).
+
 ## v1.8.4 — 2026-09-06
 
 - **Fixed Jupiter's four Galilean moons rendering overlapping each other

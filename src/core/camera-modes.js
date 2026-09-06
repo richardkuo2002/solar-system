@@ -89,6 +89,26 @@ export function cycleGeocentricFocus(state, bodyPositions, candidateKeys, direct
   return enterGeocentric(state, bodyPositions, candidateKeys[nextIdx]);
 }
 
+/**
+ * v1.8.1 — the Event Toolkit's two analysis visuals (the Earth-to-target
+ * line-of-sight line, and the v1.8.1 screen-space target marker) are
+ * mutually exclusive by camera mode: the line's direction comes from
+ * compressed scenePositions, which is wrong once Surface Mode's true-
+ * angular-direction sky proxies take over (see app.js's comment above
+ * createEventToolkitPanel and docs/accuracy.md's Surface Mode section),
+ * so the marker takes over there instead — except when standing on the
+ * analyzed body itself, where neither has anything meaningful to show.
+ * Extracted out of app.js's animate() (v1.8.5) as a pure function so this
+ * decision is Node-testable without a DOM/THREE scene.
+ */
+export function analysisVisualState(cameraState, analysisHasScenePosition, activeTargetKey) {
+  const surfacePlanetKey = cameraState.mode === CAMERA_MODES.SURFACE_FIRST_PERSON ? cameraState.surface.planet : null;
+  return {
+    showLineOfSight: Boolean(analysisHasScenePosition) && !surfacePlanetKey,
+    showTargetMarker: Boolean(analysisHasScenePosition) && surfacePlanetKey != null && activeTargetKey !== surfacePlanetKey,
+  };
+}
+
 /** Pure — adjusts the geocentric look direction by mouse-drag deltas (no positional movement; position always tracks Earth). */
 export function rotateGeocentricView(state, dYaw, dPitch) {
   const maxPitch = Math.PI / 2 - 0.01;
