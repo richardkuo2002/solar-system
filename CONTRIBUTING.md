@@ -86,6 +86,13 @@ Roughly semver, applied to this project's actual history:
 When in doubt: if it only makes something that was wrong now correct,
 patch; if it adds or changes what the app can do, minor.
 
+**Pushing a `v*` tag auto-creates a GitHub Release (v1.8.7)** —
+`.github/workflows/release.yml` runs `scripts/changelog-excerpt.mjs` to
+pull that version's section out of `CHANGELOG.md` verbatim as the
+Release's notes. Write the CHANGELOG.md entry *before* tagging (already
+established practice) — the Release will fail to generate (missing
+section) or say the wrong thing otherwise.
+
 ## Assets
 
 Textures under `assets/textures/` come from `scripts/fetch-textures.mjs`

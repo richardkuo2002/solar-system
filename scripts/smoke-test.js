@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { extractChangelogSection } from './changelog-excerpt.mjs';
 import { loadStarCatalog, constellationLineSegments, constellationLabelPositions } from '../src/core/star-catalog.js';
 import { solveEccentricAnomaly, elementsToPosition, normalizeAngle } from '../src/core/kepler.js';
 import {
@@ -1829,6 +1831,34 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
   assert.throws(() => analyzeMoonConjunction({ target: 'moon', startUtc: '2021-01-01T00:00:00Z', endUtc: '2021-02-01T00:00:00Z', latDeg: 0, lonDeg: 0 }));
   assert.throws(() => analyzeMoonConjunction({ target: 'sun', startUtc: '2021-01-01T00:00:00Z', endUtc: '2021-02-01T00:00:00Z', latDeg: 0, lonDeg: 0 }));
   assert.deepEqual(MOON_CONJUNCTION_TARGETS, OCCULTATION_TARGETS);
+}
+
+// scripts/changelog-excerpt (v1.8.7): pulls one version's section out of
+// CHANGELOG.md for release.yml's GitHub Release body — must stop at the
+// next "## " heading (not bleed into the following version) and throw a
+// clear error for a version with no section, rather than release.yml
+// silently publishing an empty or wrong-version Release.
+{
+  const fakeChangelog = [
+    '# Changelog',
+    '',
+    '## v2.0 — 2030-01-01',
+    '',
+    '- second entry line one',
+    '- second entry line two',
+    '',
+    '## v1.0 — 2029-01-01',
+    '',
+    '- first entry',
+  ].join('\n');
+  assert.equal(extractChangelogSection(fakeChangelog, 'v2.0'), '- second entry line one\n- second entry line two', 'must extract only the named version\'s lines, stopping before the next heading');
+  assert.equal(extractChangelogSection(fakeChangelog, 'v1.0'), '- first entry', 'must also work for the last section in the file (no following heading to stop at)');
+  assert.throws(() => extractChangelogSection(fakeChangelog, 'v9.9'), /No CHANGELOG\.md section found/, 'a version with no heading must throw, not silently return an empty/wrong section');
+  // And against the real file: every version this session actually shipped must still be found.
+  const realChangelog = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
+  for (const version of ['v1.0.0', 'v1.8', 'v1.8.6']) {
+    assert.ok(extractChangelogSection(realChangelog, version).length > 0, `CHANGELOG.md must have a non-empty section for ${version}`);
+  }
 }
 
 console.log('PASS: smoke-test.js all assertions passed');

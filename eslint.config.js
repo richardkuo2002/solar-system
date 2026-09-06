@@ -19,6 +19,7 @@ const browserGlobals = {
 const nodeGlobals = {
   process: 'readonly', Buffer: 'readonly', console: 'readonly',
   fetch: 'readonly', setTimeout: 'readonly', URLSearchParams: 'readonly',
+  URL: 'readonly',
 };
 
 export default [
