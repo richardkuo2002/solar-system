@@ -48,6 +48,21 @@ Both also run automatically on every push/PR via GitHub Actions
   case (a real, independently-checkable value — not hand-invented), and a
   note on method/limitations in `docs/accuracy.md`. See that file for the
   existing pattern (e.g. the Mars Kepler-vs-Horizons error check).
+- **Unit testing is a standing requirement, not a one-time analysis-
+  features rule (v1.8.5).** Before closing out *any* version — patch or
+  minor — check whether it added or changed pure logic with no test
+  covering it, not just new analysis math. Three versions in a row
+  (v1.8.1–v1.8.3) shipped pure, Node-testable decisions — a camera-mode
+  visibility rule, a speed-dropdown default — with zero assertions behind
+  them, and nothing caught it until an explicit audit. If the logic is
+  DOM/THREE-coupled (most of `src/render/`, `src/app.js`), first ask
+  whether the actual decision inside it can be pulled out into a plain
+  function in `src/core/` (see `core/camera-modes.js#analysisVisualState`,
+  extracted from `app.js`'s `animate()` for exactly this reason) — most
+  "UI logic" is a DOM shell around a testable decision, not DOM through
+  and through. Only genuinely-DOM work (layout, event wiring) is exempt,
+  and that exemption isn't a reason to leave the decision it's wrapped
+  around untested too.
 - **No unverified accuracy claims.** Don't describe something as
   "scientifically accurate" or "real-time accurate" in code comments,
   READMEs, or UI text unless a reproducible test actually backs it up.

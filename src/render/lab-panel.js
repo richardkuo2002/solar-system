@@ -7,13 +7,20 @@
 import { drawApparentPathCanvas, drawLongitudeTimelineCanvas, highlightCursorOnCharts } from './event-charts.js';
 import { createExportButtons } from './export-buttons.js';
 
+// v1.8.5 — see the analyzeBtn click handler below: caps startUtc/endUtc
+// range divided by intervalHours. 50,000 is generous headroom over every
+// EVENT_TYPES default (the largest, opposition/conjunction's ~1.5-year
+// range at 24h, is ~540) while still catching the runaway cases that
+// measurably freeze the main thread for seconds.
+const MAX_SAMPLES = 50000;
+
 /**
  * @param {HTMLElement} container
  * @param {object} config
  * @param {string} config.className        base CSS class, e.g. 'event-toolkit'
  * @param {string} config.title
  * @param {string} config.fixedText         e.g. 'Observer: Earth (geocenter) · Frame: Geocentric ECLIPJ2000'
- * @param {Array<{key:string, type:'date'|'number'|'select', label:string, default?:*, min?:number, options?:{value:string,label:string}[]}>} config.fields
+ * @param {Array<{key:string, type:'date'|'number'|'select', label:string, default?:*, min?:number, max?:number, options?:{value:string,label:string}[]}>} config.fields
  * @param {string} config.analyzeLabel
  * @param {'path+timeline'|'timeline'|'none'} config.chartKind
  * @param {(result:object, series:object) => string} config.formatResult
@@ -64,6 +71,7 @@ export function createLabPanel(container, config, callbacks = {}) {
       el.type = field.type; // 'date' | 'number'
       if (field.default != null) el.value = String(field.default);
       if (field.type === 'number' && field.min != null) el.min = String(field.min);
+      if (field.type === 'number' && field.max != null) el.max = String(field.max);
     }
     el.title = field.label;
     inputs[field.key] = el;
@@ -88,9 +96,32 @@ export function createLabPanel(container, config, callbacks = {}) {
         params[field.key] = `${el.value}T00:00:00Z`;
       } else if (field.type === 'number') {
         const parsed = parseFloat(el.value);
-        params[field.key] = Number.isFinite(parsed) ? parsed : field.default;
+        let value = Number.isFinite(parsed) ? parsed : field.default;
+        // v1.8.5 — field.min/max were previously only the <input> HTML
+        // attribute, which this click handler's own parseFloat() never
+        // enforced (a user could type below `min`, e.g. an intervalHours
+        // of 0.001 despite min:1). Clamp here so config-declared bounds
+        // actually hold.
+        if (field.min != null) value = Math.max(value, field.min);
+        if (field.max != null) value = Math.min(value, field.max);
+        params[field.key] = value;
       } else {
         params[field.key] = el.value;
+      }
+    }
+    // v1.8.5 — an interval fine enough (or a date range wide enough)
+    // relative to each other makes the analysis loop synchronously block
+    // the main thread for seconds, freezing animate() — measured: a 2-month
+    // range at 0.001h intervals blocked ~4.2s, and 1800-2050 at 1h/sample
+    // blocked ~7.2s. Every EVENT_TYPES entry with an intervalHours field
+    // also has startUtc/endUtc, so this one generic check (rather than a
+    // per-event-type one) covers all of them.
+    if ('intervalHours' in params && 'startUtc' in params && 'endUtc' in params) {
+      const rangeHours = (new Date(params.endUtc).getTime() - new Date(params.startUtc).getTime()) / 3600000;
+      const estimatedSamples = rangeHours / params.intervalHours;
+      if (estimatedSamples > MAX_SAMPLES) {
+        setError(`Sample interval too fine for this date range (~${Math.round(estimatedSamples).toLocaleString()} samples, max ${MAX_SAMPLES.toLocaleString()}) — increase the interval or shorten the range.`);
+        return;
       }
     }
     setError(null);

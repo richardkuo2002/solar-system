@@ -21,8 +21,9 @@ import {
 import {
   createCameraState, setMode, setFocusBody, setSurfaceLocation, setSurfacePlanet,
   moveFreeFlight, enterGeocentric, rotateGeocentricView, cycleGeocentricFocus,
-  walkSurface, computePose, CAMERA_MODES,
+  walkSurface, computePose, analysisVisualState, CAMERA_MODES,
 } from '../src/core/camera-modes.js';
+import { REAL_TIME_DAYS_PER_SECOND, SPEED_OPTIONS } from '../src/render/ui-controls.js';
 import { unwrapAnglesRad, centralDiffAngularVelocityRadPerDay } from '../src/analysis/longitude.js';
 import { classifyMotion, findStationaryPoints, analyzeRetrograde } from '../src/analysis/retrograde.js';
 import { elongationRad, signedElongationRad } from '../src/analysis/elongation.js';
@@ -515,6 +516,33 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
   const dir = { x: pose.target.x - pose.position.x, y: pose.target.y - pose.position.y, z: pose.target.z - pose.position.z };
   const dirLen = Math.hypot(dir.x, dir.y, dir.z);
   assert.ok(dir.z / dirLen > 0.99, 'cycling to a new focus body must re-aim toward it');
+}
+
+// camera-modes: analysisVisualState (v1.8.5, extracted from app.js's
+// animate() in v1.8.1) — the line-of-sight line and the Surface Mode
+// target marker must never both be true, and never both be false while an
+// analysis is active outside the analyzed body itself.
+{
+  const heliocentric = createCameraState(CAMERA_MODES.HELIOCENTRIC_TOPDOWN);
+  const onMars = setMode(createCameraState(), CAMERA_MODES.SURFACE_FIRST_PERSON, { planet: 'mars' });
+  const onJupiter = setMode(createCameraState(), CAMERA_MODES.SURFACE_FIRST_PERSON, { planet: 'jupiter' });
+
+  assert.deepEqual(analysisVisualState(heliocentric, false, 'mars'), { showLineOfSight: false, showTargetMarker: false }, 'no active analysis: neither visual shows, in any mode');
+  assert.deepEqual(analysisVisualState(heliocentric, true, 'mars'), { showLineOfSight: true, showTargetMarker: false }, 'active analysis outside Surface Mode: line only');
+  assert.deepEqual(analysisVisualState(onMars, true, 'mars'), { showLineOfSight: false, showTargetMarker: false }, 'standing on the analyzed body itself: neither (nothing to point at)');
+  assert.deepEqual(analysisVisualState(onJupiter, true, 'mars'), { showLineOfSight: false, showTargetMarker: true }, 'Surface Mode, analyzing a different body: marker only');
+}
+
+// render/ui-controls: SPEED_OPTIONS's default-selected option (v1.8.2)
+// must equal REAL_TIME_DAYS_PER_SECOND, the same constant app.js passes
+// to createTimeController's initial state — this is the exact mismatch
+// v1.8.2 fixed (the dropdown's old default didn't match the clock's real
+// starting speed); a regression here would silently reintroduce it.
+{
+  assert.equal(SPEED_OPTIONS[0].daysPerSecond, REAL_TIME_DAYS_PER_SECOND, 'the first (default-selected) speed option must be real time');
+  for (let i = 1; i < SPEED_OPTIONS.length; i++) {
+    assert.ok(SPEED_OPTIONS[i].daysPerSecond > SPEED_OPTIONS[i - 1].daysPerSecond, 'speed options must be in strictly ascending order');
+  }
 }
 
 // camera-modes: geocentric look direction is fixed across a position update
