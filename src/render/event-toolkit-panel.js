@@ -98,7 +98,28 @@ function formatSignedElongationResult(noneMessage) {
   };
 }
 
-function formatEclipseResult(noneMessage) {
+// v1.9 — contact-time table rows, in display order, per eclipse kind. Only
+// rows whose Utc field is non-null for this event get printed (a partial
+// lunar eclipse has no U2/U3, a penumbral one has neither U1-4; a partial
+// solar eclipse has no C2/C3).
+const LUNAR_CONTACT_ROWS = [
+  ['p1Utc', 'P1 (penumbral begin)'], ['u1Utc', 'U1 (partial begin)'],
+  ['u2Utc', 'U2 (total begin)'], ['u3Utc', 'U3 (total end)'],
+  ['u4Utc', 'U4 (partial end)'], ['p4Utc', 'P4 (penumbral end)'],
+];
+const SOLAR_CONTACT_ROWS = [
+  ['c1Utc', 'C1 (partial begin)'], ['c2Utc', 'C2 (total/annular begin)'],
+  ['c3Utc', 'C3 (total/annular end)'], ['c4Utc', 'C4 (partial end)'],
+];
+
+function formatContactLines(contacts, rows) {
+  if (!contacts) return [];
+  return rows
+    .filter(([key]) => contacts[key] != null)
+    .map(([key, label]) => `    ${label}: ${contacts[key]}`);
+}
+
+function formatEclipseResult(noneMessage, contactRows) {
   return (result) => {
     const lines = [
       `Source: ${result.reference.source}  Frame: ${result.reference.frame}`,
@@ -112,9 +133,10 @@ function formatEclipseResult(noneMessage) {
       for (const event of result.result.events) {
         lines.push(`${capitalize(event.classification)} — ${event.epochUtc}`);
         lines.push(`  magnitude ≈ ${event.magnitude.toFixed(3)}`);
+        lines.push(...formatContactLines(event.contacts, contactRows));
       }
     }
-    lines.push('', 'Note: geometric approximation — spherical Sun/Earth/Moon, no atmospheric shadow enlargement or refraction, no Besselian elements. See docs/accuracy.md.');
+    lines.push('', 'Note: geometric approximation — spherical Sun/Earth/Moon, no Besselian elements. Contact times found by a fixed-window scan around the greatest-eclipse instant (see docs/accuracy.md). Lunar shadow radii include the standard 1.01 atmospheric-enlargement factor.');
     return lines.join('\n');
   };
 }
@@ -314,7 +336,7 @@ export const EVENT_TYPES = [
     analyzeLabel: 'Analyze lunar eclipses',
     chartKind: 'timeline',
     analyze: (params) => analyzeLunarEclipse(params),
-    formatResult: formatEclipseResult('No lunar eclipse found in this range.'),
+    formatResult: formatEclipseResult('No lunar eclipse found in this range.', LUNAR_CONTACT_ROWS),
     getMarkers: (result) => result.result.events.map((e) => e.epochJd),
     getHighlight: () => null,
     resultTarget: (result) => result.target,
@@ -334,7 +356,7 @@ export const EVENT_TYPES = [
     analyzeLabel: 'Analyze solar eclipses',
     chartKind: 'timeline',
     analyze: (params) => analyzeSolarEclipse(params),
-    formatResult: formatEclipseResult('No solar eclipse visible from this location in this range.'),
+    formatResult: formatEclipseResult('No solar eclipse visible from this location in this range.', SOLAR_CONTACT_ROWS),
     getMarkers: (result) => result.result.events.map((e) => e.epochJd),
     getHighlight: () => null,
     resultTarget: (result) => result.target,
@@ -470,6 +492,7 @@ export function createEventToolkitPanel(container, callbacks) {
       title: eventType.label,
       fixedText: eventType.fixedText,
       fields: eventType.fields,
+      storageKey: `event-toolkit:${eventType.key}`,
       analyzeLabel: eventType.analyzeLabel,
       chartKind: eventType.chartKind,
       formatResult: eventType.formatResult,

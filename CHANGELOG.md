@@ -5,6 +5,35 @@ All notable changes to this project. Format loosely follows
 milestones in `docs/ROADMAP.md` (local-only), with each version's exact
 scope and accuracy notes in [docs/accuracy.md](docs/accuracy.md).
 
+## v1.9 — 2026-09-06
+
+- **Eclipse 4/5-contact time tables** — lunar eclipses now report
+  P1/U1/U2/U3/U4/P4 and solar eclipses report C1/C2/C3/C4, not just
+  magnitude and one peak time. Reuses `analysis/retrograde.js`'s
+  `findStationaryPoints` (a generic bisection zero-crossing finder) to
+  find where a distance-to-boundary margin function crosses zero, within
+  a fixed window around the already-found greatest-eclipse instant (±6h
+  lunar, ±3h solar) — no new root-finding code. A boundary an eclipse's
+  classification never reaches (e.g. U2/U3 for a partial eclipse) comes
+  back `null`.
+- **Atmospheric shadow enlargement for lunar eclipses** — Earth's
+  umbra/penumbra radii are now scaled by the standard Espenak/Danjon 1.01
+  factor, approximating the atmosphere refracting extra sunlight into the
+  shadow. (Solar eclipses needed no change — the horizon check already
+  applies Bennett's refraction formula.)
+- **Event Toolkit inputs now persist per event type** across page
+  reloads via `localStorage` (new `src/core/event-toolkit-persistence.js`,
+  pure `applySavedDefaults` logic + thin storage wrappers in
+  `lab-panel.js`) — separate from, and not a change to, v0.8's URL
+  Shareable State scope (which still deliberately excludes Event Toolkit
+  and Observer Mode inputs from the address bar).
+- `scripts/smoke-test.js` gained contact-time assertions against
+  published NASA/Espenak values for the existing 2022-11-08 lunar and
+  2024-04-08 Dallas solar eclipse reference cases, plus unit tests for
+  `applySavedDefaults`.
+
+`npm test`/`npm run lint` all pass.
+
 ## v1.8.7 — 2026-09-06
 
 - **Tags now auto-create a GitHub Release** — `.github/workflows/release.yml`

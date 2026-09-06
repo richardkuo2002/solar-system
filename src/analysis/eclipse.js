@@ -7,9 +7,11 @@
 // never core/scale.js's display-compressed values). Pure math, zero DOM/
 // THREE, Node-testable like core/. See docs/accuracy.md's "Eclipses
 // (v1.1)" section for the exact scope of every simplification made here:
-// spherical Sun/Earth/Moon, no atmospheric shadow enlargement, no
-// Besselian elements, magnitude + one peak time only (not a 4/5-contact
-// circumstance table). Solar eclipse timing IS refined per observer (see
+// spherical Sun/Earth/Moon, no Besselian elements. Lunar eclipses (v1.9)
+// apply the standard Espenak/Danjon 1.01 atmospheric-enlargement factor to
+// Earth's umbra/penumbra radii, and both lunar and solar eclipses (v1.9)
+// report a full 4/5-contact time table (P1/U1/U2/U3/U4/P4, C1-C4), not just
+// one peak time. Solar eclipse timing IS refined per observer (see
 // refineLocalSolarEclipseEpoch) — parallax shifts the apparent alignment
 // enough, over the time span between geocentric syzygy and a given
 // site's own greatest eclipse, to flip total/partial for a narrow path.
@@ -99,17 +101,23 @@ function findSyzygies(startUtc, endUtc, intervalHours) {
 
 // --- Lunar eclipse: Earth-shadow-cone geometry ---
 
+// v1.9 — standard Espenak/Danjon convention: scale Earth's vacuum shadow
+// radii by 1.01 to approximate the atmosphere refracting extra sunlight
+// into the cone (and correspondingly enlarging it). Still an empirical
+// constant, not a real pressure/altitude atmosphere model — see
+// docs/accuracy.md.
+const ATMOSPHERE_ENLARGEMENT_FACTOR = 1.01;
+
 /** Earth's umbra/penumbra cone radii (km) at a given distance from Earth's
  *  center, via similar triangles on real Sun/Earth radii and the actual
- *  Sun-Earth distance at that epoch. Pure vacuum cone geometry — no
- *  empirical atmospheric-enlargement factor (real eclipse calendars apply
- *  one, typically ~1%; omitted here, see docs/accuracy.md). */
+ *  Sun-Earth distance at that epoch, then scaled by
+ *  ATMOSPHERE_ENLARGEMENT_FACTOR. */
 function earthShadowRadiiKm(distanceFromEarthKm, sunEarthDistKm) {
   const penumbraHalfAngle = Math.atan((SUN.radiusKm + PLANETS.earth.radiusKm) / sunEarthDistKm);
   const umbraHalfAngle = Math.atan((SUN.radiusKm - PLANETS.earth.radiusKm) / sunEarthDistKm);
   return {
-    penumbraRadiusKm: PLANETS.earth.radiusKm + distanceFromEarthKm * Math.tan(penumbraHalfAngle),
-    umbraRadiusKm: PLANETS.earth.radiusKm - distanceFromEarthKm * Math.tan(umbraHalfAngle),
+    penumbraRadiusKm: (PLANETS.earth.radiusKm + distanceFromEarthKm * Math.tan(penumbraHalfAngle)) * ATMOSPHERE_ENLARGEMENT_FACTOR,
+    umbraRadiusKm: (PLANETS.earth.radiusKm - distanceFromEarthKm * Math.tan(umbraHalfAngle)) * ATMOSPHERE_ENLARGEMENT_FACTOR,
   };
 }
 
@@ -152,19 +160,93 @@ function lunarEclipseAt(epochJd) {
   return { classification, magnitude: Math.max(0, magnitude), offsetKm, umbraRadiusKm, penumbraRadiusKm };
 }
 
+// --- Contact times (v1.9): reuses retrograde.js's findStationaryPoints as a
+// generic bisection zero-crossing finder — a "contact" is just the moment a
+// margin function (distance-to-target minus a threshold) crosses zero, no
+// new root-finding code needed. ---
+
+/**
+ * Scans `marginFn` (positive = outside the boundary, negative = inside)
+ * over a window around `centerJd` for its two zero-crossings (entering,
+ * then exiting) and bisects each down to DEFAULT_TOLERANCE_SECONDS.
+ * Returns `{ enterJd, exitJd }`, either `null` if not crossed within the
+ * window (e.g. asking for a boundary this eclipse never reaches).
+ */
+function findContactCrossing(centerJd, windowDays, stepDays, marginFn) {
+  const timesJd = [];
+  const values = [];
+  for (let jd = centerJd - windowDays; jd <= centerJd + windowDays; jd += stepDays) {
+    timesJd.push(jd);
+    values.push(marginFn(jd));
+  }
+  const crossings = findStationaryPoints(timesJd, values, marginFn, {
+    toleranceSeconds: DEFAULT_TOLERANCE_SECONDS,
+    labelFor: (sign) => (sign > 0 ? 'enter' : 'exit'),
+  });
+  return {
+    enterJd: crossings.find((c) => c.transition === 'enter')?.epochJd ?? null,
+    exitJd: crossings.find((c) => c.transition === 'exit')?.epochJd ?? null,
+  };
+}
+
+const LUNAR_CONTACT_WINDOW_DAYS = 6 / 24; // real penumbral duration tops out ~6h
+const LUNAR_CONTACT_STEP_DAYS = 5 / 1440; // 5 min — fine enough to bracket every crossing
+
+/**
+ * P1/U1/U2/U3/U4/P4 contact times for a lunar eclipse already found at
+ * `epochJd` (the syzygy instant). Only computes the boundaries this
+ * eclipse's `classification` actually reaches — a penumbral-only eclipse
+ * has no umbra contacts, a partial eclipse has no U2/U3 (never fully
+ * inside the umbra).
+ */
+function lunarEclipseContacts(epochJd, classification) {
+  const moonRadiusKm = MOONS.moon.radiusKm;
+  const penumbra = findContactCrossing(epochJd, LUNAR_CONTACT_WINDOW_DAYS, LUNAR_CONTACT_STEP_DAYS,
+    (jd) => { const g = lunarEclipseAt(jd); return g.offsetKm - (g.penumbraRadiusKm + moonRadiusKm); });
+
+  const contacts = {
+    p1Jd: penumbra.enterJd, p4Jd: penumbra.exitJd,
+    u1Jd: null, u4Jd: null, u2Jd: null, u3Jd: null,
+  };
+
+  if (classification === 'partial' || classification === 'total') {
+    const umbraOuter = findContactCrossing(epochJd, LUNAR_CONTACT_WINDOW_DAYS, LUNAR_CONTACT_STEP_DAYS,
+      (jd) => { const g = lunarEclipseAt(jd); return g.offsetKm - (g.umbraRadiusKm + moonRadiusKm); });
+    contacts.u1Jd = umbraOuter.enterJd;
+    contacts.u4Jd = umbraOuter.exitJd;
+  }
+
+  if (classification === 'total') {
+    const umbraInner = findContactCrossing(epochJd, LUNAR_CONTACT_WINDOW_DAYS, LUNAR_CONTACT_STEP_DAYS,
+      (jd) => { const g = lunarEclipseAt(jd); return g.offsetKm - (g.umbraRadiusKm - moonRadiusKm); });
+    contacts.u2Jd = umbraInner.enterJd;
+    contacts.u3Jd = umbraInner.exitJd;
+  }
+
+  return contacts;
+}
+
+function jdToUtcOrNull(jd) {
+  return jd == null ? null : dateFromJulianDate(jd).toISOString();
+}
+
 /**
  * Lunar eclipses across [startUtc, endUtc]: one event per full moon in
  * range, classified none/penumbral/partial/total from the Moon's actual
  * offset from Earth's shadow axis vs. the umbra/penumbra radii at the
- * Moon's distance that epoch. Reports magnitude + the syzygy epoch only —
- * not the four/five real-world contact times (P1/U1/U2/greatest/U3/U4/P4)
- * a full eclipse calendar shows (see docs/accuracy.md).
+ * Moon's distance that epoch. Each event also reports the P1/U1/U2/U3/U4/P4
+ * contact-time table (see lunarEclipseContacts), fields `null` where this
+ * eclipse's classification doesn't reach that boundary.
  */
 export function analyzeLunarEclipse({ startUtc, endUtc, intervalHours = 6, ephemerisSource = 'kepler' }) {
   const syzygies = findSyzygies(startUtc, endUtc, intervalHours).filter((s) => s.transition === 'full-moon');
 
   const events = syzygies.map((s) => {
     const { classification, magnitude } = lunarEclipseAt(s.epochJd);
+    if (classification === 'none') {
+      return { event: 'lunar-eclipse', epochJd: s.epochJd, classification };
+    }
+    const contactsJd = lunarEclipseContacts(s.epochJd, classification);
     return {
       event: 'lunar-eclipse',
       epochJd: s.epochJd,
@@ -173,6 +255,14 @@ export function analyzeLunarEclipse({ startUtc, endUtc, intervalHours = 6, ephem
       magnitude,
       method: s.method,
       toleranceSeconds: s.toleranceSeconds,
+      contacts: {
+        p1Jd: contactsJd.p1Jd, p1Utc: jdToUtcOrNull(contactsJd.p1Jd),
+        u1Jd: contactsJd.u1Jd, u1Utc: jdToUtcOrNull(contactsJd.u1Jd),
+        u2Jd: contactsJd.u2Jd, u2Utc: jdToUtcOrNull(contactsJd.u2Jd),
+        u3Jd: contactsJd.u3Jd, u3Utc: jdToUtcOrNull(contactsJd.u3Jd),
+        u4Jd: contactsJd.u4Jd, u4Utc: jdToUtcOrNull(contactsJd.u4Jd),
+        p4Jd: contactsJd.p4Jd, p4Utc: jdToUtcOrNull(contactsJd.p4Jd),
+      },
     };
   }).filter((e) => e.classification !== 'none');
 
@@ -260,15 +350,12 @@ function refineLocalSolarEclipseEpoch(geocentricJd, latDeg, lonDeg, elevationM) 
 }
 
 /**
- * Solar eclipse circumstances for one observer at `epochJd` (already
- * refined to this observer's own local greatest-eclipse instant, see
- * refineLocalSolarEclipseEpoch) — topocentric Sun/Moon positions (reusing
- * analysis/observer.js's observeAt, parallax-corrected) and their apparent
- * angular radii determine none/partial/annular/total. Still spherical
- * Earth/Sun/Moon, no atmospheric refraction (same caveats Observer Mode
- * already documents) — see docs/accuracy.md.
+ * Topocentric Sun-Moon disk geometry at `epochJd` for one observer — shared
+ * by solarEclipseAt (classification/magnitude) and solarEclipseContacts
+ * (C1-C4 crossing search) so both read the same apparent angular radii and
+ * separation instead of duplicating the observeAt calls (v1.9).
  */
-function solarEclipseAt(epochJd, latDeg, lonDeg, elevationM) {
+function solarDiskGeometryAt(epochJd, latDeg, lonDeg, elevationM) {
   const jsDate = dateFromJulianDate(epochJd);
   const sunObs = observeAt({ target: 'sun', jsDate, latDeg, lonDeg, elevationM, forceSource: 'kepler' });
   const moonObs = observeAt({ target: 'moon', jsDate, latDeg, lonDeg, elevationM, forceSource: 'kepler' });
@@ -279,11 +366,32 @@ function solarEclipseAt(epochJd, latDeg, lonDeg, elevationM) {
   const moonAngularRadiusDeg = Math.asin(MOONS.moon.radiusKm / moonDistanceKm) * RAD_TO_DEG;
   const separationDeg = angularSeparationDeg(sunObs.raDeg, sunObs.decDeg, moonObs.raDeg, moonObs.decDeg);
 
-  const sumRadiiDeg = sunAngularRadiusDeg + moonAngularRadiusDeg;
-  const diffRadiiDeg = Math.abs(moonAngularRadiusDeg - sunAngularRadiusDeg);
+  return {
+    separationDeg,
+    sunAngularRadiusDeg,
+    moonAngularRadiusDeg,
+    sumRadiiDeg: sunAngularRadiusDeg + moonAngularRadiusDeg,
+    diffRadiiDeg: Math.abs(moonAngularRadiusDeg - sunAngularRadiusDeg),
+    sunAboveHorizon: sunObs.aboveHorizon,
+    sunAltDeg: sunObs.altDeg,
+  };
+}
+
+/**
+ * Solar eclipse circumstances for one observer at `epochJd` (already
+ * refined to this observer's own local greatest-eclipse instant, see
+ * refineLocalSolarEclipseEpoch) — topocentric Sun/Moon positions (reusing
+ * analysis/observer.js's observeAt, parallax-corrected) and their apparent
+ * angular radii determine none/partial/annular/total. Still spherical
+ * Earth/Sun/Moon (same caveats Observer Mode already documents for
+ * refraction near the horizon) — see docs/accuracy.md.
+ */
+function solarEclipseAt(epochJd, latDeg, lonDeg, elevationM) {
+  const { separationDeg, sunAngularRadiusDeg, moonAngularRadiusDeg, sumRadiiDeg, diffRadiiDeg, sunAboveHorizon, sunAltDeg } =
+    solarDiskGeometryAt(epochJd, latDeg, lonDeg, elevationM);
 
   let classification;
-  if (!sunObs.aboveHorizon) {
+  if (!sunAboveHorizon) {
     classification = 'none'; // Sun below the horizon — nothing observable here regardless of geometry
   } else if (separationDeg >= sumRadiiDeg) {
     classification = 'none';
@@ -300,7 +408,38 @@ function solarEclipseAt(epochJd, latDeg, lonDeg, elevationM) {
     ? 0
     : Math.max(0, (sumRadiiDeg - separationDeg) / (2 * sunAngularRadiusDeg));
 
-  return { classification, magnitude, altDeg: sunObs.altDeg };
+  return { classification, magnitude, altDeg: sunAltDeg };
+}
+
+const SOLAR_CONTACT_WINDOW_DAYS = LOCAL_REFINE_WINDOW_HOURS / 24; // same order as the local-epoch refinement window
+const SOLAR_CONTACT_STEP_DAYS = 2 / 1440; // 2 min
+
+/**
+ * C1-C4 contact times for a solar eclipse already found at `epochJd` (this
+ * observer's local greatest-eclipse instant). C2/C3 (totality/annularity
+ * begin/end) only exist when `classification` is 'total' or 'annular' — a
+ * merely partial eclipse never reaches the diffRadiiDeg boundary.
+ */
+function solarEclipseContacts(epochJd, latDeg, lonDeg, elevationM, classification) {
+  const outer = findContactCrossing(epochJd, SOLAR_CONTACT_WINDOW_DAYS, SOLAR_CONTACT_STEP_DAYS,
+    (jd) => {
+      const g = solarDiskGeometryAt(jd, latDeg, lonDeg, elevationM);
+      return g.separationDeg - g.sumRadiiDeg;
+    });
+
+  const contacts = { c1Jd: outer.enterJd, c4Jd: outer.exitJd, c2Jd: null, c3Jd: null };
+
+  if (classification === 'total' || classification === 'annular') {
+    const inner = findContactCrossing(epochJd, SOLAR_CONTACT_WINDOW_DAYS, SOLAR_CONTACT_STEP_DAYS,
+      (jd) => {
+        const g = solarDiskGeometryAt(jd, latDeg, lonDeg, elevationM);
+        return g.separationDeg - g.diffRadiiDeg;
+      });
+    contacts.c2Jd = inner.enterJd;
+    contacts.c3Jd = inner.exitJd;
+  }
+
+  return contacts;
 }
 
 /**
@@ -324,6 +463,10 @@ export function analyzeSolarEclipse({
 
   const events = refined.map((s) => {
     const { classification, magnitude } = solarEclipseAt(s.epochJd, latDeg, lonDeg, elevationM);
+    if (classification === 'none') {
+      return { event: 'solar-eclipse', epochJd: s.epochJd, classification };
+    }
+    const contactsJd = solarEclipseContacts(s.epochJd, latDeg, lonDeg, elevationM, classification);
     return {
       event: 'solar-eclipse',
       epochJd: s.epochJd,
@@ -332,6 +475,12 @@ export function analyzeSolarEclipse({
       magnitude,
       method: s.method,
       toleranceSeconds: s.toleranceSeconds,
+      contacts: {
+        c1Jd: contactsJd.c1Jd, c1Utc: jdToUtcOrNull(contactsJd.c1Jd),
+        c2Jd: contactsJd.c2Jd, c2Utc: jdToUtcOrNull(contactsJd.c2Jd),
+        c3Jd: contactsJd.c3Jd, c3Utc: jdToUtcOrNull(contactsJd.c3Jd),
+        c4Jd: contactsJd.c4Jd, c4Utc: jdToUtcOrNull(contactsJd.c4Jd),
+      },
     };
   }).filter((e) => e.classification !== 'none');
 

@@ -115,7 +115,10 @@ type, and one shared results/chart layout renders whichever is selected.
 Dragging a result's chart scrubber (v1.8) pauses the main simulated clock
 and jumps the whole scene — not just the line-of-sight visual — to the
 scrubbed epoch, staying there after you release so you can inspect that
-exact moment; resume playback with the time-controls Play button.
+exact moment; resume playback with the time-controls Play button. Each
+event type remembers its own last-used inputs across reloads via the
+browser's local storage (v1.9) — separate from, and not affected by, the
+URL Shareable State feature below.
 
 - **Retrograde Motion** (v0.4; any planet since v1.5) — computes the
   target's geocentric ecliptic longitude (`λ = atan2(Δy, Δx)` of the
@@ -154,11 +157,12 @@ exact moment; resume playback with the time-controls Play button.
   none/partial/annular/total *for a specific observer location*
   (lat/lon/elevation), using topocentric parallax correction the same way
   Observer Mode does. Tested against two real historical eclipses (the
-  2022-11-08 total lunar eclipse, the 2024-04-08 total solar eclipse) —
-  see [docs/accuracy.md](docs/accuracy.md#eclipses-v11) for the exact
-  geometric simplifications (spherical bodies, no atmospheric shadow
-  enlargement, magnitude + one peak time rather than a full 4/5-contact
-  circumstance table).
+  2022-11-08 total lunar eclipse, the 2024-04-08 total solar eclipse).
+  Each event reports a full P1/U1/U2/U3/U4/P4 or C1/C2/C3/C4 contact-time
+  table (v1.9), and the lunar shadow cone includes the standard 1.01
+  atmospheric-enlargement factor — see
+  [docs/accuracy.md](docs/accuracy.md#eclipses-v11) for the exact
+  geometric simplifications (spherical bodies, no Besselian elements).
 - **Transit of Mercury/Venus** (v1.4) — the same disk-overlap geometry as
   solar eclipses, with a planet instead of the Moon as the occulter,
   triggered off inferior conjunctions. Tested against the real 2019-11-11
@@ -253,7 +257,10 @@ view — copy it at any time to get a link that restores the same scene:
 - **Included**: simulated date, camera mode, focus body (Top-Down/
   Geocentric), Surface mode's planet/latitude/longitude.
 - **Not included**: playback speed/direction/paused state, Free-flight's
-  position/look direction, Event Toolkit or Observer Mode inputs.
+  position/look direction, Event Toolkit or Observer Mode inputs (Event
+  Toolkit inputs are separately remembered per event type via local
+  storage instead — see the Event Toolkit section above — Observer Mode's
+  are not persisted at all).
 - Updated live via `history.replaceState` — no new browser-history entries
   pile up as you play through time or fly around.
 - A hand-edited or stale URL (unknown mode, out-of-range coordinates, an
