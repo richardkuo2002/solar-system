@@ -7,6 +7,7 @@
 import { drawApparentPathCanvas, drawLongitudeTimelineCanvas, highlightCursorOnCharts } from './event-charts.js';
 import { createExportButtons } from './export-buttons.js';
 import { dateFromJulianDate } from '../core/orbital-elements.js';
+import { applySavedDefaults, loadSaved, saveValues } from '../core/event-toolkit-persistence.js';
 
 // v1.8.5 — see the analyzeBtn click handler below: caps startUtc/endUtc
 // range divided by intervalHours. 50,000 is generous headroom over every
@@ -27,6 +28,8 @@ const MAX_SAMPLES = 50000;
  * @param {(result:object, series:object) => string} config.formatResult
  * @param {(result:object) => number[]} [config.getMarkers]        epochJd values to mark on both charts (default: none)
  * @param {(result:object) => {startJd:number,endJd:number}|null} [config.getHighlight]  shaded band on the timeline (default: none)
+ * @param {string} [config.storageKey]  when set, field values are restored from and
+ *   saved to localStorage under this key (v1.9 Event Toolkit input persistence)
  * @param {object} callbacks
  * @param {(params:object) => void} callbacks.onAnalyze
  * @param {(cursorJd:number) => void} [callbacks.onCursorChange]  fired while scrubbing
@@ -34,10 +37,11 @@ const MAX_SAMPLES = 50000;
  */
 export function createLabPanel(container, config, callbacks = {}) {
   const {
-    className, title, fixedText, fields, analyzeLabel, chartKind, formatResult,
+    className, title, fixedText, analyzeLabel, chartKind, formatResult, storageKey,
     getMarkers = () => [], getHighlight = () => null,
   } = config;
   const { onAnalyze, onCursorChange } = callbacks;
+  const fields = storageKey ? applySavedDefaults(config.fields, loadSaved(storageKey)) : config.fields;
 
   const panel = document.createElement('div');
   panel.className = className;
@@ -83,6 +87,30 @@ export function createLabPanel(container, config, callbacks = {}) {
     el.setAttribute('aria-label', field.label);
     inputs[field.key] = el;
     form.appendChild(el);
+  }
+
+  // v1.9 — persist raw field values (same shape as field.default, e.g. a
+  // date field's bare `el.value`, not onAnalyze's `T00:00:00Z`-suffixed
+  // form) on every edit, so switching event types or reloading restores
+  // the last-used inputs per type instead of the config's hardcoded
+  // defaults.
+  if (storageKey) {
+    const persist = () => {
+      const values = {};
+      for (const field of fields) {
+        const el = inputs[field.key];
+        if (field.type === 'number') {
+          const parsed = parseFloat(el.value);
+          values[field.key] = Number.isFinite(parsed) ? parsed : field.default;
+        } else {
+          values[field.key] = el.value;
+        }
+      }
+      saveValues(storageKey, values);
+    };
+    for (const field of fields) {
+      inputs[field.key].addEventListener('change', persist);
+    }
   }
 
   const errorText = document.createElement('pre');

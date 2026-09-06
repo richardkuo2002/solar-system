@@ -49,6 +49,7 @@ import { C_AU_PER_DAY } from '../src/core/units.js';
 import { J2000_JD } from '../src/core/orbital-elements.js';
 import { analyzeObserver, observeAt, OBSERVER_TARGETS } from '../src/analysis/observer.js';
 import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/url-state.js';
+import { applySavedDefaults } from '../src/core/event-toolkit-persistence.js';
 
 // kepler: eccentric anomaly solver satisfies Kepler's equation
 {
@@ -1437,6 +1438,22 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
   assert.ok(event.magnitude > 0.9, `expected umbral magnitude > 0.9 (real value 1.359), got ${event.magnitude}`);
   const deltaHours = Math.abs(new Date(event.epochUtc) - new Date('2022-11-08T11:00:00Z')) / 3600000;
   assert.ok(deltaHours < 6, `greatest-eclipse time should be within a few hours of the real 2022-11-08 11:00 UT, off by ${deltaHours}h`);
+
+  // v1.9 contact-time table — NASA/Espenak published times for this
+  // eclipse: P1 08:02, U1 09:09, U2 10:16, U3 11:42, U4 12:49, P4 13:56 UT.
+  // 30-minute tolerance is generous headroom over the few minutes this
+  // model actually lands within (see docs/accuracy.md).
+  const CONTACT_TOLERANCE_MIN = 30;
+  const expectedLunarContacts = {
+    p1Utc: '2022-11-08T08:02:00Z', u1Utc: '2022-11-08T09:09:00Z',
+    u2Utc: '2022-11-08T10:16:00Z', u3Utc: '2022-11-08T11:42:00Z',
+    u4Utc: '2022-11-08T12:49:00Z', p4Utc: '2022-11-08T13:56:00Z',
+  };
+  for (const [key, expectedUtc] of Object.entries(expectedLunarContacts)) {
+    assert.ok(event.contacts[key] != null, `expected non-null lunar contact ${key} for a total eclipse`);
+    const diffMin = Math.abs(new Date(event.contacts[key]) - new Date(expectedUtc)) / 60000;
+    assert.ok(diffMin < CONTACT_TOLERANCE_MIN, `lunar contact ${key} should be within ${CONTACT_TOLERANCE_MIN}min of ${expectedUtc}, off by ${diffMin}min`);
+  }
 }
 
 // analysis/eclipse: a full moon with no real eclipse (Aug 2022) correctly
@@ -1461,6 +1478,19 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
   assert.equal(dallas.result.events.length, 1, 'expected exactly one solar eclipse visible from Dallas in this window');
   assert.equal(dallas.result.events[0].classification, 'total');
   assert.ok(dallas.result.events[0].magnitude > 0.9, `expected magnitude > 0.9 for totality, got ${dallas.result.events[0].magnitude}`);
+
+  // v1.9 contact-time table — NASA published local circumstances for
+  // Dallas, TX: C1 ~17:23, C2 ~18:40, C3 ~18:44, C4 ~20:01 UT.
+  const dallasContacts = dallas.result.events[0].contacts;
+  const expectedSolarContacts = {
+    c1Utc: '2024-04-08T17:23:00Z', c2Utc: '2024-04-08T18:40:00Z',
+    c3Utc: '2024-04-08T18:44:00Z', c4Utc: '2024-04-08T20:01:00Z',
+  };
+  for (const [key, expectedUtc] of Object.entries(expectedSolarContacts)) {
+    assert.ok(dallasContacts[key] != null, `expected non-null solar contact ${key} for a total eclipse`);
+    const diffMin = Math.abs(new Date(dallasContacts[key]) - new Date(expectedUtc)) / 60000;
+    assert.ok(diffMin < 30, `solar contact ${key} should be within 30min of ${expectedUtc}, off by ${diffMin}min`);
+  }
 
   const tokyo = analyzeSolarEclipse({
     startUtc: '2024-04-01T00:00:00Z', endUtc: '2024-04-15T00:00:00Z',
@@ -1859,6 +1889,45 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
   for (const version of ['v1.0.0', 'v1.8', 'v1.8.6']) {
     assert.ok(extractChangelogSection(realChangelog, version).length > 0, `CHANGELOG.md must have a non-empty section for ${version}`);
   }
+}
+
+// event-toolkit-persistence (v1.9): applySavedDefaults is the pure logic
+// behind Event Toolkit input persistence — only the DOM-facing
+// localStorage read/write wrappers are untested here (thin browser-API
+// shim, no localStorage in Node, same carve-out as other DOM-only code).
+{
+  const selectField = { key: 'target', type: 'select', default: 'mars', options: [{ value: 'mars' }, { value: 'venus' }] };
+  const numberField = { key: 'intervalHours', type: 'number', default: 6, min: 1, max: 100 };
+  const dateField = { key: 'startUtc', type: 'date', default: '2022-01-01' };
+  const fields = [selectField, numberField, dateField];
+
+  // No saved values at all: fields pass through unchanged.
+  assert.deepEqual(applySavedDefaults(fields, null), fields, 'null saved must return fields unchanged');
+
+  // Valid override for every field type.
+  let result = applySavedDefaults(fields, { target: 'venus', intervalHours: 24, startUtc: '2023-06-15' });
+  assert.equal(result[0].default, 'venus');
+  assert.equal(result[1].default, 24);
+  assert.equal(result[2].default, '2023-06-15');
+
+  // Invalid select value (not one of this field's options) falls through to the original default.
+  result = applySavedDefaults(fields, { target: 'jupiter' });
+  assert.equal(result[0].default, 'mars', 'an unknown select option must not override the default');
+
+  // Out-of-range number is clamped, not rejected outright.
+  result = applySavedDefaults(fields, { intervalHours: 500 });
+  assert.equal(result[1].default, 100, 'a saved number above max must clamp to max, not pass through raw');
+  result = applySavedDefaults(fields, { intervalHours: 0.001 });
+  assert.equal(result[1].default, 1, 'a saved number below min must clamp to min');
+
+  // Non-finite number and empty date string are both ignored.
+  result = applySavedDefaults(fields, { intervalHours: NaN, startUtc: '' });
+  assert.equal(result[1].default, 6);
+  assert.equal(result[2].default, '2022-01-01');
+
+  // A key this field set doesn't have is simply ignored, not an error.
+  result = applySavedDefaults(fields, { nonexistentKey: 'whatever' });
+  assert.deepEqual(result, fields);
 }
 
 console.log('PASS: smoke-test.js all assertions passed');

@@ -370,18 +370,32 @@ made eclipse detection meaningless). Simplifications, all deliberate:
   `scripts/smoke-test.js` actually come back "total" rather than
   "partial"). Lunar eclipses are geocentric by nature (visible from the
   whole night-side hemisphere) and don't need this per-observer step.
-- **Shadow geometry is a pure vacuum cone** (similar triangles on the real
-  Sun/Earth/Moon radii and actual Sun-Earth/Earth-Moon distances) — no
-  empirical atmospheric-enlargement factor (real eclipse calendars
-  typically add ~1% to Earth's umbra/penumbra radius for this; omitted
-  here).
+- **Shadow geometry is a similar-triangles vacuum cone** on the real
+  Sun/Earth/Moon radii and actual Sun-Earth/Earth-Moon distances, scaled by
+  the standard Espenak/Danjon **1.01 atmospheric-enlargement factor**
+  (v1.9, `ATMOSPHERE_ENLARGEMENT_FACTOR` in `eclipse.js`) to approximate the
+  atmosphere refracting extra sunlight into Earth's shadow. Still an
+  empirical constant applied uniformly, not a real pressure/altitude
+  atmosphere model.
 - **Spherical Earth and Moon** (no oblateness, no lunar-limb profile) — no
-  atmospheric refraction for the solar-eclipse observer check (same
-  caveats Observer Mode already carries).
-- **Magnitude + one peak time only** — not the 4/5-contact circumstance
-  table (P1/U1/U2/greatest/U3/U4/P4) a real eclipse calendar shows, and no
-  path/footprint mapping across Earth's surface (solar eclipses answer
-  "what does this one point see," not "where is the path of totality").
+  atmospheric refraction correction for the solar-eclipse geometry itself
+  (the separate horizon check below the fold *does* use Bennett's
+  refraction formula, same as Observer Mode).
+- **Full 4/5-contact time table (v1.9)** — both eclipse types report
+  P1/U1/U2/U3/U4/P4 (lunar) or C1/C2/C3/C4 (solar), not just magnitude and
+  one peak time. Contacts are found by `findContactCrossing` in
+  `eclipse.js`: scan a fixed window around the already-found greatest-
+  eclipse instant (±6h lunar, ±3h solar — comfortably wider than any real
+  eclipse's duration) for the moment a margin function (Moon-to-shadow-axis
+  distance, or angular Sun-Moon separation, minus the relevant boundary
+  radius) crosses zero, then reuse `analysis/retrograde.js`'s
+  `findStationaryPoints` — despite its name, a generic bisection
+  zero-crossing finder — to refine it to `DEFAULT_TOLERANCE_SECONDS`. A
+  boundary this eclipse's classification never reaches (e.g. U2/U3 for a
+  merely partial eclipse) is simply omitted (`null`), not computed. No
+  path/footprint mapping across Earth's surface (solar eclipses still only
+  answer "what does this one point see," not "where is the path of
+  totality").
 - No Besselian elements — this is plain vector/spherical-trig geometry,
   not the precision apparatus real eclipse predictions use for path maps
   down to the kilometer.
@@ -390,7 +404,10 @@ made eclipse detection meaningless). Simplifications, all deliberate:
   2024-04-08 total solar eclipse (verified visible from Dallas, TX; and
   correctly *not* visible from Tokyo, where it was simply night-time at
   the relevant instant — a check robust to any model imprecision, not
-  just path distance).
+  just path distance), now including contact-time assertions against
+  published NASA/Espenak values (within about an hour, the same order as
+  the syzygy-vs-shadow-axis simplification above — in practice contacts
+  come back within a few minutes).
 
 ## Moon orbit spacing (v1.8.4)
 
