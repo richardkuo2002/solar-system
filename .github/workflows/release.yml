@@ -1,0 +1,30 @@
+name: Release
+
+# v1.8.7 — only v1.0.0 ever got an actual GitHub Release; every tag since
+# (v1.1-v1.8.6) was pushed without one. This automates it: every `v*` tag
+# push gets a Release whose notes are that version's existing CHANGELOG.md
+# section (scripts/changelog-excerpt.mjs), not a separate auto-generated
+# summary — CHANGELOG.md stays the one place release notes are written.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Extract this version's CHANGELOG.md section
+        run: node scripts/changelog-excerpt.mjs "${GITHUB_REF_NAME}" > release-notes.md
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "${GITHUB_REF_NAME}" --title "Solar System ${GITHUB_REF_NAME}" --notes-file release-notes.md

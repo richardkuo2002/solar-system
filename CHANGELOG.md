@@ -5,6 +5,14 @@ All notable changes to this project. Format loosely follows
 milestones in `docs/ROADMAP.md` (local-only), with each version's exact
 scope and accuracy notes in [docs/accuracy.md](docs/accuracy.md).
 
+## v1.8.7 — 2026-09-06
+
+- **Tags now auto-create a GitHub Release** — `.github/workflows/release.yml`
+  triggers on any pushed `v*` tag and uses that version's existing
+  CHANGELOG.md section (`scripts/changelog-excerpt.mjs`) as the Release's
+  notes, rather than a separate auto-generated summary. Previously only
+  `v1.0.0` had a Release; every tag since (v1.1-v1.8.6) was tag-only.
+
 ## v1.8.6 — 2026-09-06
 
 Remainder of the risk audit's findings (continuing v1.8.5).
