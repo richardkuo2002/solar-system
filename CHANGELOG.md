@@ -5,6 +5,17 @@ All notable changes to this project. Format loosely follows
 milestones in `docs/ROADMAP.md` (local-only), with each version's exact
 scope and accuracy notes in [docs/accuracy.md](docs/accuracy.md).
 
+## v1.10 — 2026-09-06
+
+- **Clicking Analyze now jumps the main scene's clock to the result**,
+  the same pause+jump the chart scrubber already did (v1.8) — previously
+  the scene stayed on whatever date it was on before you ran an analysis,
+  and only synced once you manually dragged the scrubber. Reuses each
+  event type's existing `getMarkers(result)` (already used for chart
+  markers) to pick the first event's epoch; no time jump if none found.
+
+`npm test`/`npm run lint` all pass.
+
 ## v1.9.1 — 2026-09-06
 
 Risk-audit follow-up on v1.9 (no High findings) — CI permissions, input
