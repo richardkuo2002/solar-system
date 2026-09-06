@@ -448,6 +448,7 @@ export function createEventToolkitPanel(container, callbacks) {
 
   const typeSelect = document.createElement('select');
   typeSelect.className = 'event-toolkit-type-select';
+  typeSelect.setAttribute('aria-label', 'Event type');
   for (const eventType of EVENT_TYPES) {
     const option = document.createElement('option');
     option.value = eventType.key;

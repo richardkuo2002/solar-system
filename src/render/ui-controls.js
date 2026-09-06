@@ -54,6 +54,7 @@ export function createTimeControlsUI(container, callbacks) {
   reverseBtn.addEventListener('click', () => callbacks.onReverse());
 
   const speedSelect = document.createElement('select');
+  speedSelect.setAttribute('aria-label', 'Playback speed');
   for (const { daysPerSecond, label } of SPEED_OPTIONS) {
     const option = document.createElement('option');
     option.value = String(daysPerSecond);
@@ -67,6 +68,7 @@ export function createTimeControlsUI(container, callbacks) {
 
   const dateInput = document.createElement('input');
   dateInput.type = 'date';
+  dateInput.setAttribute('aria-label', 'Jump to date');
   const jumpBtn = document.createElement('button');
   jumpBtn.textContent = 'Jump';
   jumpBtn.addEventListener('click', () => {
@@ -149,6 +151,7 @@ export function createSurfaceControlsUI(container, planetKeys, onGo, initial = {
   panel.className = 'surface-controls';
 
   const planetSelect = document.createElement('select');
+  planetSelect.setAttribute('aria-label', 'Planet to stand on');
   for (const key of planetKeys) {
     const option = document.createElement('option');
     option.value = key;
@@ -163,6 +166,7 @@ export function createSurfaceControlsUI(container, planetKeys, onGo, initial = {
   latInput.max = '90';
   latInput.value = String(initial.lat);
   latInput.title = 'Latitude';
+  latInput.setAttribute('aria-label', 'Latitude');
 
   const lonInput = document.createElement('input');
   lonInput.type = 'number';
@@ -170,11 +174,19 @@ export function createSurfaceControlsUI(container, planetKeys, onGo, initial = {
   lonInput.max = '180';
   lonInput.value = String(initial.lon);
   lonInput.title = 'Longitude';
+  lonInput.setAttribute('aria-label', 'Longitude');
 
   const goBtn = document.createElement('button');
   goBtn.textContent = 'Stand Here';
   goBtn.addEventListener('click', () => {
-    onGo(planetSelect.value, parseFloat(latInput.value) || 0, parseFloat(lonInput.value) || 0);
+    // v1.8.6 — `parseFloat(...) || 0` can't tell a legitimately-typed 0
+    // apart from unparseable garbage (both produce 0 either way, so this
+    // was harmless here, but observer-panel.js already uses the stricter
+    // Number.isFinite pattern for the same latitude/longitude concept —
+    // matching it removes the one inconsistency.
+    const lat = Number.isFinite(parseFloat(latInput.value)) ? parseFloat(latInput.value) : 0;
+    const lon = Number.isFinite(parseFloat(lonInput.value)) ? parseFloat(lonInput.value) : 0;
+    onGo(planetSelect.value, lat, lon);
   });
 
   panel.append(planetSelect, latInput, lonInput, goBtn);

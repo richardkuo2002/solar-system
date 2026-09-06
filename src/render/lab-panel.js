@@ -6,6 +6,7 @@
 // Event Toolkit is just one config object plugged into this.
 import { drawApparentPathCanvas, drawLongitudeTimelineCanvas, highlightCursorOnCharts } from './event-charts.js';
 import { createExportButtons } from './export-buttons.js';
+import { dateFromJulianDate } from '../core/orbital-elements.js';
 
 // v1.8.5 — see the analyzeBtn click handler below: caps startUtc/endUtc
 // range divided by intervalHours. 50,000 is generous headroom over every
@@ -74,6 +75,12 @@ export function createLabPanel(container, config, callbacks = {}) {
       if (field.type === 'number' && field.max != null) el.max = String(field.max);
     }
     el.title = field.label;
+    // v1.8.6 — `title` alone isn't reliably announced by screen readers
+    // and is invisible on touch. observer-panel.js already wraps its
+    // inputs in a <label> for the same concept; this generic builder
+    // serves ~10 different Event Toolkit field sets, so aria-label here
+    // covers all of them in one place instead of restructuring each.
+    el.setAttribute('aria-label', field.label);
     inputs[field.key] = el;
     form.appendChild(el);
   }
@@ -160,6 +167,11 @@ export function createLabPanel(container, config, callbacks = {}) {
   scrub.max = '0';
   scrub.value = '0';
   scrub.disabled = true;
+  // v1.8.6 — a bare range input announces as "slider, 0" with no context;
+  // aria-valuetext (updated alongside the visible chart highlight below)
+  // gives it the actual date being scrubbed to instead of a meaningless
+  // sample index.
+  scrub.setAttribute('aria-label', 'Scrub through result over time');
   if (chartKind !== 'none') panel.appendChild(scrub);
 
   let currentResult = null;
@@ -178,6 +190,7 @@ export function createLabPanel(container, config, callbacks = {}) {
     if (!currentSeries) return;
     const idx = parseInt(scrub.value, 10);
     const cursorJd = currentSeries.timesJd[idx];
+    scrub.setAttribute('aria-valuetext', dateFromJulianDate(cursorJd).toISOString().slice(0, 10));
     highlightCursorOnCharts(apparentPathCanvas, timelineCanvas, currentSeries, cursorJd);
     onCursorChange?.(cursorJd);
   });
@@ -209,6 +222,7 @@ export function createLabPanel(container, config, callbacks = {}) {
         scrub.max = String(series.timesJd.length - 1);
         scrub.value = '0';
         scrub.disabled = false;
+        scrub.setAttribute('aria-valuetext', dateFromJulianDate(series.timesJd[0]).toISOString().slice(0, 10));
       }
 
       resultsText.textContent = formatResult(result, series);

@@ -48,6 +48,16 @@ export const SATURN_RING_OUTER_KM = 136800;
  * other moon, so this is a no-op for them.
  */
 export function compressMoonOrbit(orbitKm, parentRadiusKm, parentSceneRadius, minSceneRadius = 0) {
+  // v1.8.6 — parentRadiusKm <= 0 has no real data row today, but is a
+  // latent trap for the next moon/dwarf-planet addition with a missing
+  // radiusKm: it used to silently produce Infinity here, which then
+  // propagated through spacedMoonOrbitRadii's Math.max into every other
+  // moon sharing that parent, making the entire moon system vanish from
+  // the scene with no error. Fail loudly instead — this is a data bug,
+  // not a value worth quietly working around.
+  if (!(parentRadiusKm > 0)) {
+    throw new Error(`compressMoonOrbit: parentRadiusKm must be positive, got ${parentRadiusKm}`);
+  }
   const radiiRatio = orbitKm / parentRadiusKm;
   const r = parentSceneRadius + MOON_GAP_SCALE * Math.pow(radiiRatio, MOON_GAP_POWER);
   return Math.max(r, minSceneRadius);
@@ -104,5 +114,13 @@ export function compressPosition(auPosition) {
  * instead of the compressed scene's inflated one.
  */
 export function apparentAngularRadiusRad(radiusKm, distanceKm) {
-  return Math.asin(radiusKm / distanceKm);
+  // v1.8.6 — Math.asin is only defined for inputs in [-1, 1]; a
+  // distanceKm collapsed below radiusKm (a degenerate body-state, e.g. a
+  // Kepler propagation far outside Standish validity, or a future body
+  // added with bad data) previously returned NaN here, which silently
+  // zeroed out an object's THREE.js scale and made it vanish from the
+  // scene with no error. Clamping the ratio caps the returned angle at
+  // 90° (pi/2) instead — visually "fills the whole sky", a plausible
+  // degenerate answer, rather than "disappears".
+  return Math.asin(Math.min(1, radiusKm / distanceKm));
 }

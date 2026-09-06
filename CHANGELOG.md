@@ -5,6 +5,44 @@ All notable changes to this project. Format loosely follows
 milestones in `docs/ROADMAP.md` (local-only), with each version's exact
 scope and accuracy notes in [docs/accuracy.md](docs/accuracy.md).
 
+## v1.8.6 — 2026-09-06
+
+Remainder of the risk audit's findings (continuing v1.8.5).
+
+- **Two silent-failure paths now fail loudly or clamp safely**:
+  `apparentAngularRadiusRad` returned `NaN` (and silently vanished the
+  object from the scene) when radius exceeds distance — now clamps to
+  90°; `compressMoonOrbit` divided by a zero/negative `parentRadiusKm`
+  into `Infinity`, which then propagated through
+  `spacedMoonOrbitRadii` and vanished an entire moon system — now throws
+  a clear error, since that's a data bug, not a value worth tolerating.
+- **Fixed WASD firing while typing in a form field** — the keydown
+  listener is bound to `window` (the canvas itself can't hold focus), so
+  typing a longitude like `-96.7970` in Observer Mode also walked the
+  camera. Now ignored while a form field has focus.
+- **Collapsible panels are keyboard-accessible** — `role="button"`,
+  `tabindex`, Enter/Space handling, and `aria-expanded`, where there was
+  previously no way to reach or toggle them without a mouse.
+- **Added missing `aria-label`s** across the speed dropdown, jump-to-date
+  input, surface planet/lat/lon fields, the Event Toolkit's type select,
+  every Event Toolkit analysis field (one shared builder, ~10 event
+  types), and the result scrubber (now with a live `aria-valuetext` date
+  instead of a meaningless sample index).
+- **CI/deploy workflows get `timeout-minutes: 10`**, and `deploy.yml` no
+  longer uploads the entire repo to the public Pages site — stages only
+  the files `index.html` actually loads (`index.html`, `.nojekyll`,
+  `css/`, `assets/`, `src/`) instead of `path: '.'`.
+- **`package.json` now lists `three` as a devDependency** pinned to the
+  same `0.160.0` vendored at `assets/vendor/three/`, purely so `npm
+  outdated`/Dependabot can ever notice it's behind upstream — runtime
+  still only ever reads the vendored copy.
+
+Deliberately left as-is: event listeners with no `removeEventListener`
+(a single-page app's objects live for the document's lifetime — the
+audit itself flagged this as not a current defect) and `syncUrl()`'s
+per-frame string allocation (the expensive `history.replaceState` call
+is already string-diff-guarded; the allocation itself is negligible).
+
 ## v1.8.5 — 2026-09-06
 
 Follow-up to a repo-wide risk audit (security, correctness, dependencies,

@@ -7,6 +7,10 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # v1.8.6 — without this, a hung job (e.g. an Event Toolkit analysis
+    # that got past lab-panel.js's own sample-count guard some other way)
+    # would burn GitHub's default 6-hour job limit instead of failing fast.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
