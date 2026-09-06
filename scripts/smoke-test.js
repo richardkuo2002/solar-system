@@ -269,6 +269,27 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
     `expected the Moon's real angular radius ~0.259deg, got ${moonAngularRadiusDeg}`);
 }
 
+// scale: apparentAngularRadiusRad (v1.8.6) — a degenerate distance smaller
+// than the body's own radius used to return NaN (Math.asin's domain is
+// [-1, 1]), which silently zeroed a THREE.js object's scale and made it
+// vanish from the scene. Must now clamp to pi/2 (a body "filling the
+// whole sky") instead.
+{
+  const clamped = apparentAngularRadiusRad(696000, 100); // Sun-sized radius, absurdly small distance
+  assert.ok(Number.isFinite(clamped), `must not return NaN when radius > distance, got ${clamped}`);
+  assert.equal(clamped, Math.PI / 2, 'must clamp to a full pi/2 (90deg), not overflow past it');
+}
+
+// scale: compressMoonOrbit (v1.8.6) — parentRadiusKm <= 0 has no current
+// data row, but silently produced Infinity here before (then propagated
+// through spacedMoonOrbitRadii into every sibling moon, vanishing the
+// whole system). Must fail loudly instead — this is a data bug, not a
+// value worth quietly tolerating.
+{
+  assert.throws(() => compressMoonOrbit(400000, 0, 1), /must be positive/, 'parentRadiusKm=0 must throw, not silently return Infinity');
+  assert.throws(() => compressMoonOrbit(400000, -1, 1), /must be positive/, 'negative parentRadiusKm must throw too');
+}
+
 // orbital-elements: circularOrbitAngle wraps to [0, 2*PI) and completes one
 // full revolution after exactly one period
 {

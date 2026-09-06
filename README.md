@@ -342,7 +342,12 @@ working source URL yet (see the TODO list in `ATTRIBUTION.md`).
 rather than loaded from a CDN — needed for the desktop app to actually
 work offline (see [Desktop App](#desktop-app-tauri) below). Only the exact
 files this project imports are vendored: `build/three.module.js` and the
-one addon in use, `examples/jsm/controls/OrbitControls.js`.
+one addon in use, `examples/jsm/controls/OrbitControls.js`. `package.json`
+also lists `three` as a devDependency at the same pinned version
+(v1.8.6) — purely so `npm outdated`/Dependabot can ever notice this file
+is behind upstream; the browser and the Tauri build both still import
+the vendored copy under `assets/vendor/`, never the one under
+`node_modules/` that this installs.
 
 ## Contributing
 

@@ -16,14 +16,31 @@
 export function makeCollapsible(titleEl, bodyEl) {
   const baseText = titleEl.textContent;
   titleEl.classList.add('collapsible-title');
+  // v1.8.6 — titleEl was a plain <div> with only a click handler: no
+  // tabindex meant keyboard users could never reach it via Tab, and no
+  // role/keydown handler meant even a focused div did nothing on
+  // Enter/Space. role="button" + tabindex make it a real, Tab-reachable
+  // control; aria-expanded lets a screen reader announce the current
+  // state the same way the ▾/▸ glyph communicates it visually.
+  titleEl.setAttribute('role', 'button');
+  titleEl.setAttribute('tabindex', '0');
 
   function render() {
     titleEl.textContent = `${bodyEl.hidden ? '▸' : '▾'} ${baseText}`;
+    titleEl.setAttribute('aria-expanded', String(!bodyEl.hidden));
   }
 
-  titleEl.addEventListener('click', () => {
+  function toggle() {
     bodyEl.hidden = !bodyEl.hidden;
     render();
+  }
+
+  titleEl.addEventListener('click', toggle);
+  titleEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault(); // Space must not also scroll the page
+      toggle();
+    }
   });
 
   render();

@@ -22,6 +22,13 @@ function clamp11(x) {
 const TOPDOWN_PAN_SPEED = 60; // scene units / second
 const SURFACE_WALK_SPEED_DEG_PER_SEC = 15; // stylized "walking" rate, not tied to any planet's real size
 
+// v1.8.6 — see the keydown listener below for why this exists.
+function isTypingIntoFormField(target) {
+  if (!target) return false;
+  const tag = target.tagName;
+  return tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || target.isContentEditable === true;
+}
+
 export function createCameraRig(camera, domElement) {
   const orbitControls = new OrbitControls(camera, domElement);
   orbitControls.enableDamping = true;
@@ -52,6 +59,13 @@ export function createCameraRig(camera, domElement) {
   let touchVertical = 0;
 
   window.addEventListener('keydown', (e) => {
+    // v1.8.6 — this listener is on `window` (so WASD works without the
+    // canvas needing focus, since it has none — see camera-rig.js's own
+    // history), which means it also fires while a form field elsewhere on
+    // the page has focus. Typing "-96.7970" into the Observer Mode
+    // longitude field would walk the surface camera at the same time,
+    // since W/A/S/D are all real letters/characters someone might type.
+    if (isTypingIntoFormField(e.target)) return;
     keysDown.add(e.code);
     if (e.repeat) return;
     if (e.code === 'KeyD' || e.code === 'KeyW') pendingCycleDirections.push(1);

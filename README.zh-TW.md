@@ -149,7 +149,11 @@ npm run tauri:build   # 產生真的 .app/.dmg(macOS)安裝包
 
 - **預設就離線可用**——這正是為什麼 THREE.js 要地化到本地(見下方
   [資產授權](#資產授權)),而不是從 CDN 載入:桌面版打包好之後如果沒有
-  網路就白屏,那就不算真的離線可用。
+  網路就白屏,那就不算真的離線可用。THREE.js 釘選在 `0.160.0`
+  (`assets/vendor/three/`),`package.json` 也把同版本列成 devDependency
+  (v1.8.6)——純粹是為了讓 `npm outdated`/Dependabot 能發現這個版本落後
+  多少,瀏覽器跟桌面版打包實際上都還是讀 `assets/vendor/` 底下地化的
+  那份,不是 `node_modules/` 裡這個安裝來的。
 - **視窗標題/圖示**跟**視窗大小/位置**(用官方 `tauri-plugin-window-state`
   外掛記憶,跨次啟動)都設定在 `src-tauri/tauri.conf.json` /
   `src-tauri/src/lib.rs`。

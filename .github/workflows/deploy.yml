@@ -16,6 +16,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10 # v1.8.6 — see ci.yml's identical guard
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -29,6 +30,7 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -36,9 +38,21 @@ jobs:
       # No `npm ci` here on purpose — zero-build static site, and this way
       # node_modules never exists in the checkout that gets uploaded below.
       - uses: actions/checkout@v4
+      # v1.8.6 — `path: '.'` used to upload the entire repo (package-lock.json,
+      # src-tauri/, scripts/, docs/, CONTRIBUTING.md, ...) to the public
+      # site, not just what index.html actually loads. Nothing in there is
+      # sensitive today, but "publish everything by default" is the wrong
+      # default for a public deploy — stage only the files the browser
+      # actually fetches (see index.html's own <link>/<script>/importmap)
+      # into a throwaway directory instead.
+      - name: Stage only what the static site serves
+        run: |
+          mkdir _site
+          cp index.html .nojekyll _site/
+          cp -r css assets src _site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
+          path: '_site'
       - id: deployment
         uses: actions/deploy-pages@v4
