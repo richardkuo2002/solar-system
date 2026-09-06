@@ -5,6 +5,19 @@ All notable changes to this project. Format loosely follows
 milestones in `docs/ROADMAP.md` (local-only), with each version's exact
 scope and accuracy notes in [docs/accuracy.md](docs/accuracy.md).
 
+## v1.8.4 — 2026-09-06
+
+- **Fixed Jupiter's four Galilean moons rendering overlapping each other
+  (and dipping inside Jupiter itself)** — their real orbital-radius
+  ratios span under 5x of each other, which compressed into a scene-unit
+  spread narrower than the moons' own rendered sizes. Added
+  `scale.js#spacedMoonOrbitRadii`, which orders a parent's moons by real
+  orbit radius and pushes any orbit that would overlap its inner
+  neighbor (or the parent itself) further out by the minimum needed —
+  computed once at startup, a no-op for every other current moon system
+  (0-1 moons each), and driven by the actual per-parent moon list so it
+  automatically covers any future planet with 2+ real moons.
+
 ## v1.8.3 — 2026-09-06
 
 - **Added 100x and 1000x to the speed dropdown**, between 5x and the two
