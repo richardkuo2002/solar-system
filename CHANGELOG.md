@@ -5,6 +5,28 @@ All notable changes to this project. Format loosely follows
 milestones in `docs/ROADMAP.md` (local-only), with each version's exact
 scope and accuracy notes in [docs/accuracy.md](docs/accuracy.md).
 
+## v1.9.1 — 2026-09-06
+
+Risk-audit follow-up on v1.9 (no High findings) — CI permissions, input
+validation, and a Tauri hardening item:
+
+- `.github/workflows/ci.yml` now declares `permissions: contents: read`
+  (it lints/tests only, including on fork PRs, and previously fell back
+  to broader repo/org defaults — `deploy.yml`/`release.yml` already had
+  their own minimal permissions).
+- `event-toolkit-persistence.js#applySavedDefaults` now validates a saved
+  date field with `Date.parse` instead of just checking for a non-empty
+  string.
+- Deduplicated the number-clamping logic between `applySavedDefaults` and
+  `lab-panel.js`'s persist-on-change handler into a shared
+  `clampNumberField`.
+- `src-tauri/tauri.conf.json`'s CSP changed from `null` to an explicit
+  allowlist (`default-src 'self'` plus `connect-src` for the Horizons API
+  host) — **not build-verified in this environment** (no `cargo`/`rustc`
+  available); verify with `npm run tauri:dev` before shipping a build.
+
+`npm test`/`npm run lint` all pass.
+
 ## v1.9 — 2026-09-06
 
 - **Eclipse 4/5-contact time tables** — lunar eclipses now report

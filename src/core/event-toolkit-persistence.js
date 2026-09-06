@@ -22,6 +22,18 @@
  * @param {Array<{key:string, type:'date'|'number'|'select', default?:*, min?:number, max?:number, options?:{value:string}[]}>} fields
  * @param {Record<string, *>} saved
  */
+/** Clamps `parsed` to `field.min`/`field.max` (a `number`-type field's
+ *  declared bounds); `null` if `parsed` isn't finite. Shared by
+ *  applySavedDefaults (below) and lab-panel.js's own persist-on-change
+ *  handler (v1.9.1 risk audit — was duplicated, drifting risk). */
+export function clampNumberField(parsed, field) {
+  if (!Number.isFinite(parsed)) return null;
+  let clamped = parsed;
+  if (field.min != null) clamped = Math.max(clamped, field.min);
+  if (field.max != null) clamped = Math.min(clamped, field.max);
+  return clamped;
+}
+
 export function applySavedDefaults(fields, saved) {
   if (!saved) return fields;
   return fields.map((field) => {
@@ -34,14 +46,17 @@ export function applySavedDefaults(fields, saved) {
     }
     if (field.type === 'number') {
       const parsed = typeof value === 'number' ? value : parseFloat(value);
-      if (!Number.isFinite(parsed)) return field;
-      let clamped = parsed;
-      if (field.min != null) clamped = Math.max(clamped, field.min);
-      if (field.max != null) clamped = Math.min(clamped, field.max);
-      return { ...field, default: clamped };
+      const clamped = clampNumberField(parsed, field);
+      return clamped == null ? field : { ...field, default: clamped };
     }
     if (field.type === 'date') {
-      return typeof value === 'string' && value.length > 0 ? { ...field, default: value } : field;
+      // v1.9.1 risk audit — a bare non-empty-string check let a corrupted
+      // or hand-edited localStorage value like "hello" through as a date
+      // default. An <input type="date"> silently ignores an invalid
+      // value.value assignment (fails safe), but this function shouldn't
+      // rely on that caller behavior to stay correct.
+      const isValidDate = typeof value === 'string' && value.length > 0 && !Number.isNaN(Date.parse(value));
+      return isValidDate ? { ...field, default: value } : field;
     }
     return field;
   });

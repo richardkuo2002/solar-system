@@ -4,6 +4,14 @@ on:
   push:
   pull_request:
 
+# v1.9.1 risk audit — this job only lints/tests (no deploy step, unlike
+# deploy.yml/release.yml which already declare their own minimal
+# permissions), and also runs on pull_request (including forks), so
+# GITHUB_TOKEN should default to read-only rather than inherit whatever
+# broader repo/org default applies.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
