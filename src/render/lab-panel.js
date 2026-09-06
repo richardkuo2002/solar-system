@@ -7,7 +7,7 @@
 import { drawApparentPathCanvas, drawLongitudeTimelineCanvas, highlightCursorOnCharts } from './event-charts.js';
 import { createExportButtons } from './export-buttons.js';
 import { dateFromJulianDate } from '../core/orbital-elements.js';
-import { applySavedDefaults, loadSaved, saveValues } from '../core/event-toolkit-persistence.js';
+import { applySavedDefaults, loadSaved, saveValues, clampNumberField } from '../core/event-toolkit-persistence.js';
 
 // v1.8.5 — see the analyzeBtn click handler below: caps startUtc/endUtc
 // range divided by intervalHours. 50,000 is generous headroom over every
@@ -100,8 +100,8 @@ export function createLabPanel(container, config, callbacks = {}) {
       for (const field of fields) {
         const el = inputs[field.key];
         if (field.type === 'number') {
-          const parsed = parseFloat(el.value);
-          values[field.key] = Number.isFinite(parsed) ? parsed : field.default;
+          const clamped = clampNumberField(parseFloat(el.value), field);
+          values[field.key] = clamped == null ? field.default : clamped;
         } else {
           values[field.key] = el.value;
         }

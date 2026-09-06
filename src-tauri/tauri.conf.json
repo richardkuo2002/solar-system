@@ -17,7 +17,7 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; img-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self' https://ssd.jpl.nasa.gov"
     }
   },
   "bundle": {
