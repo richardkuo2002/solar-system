@@ -53,6 +53,34 @@ export function compressMoonOrbit(orbitKm, parentRadiusKm, parentSceneRadius, mi
   return Math.max(r, minSceneRadius);
 }
 
+// v1.8.4 — for a parent with 2+ moons whose real orbital-radius ratios span
+// a narrow range (Jupiter's four Galilean moons: Io ~6x Jupiter's radius,
+// Callisto ~27x — under 5x apart), compressMoonOrbit's shared ratio^power
+// curve compresses that narrow real range into an even narrower scene-unit
+// spread, visibly narrower than the moons' own rendered sizes — so the
+// moons render overlapping each other (and the planet), rather than
+// merely "close together" the way the real solar system actually has
+// them. Walks moons ordered by real orbit radius (ascending — the
+// `moons` array must already be sorted, since this only ever pushes
+// outward) and nudges any orbit that would overlap its inner neighbor
+// (both moons' compressed sizes + a small gap) further out. A no-op for
+// any parent with 0-1 moons (Earth/Saturn/Neptune here), since there's no
+// neighbor to collide with — existing single-moon systems are unaffected.
+export const MOON_MIN_GAP_SCENE = 0.02;
+
+export function spacedMoonOrbitRadii(moons) {
+  const result = [];
+  let prevR = null;
+  let prevSizeScene = 0;
+  for (const moon of moons) {
+    const rScene = prevR === null ? moon.rScene : Math.max(moon.rScene, prevR + prevSizeScene + moon.sizeScene + MOON_MIN_GAP_SCENE);
+    result.push({ ...moon, rScene });
+    prevR = rScene;
+    prevSizeScene = moon.sizeScene;
+  }
+  return result;
+}
+
 /**
  * Compress a heliocentric position (AU, plain {x,y,z}) into scene units,
  * preserving direction — compresses the *radial distance* via

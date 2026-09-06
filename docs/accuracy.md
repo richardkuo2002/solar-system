@@ -392,6 +392,31 @@ made eclipse detection meaningless). Simplifications, all deliberate:
   the relevant instant — a check robust to any model imprecision, not
   just path distance).
 
+## Moon orbit spacing (v1.8.4)
+
+`compressMoonOrbit`'s ratio-based curve (see below) is tuned per-planet,
+not per-planet-*and*-moon-count. For a lone moon (Earth, Saturn's Titan,
+Neptune's Triton) that's fine — there's nothing to collide with. Jupiter's
+four Galilean moons are a different case: their real orbital-radius ratios
+(Io ~6x Jupiter's radius, Callisto ~27x) span under 5x of each other, and
+that narrow real-world range compresses into an even narrower scene-unit
+spread — narrower than the moons' own rendered sizes (they're
+Mercury/Moon-sized bodies, not specks). Before this fix, Io's and Europa's
+compressed orbits were only ~0.03 scene units apart, less than either
+moon's own ~0.16-0.17 rendered radius — they (and Ganymede/Callisto)
+rendered overlapping each other, and Io's near side even rendered dipping
+back inside Jupiter's own sphere. `scale.js#spacedMoonOrbitRadii` now walks
+each parent's moons ordered by real `orbitKm` (computed once at startup,
+not per frame — every input is static) and pushes any orbit that would
+overlap its inner neighbor, or dip back inside the parent itself, further
+out by the minimum amount needed. A no-op for every other current
+moon system (0-1 moons each), and — since it's driven by the actual
+moon list rather than hardcoded to "Jupiter" — automatically applies to
+any future planet a second/third real moon gets added to. This changes
+Jupiter's moons' rendered orbit *radii* (now more spread out, no longer
+overlapping); it does not change their orbital *periods*, i.e. how fast
+they visually orbit.
+
 ## Surface Mode sky realism (v1.3, extended v1.4)
 
 Everywhere else in the app, `core/scale.js`'s compression curves are

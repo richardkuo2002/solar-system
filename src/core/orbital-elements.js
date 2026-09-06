@@ -133,13 +133,19 @@ const SATURN_RING_CLEARANCE_MARGIN = 1.05;
  * compressMoonOrbit. Pure — safe to keep in core/ (no THREE import) so
  * render/bodies.js just calls this instead of duplicating the math in a
  * THREE-importing file where it couldn't be Node-tested.
+ *
+ * `extraMinSceneRadius` (optional, v1.8.4): a second floor on top of the
+ * Saturn-ring one below, combined via Math.max — app.js computes this
+ * once at startup, per moon, via scale.js#spacedMoonOrbitRadii to keep
+ * multi-moon parents' (Jupiter) siblings from rendering on top of each
+ * other. 0 (no-op) for every moon app.js doesn't pass one for.
  */
-export function moonLocalPosition(moonData, parentRadiusKm, parentSceneRadius, currentJD, epochJD) {
+export function moonLocalPosition(moonData, parentRadiusKm, parentSceneRadius, currentJD, epochJD, extraMinSceneRadius = 0) {
   const angle = circularOrbitAngle(currentJD - epochJD, moonData.periodDays);
-  const minSceneRadius = moonData.parent === 'saturn'
+  const saturnRingFloor = moonData.parent === 'saturn'
     ? compressSize(SATURN_RING_OUTER_KM) * SATURN_RING_CLEARANCE_MARGIN
     : 0;
-  const r = compressMoonOrbit(moonData.orbitKm, parentRadiusKm, parentSceneRadius, minSceneRadius);
+  const r = compressMoonOrbit(moonData.orbitKm, parentRadiusKm, parentSceneRadius, Math.max(saturnRingFloor, extraMinSceneRadius));
   return { x: r * Math.cos(angle), y: 0, z: r * Math.sin(angle) };
 }
 

@@ -6,7 +6,7 @@ import {
   moonLocalPositionMeeus, moonGeocentricJ2000,
   elementsVelocity, sampleOrbitPath, orbitalPeriodDaysFromSemiMajorAxisAu,
 } from '../src/core/orbital-elements.js';
-import { compressDistance, compressSize, compressPosition, compressMoonOrbit, apparentAngularRadiusRad, SATURN_RING_OUTER_KM } from '../src/core/scale.js';
+import { compressDistance, compressSize, compressPosition, compressMoonOrbit, spacedMoonOrbitRadii, MOON_MIN_GAP_SCENE, apparentAngularRadiusRad, SATURN_RING_OUTER_KM } from '../src/core/scale.js';
 import { PLANETS, PLANET_ORDER } from '../src/data/planets.js';
 import { MOONS, MOON_ORDER } from '../src/data/moons.js';
 import { COMETS, COMET_ORDER } from '../src/data/comets.js';
@@ -225,6 +225,37 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
   assert.ok(titanUnclamped < ringOuterScene, 'sanity: unclamped Titan orbit really would fall inside the ring');
   const titanClamped = compressMoonOrbit(1221870, saturnRadiusKm, saturnSceneRadius, ringOuterScene * 1.05);
   assert.ok(titanClamped > ringOuterScene, 'Titan orbit must clear Saturn\'s ring once floored');
+}
+
+// scale: spacedMoonOrbitRadii (v1.8.4) — Jupiter's four Galilean moons'
+// raw compressMoonOrbit results render overlapping each other (verified:
+// Io's orbit is ~1.02, Europa's ~1.05 — 0.03 apart, less than either
+// moon's own ~0.16-0.17 rendered radius) and Io's near side even dips
+// back inside Jupiter's own scene radius. After spacing, every pair must
+// clear both each other and the planet.
+{
+  const parentRadiusKm = 69911; // Jupiter
+  const parentSceneRadius = compressSize(parentRadiusKm);
+  const galileanMoons = [
+    { orbitKm: 421700, radiusKm: 1821.6 }, // Io
+    { orbitKm: 671034, radiusKm: 1560.8 }, // Europa
+    { orbitKm: 1070412, radiusKm: 2634.1 }, // Ganymede
+    { orbitKm: 1882709, radiusKm: 2410.3 }, // Callisto
+  ].map(({ orbitKm, radiusKm }) => ({
+    sizeScene: compressSize(radiusKm),
+    rScene: Math.max(compressMoonOrbit(orbitKm, parentRadiusKm, parentSceneRadius), parentSceneRadius + compressSize(radiusKm) + MOON_MIN_GAP_SCENE),
+  }));
+  const unspacedGap = galileanMoons[1].rScene - galileanMoons[0].rScene - galileanMoons[0].sizeScene - galileanMoons[1].sizeScene;
+  assert.ok(unspacedGap < 0, `sanity: Io/Europa really do overlap before spacing, got clearance ${unspacedGap}`);
+  const spaced = spacedMoonOrbitRadii(galileanMoons);
+  assert.ok(spaced[0].rScene - spaced[0].sizeScene > parentSceneRadius, 'Io must clear Jupiter\'s own surface after spacing');
+  for (let i = 1; i < spaced.length; i++) {
+    const clearance = spaced[i].rScene - spaced[i - 1].rScene - spaced[i - 1].sizeScene - spaced[i].sizeScene;
+    assert.ok(clearance >= MOON_MIN_GAP_SCENE - 1e-9, `moon ${i - 1} and ${i} must not overlap after spacing, got clearance ${clearance}`);
+  }
+  // A single-moon parent (nothing to collide with) must be untouched.
+  const lone = spacedMoonOrbitRadii([{ rScene: 0.65, sizeScene: 0.167 }]);
+  assert.equal(lone[0].rScene, 0.65, 'a lone moon\'s orbit radius must pass through unchanged');
 }
 
 // scale: apparentAngularRadiusRad (v1.3) — the real Moon's angular radius

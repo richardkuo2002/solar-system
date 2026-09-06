@@ -33,7 +33,7 @@ import {
   julianDateFromDate, dateFromJulianDate, moonLocalPosition, moonLocalPositionMeeus, moonGeocentricJ2000, circularOrbitAngle,
   orbitalPeriodDaysFromSemiMajorAxisAu,
 } from './core/orbital-elements.js';
-import { compressSize, apparentAngularRadiusRad, SUN_SIZE_CAP } from './core/scale.js';
+import { compressSize, compressMoonOrbit, spacedMoonOrbitRadii, MOON_MIN_GAP_SCENE, apparentAngularRadiusRad, SUN_SIZE_CAP } from './core/scale.js';
 import { KM_PER_AU } from './core/units.js';
 import { getBodyState, sunBodyState } from './core/ephemeris.js';
 import { PLANETS, PLANET_ORDER, SUN } from './data/planets.js';
@@ -163,6 +163,37 @@ for (const moonKey of MOON_ORDER) {
   registerLazy(mesh, [{ textureKey: moonData.textureKey, material: mesh.material, property: 'map' }]);
 }
 loadFullFor(moonMeshesByParent.earth[0].mesh); // the Moon always loads full-res immediately
+
+// v1.8.4 — per-moon extra orbit-radius floor (scale.js#spacedMoonOrbitRadii)
+// so Jupiter's four Galilean moons don't render overlapping each other,
+// plus a per-moon floor clearing the near-side of a big moon from actually
+// dipping back inside its own parent's sphere (Io's compressed orbit was
+// only ~0.14 scene units past Jupiter's edge, less than Io's own ~0.17
+// rendered radius — its near side rendered inside Jupiter). Computed once
+// here, not per animate() frame: every input (planet/moon radiusKm,
+// orbitKm) is static, only the orbital angle actually changes per frame.
+const moonOrbitFloorByKey = {};
+for (const key of PLANET_ORDER) {
+  const planetData = PLANETS[key];
+  const parentSceneRadius = compressSize(planetData.radiusKm);
+  const ordered = moonMeshesByParent[key]
+    .map(({ key: moonKey, moonData }) => {
+      const sizeScene = compressSize(moonData.radiusKm);
+      const rScene = Math.max(
+        compressMoonOrbit(moonData.orbitKm, planetData.radiusKm, parentSceneRadius),
+        parentSceneRadius + sizeScene + MOON_MIN_GAP_SCENE,
+      );
+      return { moonKey, rScene, sizeScene, orbitKm: moonData.orbitKm };
+    })
+    // Sort by real orbitKm (physical truth), not the floored rScene above —
+    // a smaller moon can get a smaller planet-clearance floor than a
+    // bigger, physically-closer sibling (e.g. Europa vs. Io), which would
+    // otherwise invert their visual order.
+    .sort((a, b) => a.orbitKm - b.orbitKm);
+  for (const { moonKey, rScene } of spacedMoonOrbitRadii(ordered)) {
+    moonOrbitFloorByKey[moonKey] = rScene;
+  }
+}
 
 // Comets — same [value,rate] element shape as planets, so this reuses
 // buildOrbitPath/buildPlanetMesh unchanged (see data/comets.js).
@@ -324,14 +355,14 @@ function updateAllPositions(currentDate) {
     planetMeshes[key].rotation.y = rotationRad;
     bodyRotations[key] = rotationRad;
     const parentSceneRadius = compressSize(planetData.radiusKm);
-    for (const { mesh, moonData } of moonMeshesByParent[key]) {
+    for (const { key: moonKey, mesh, moonData } of moonMeshesByParent[key]) {
       // v1.5 — THE Moon uses the same Meeus lunar theory the analysis path
       // uses (real phase/inclination/eccentric distance), so the scene and
       // the Event Toolkit/Observer Mode finally show the same Moon for the
       // same date. Every other moon keeps the circular approximation.
       const localPos = moonData === MOONS.moon
         ? moonLocalPositionMeeus(currentJD, planetData.radiusKm, parentSceneRadius)
-        : moonLocalPosition(moonData, planetData.radiusKm, parentSceneRadius, currentJD, startJD);
+        : moonLocalPosition(moonData, planetData.radiusKm, parentSceneRadius, currentJD, startJD, moonOrbitFloorByKey[moonKey]);
       mesh.position.set(localPos.x, localPos.y, localPos.z);
     }
   }
