@@ -5,6 +5,68 @@ All notable changes to this project. Format loosely follows
 milestones in `docs/ROADMAP.md` (local-only), with each version's exact
 scope and accuracy notes in [docs/accuracy.md](docs/accuracy.md).
 
+## v1.11.2 — 2026-09-07
+
+Follow-up risk audit requested after v1.11.1 — two Explore agents swept
+the code added since v1.8.6/v1.9.1 (eclipse contact tables, Event
+Toolkit persistence, `best-night.js`, and this session's own v1.11.1
+layout changes) plus the whole repo for common issue patterns. One
+Critical, several Moderate/Minor findings, all fixed:
+
+- **Critical: a corrupted (but valid-JSON) localStorage value could crash
+  the whole Event Toolkit's construction** — `applySavedDefaults` used
+  `field.key in saved`, which throws a `TypeError` if `saved` is a
+  non-object JSON value (`"hello"`, `123`, `true` are all valid JSON).
+  Now checks `typeof saved === 'object'` first.
+- **`best-night.js`'s date validation was a third, less careful variant**
+  of the pattern `observer.js`/`phase.js` already use — an unparseable
+  `startUtc`/`endUtc` fell through to `Date.UTC(NaN,...)` and was
+  misreported as "endUtc before startUtc." Now validated explicitly, with
+  both received values named in the error either way.
+- **`scoreNight`'s `clamp01` could return `NaN`**, which was then pushed
+  into the chart series alongside real 0-100 scores; NaN now clamps to 0.
+- **Solar eclipse C1-C4 contact times ignored the horizon** — an eclipse
+  in progress right at local sunrise/sunset could report a contact clock
+  time for a moment the Sun hadn't risen (or had already set) yet,
+  contradicting the classification logic's own "Sun below horizon =
+  nothing observable" rule at the central epoch. Contacts below the
+  horizon now come back `null`, same as one that doesn't apply to that
+  eclipse's classification.
+- **This session's own new `matchMedia` calls (v1.11.1) weren't actually
+  guarded** — the optional chaining only covered the `matchMedia(...)`
+  call, not the `.matches` read after it, so an environment without
+  `matchMedia` would still throw. Fixed in the two new call sites, and in
+  `touch-controls.js`'s existing one, which had the identical gap.
+- **Five near-identical `validateRange` helpers** (`appulse.js`,
+  `eclipse.js`, `elongation-events.js`, `moon-conjunction.js`,
+  `occultation.js`) threw a bare message with no function name or actual
+  values — indistinguishable from five other analyzers' errors in the
+  Event Toolkit's single shared error display. Now named and
+  value-carrying, matching `opposition.js`/`longitude.js`'s existing
+  convention.
+- Added direct unit tests for `clampNumberField`/`loadSaved`/`saveValues`
+  (previously only exercised indirectly through `applySavedDefaults`) and
+  for the new eclipse horizon guard.
+- `scripts/smoke-test.js`'s 700px-breakpoint assertion (v1.11.1) now
+  reads the actual values out of `css/style.css` instead of hardcoded
+  literals that couldn't have caught the CSS drifting from them.
+- `.github/workflows/release.yml` gained a `concurrency` group, matching
+  `deploy.yml`'s existing one.
+- `sharp` moved from `dependencies` to `devDependencies` (only used by
+  the maintainer-only `fetch-textures.mjs` script, never shipped to
+  users); a new `scripts/smoke-test.js` check asserts the vendored
+  `assets/vendor/three/`'s `REVISION` actually matches the `three`
+  devDependency pin, closing the gap where the two could silently drift
+  apart.
+
+Deliberately left as-is (found, considered, not a defect): `best-night.js`
+intentionally has no ≥3-samples-per-range guard the other dense-scan
+analyzers have — it scores whole calendar nights independently rather
+than finding zero-crossings across a fixed sampling grid, so a 1-night
+range is a legitimate request, not an under-sampled edge case.
+
+`npm test`/`npm run lint` all pass.
+
 ## v1.11.1 — 2026-09-07
 
 Fixes the recurring "panels overlap" bug class properly instead of

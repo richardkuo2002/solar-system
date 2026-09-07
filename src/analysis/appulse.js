@@ -30,12 +30,16 @@ function validateAppulseTargets(planetA, planetB) {
   if (planetA === planetB) throw new Error('planetA and planetB must be different planets');
 }
 
-function validateRange(startUtc, endUtc, intervalHours) {
+// v1.11.2 risk audit — `callerName` and the actual values in the message
+// so a validation failure surfacing in the Event Toolkit's single shared
+// error display (lab-panel.js's setError) says which analyzer and which
+// input, not just a generic sentence indistinguishable from five others.
+function validateRange(callerName, startUtc, endUtc, intervalHours) {
   const startMs = new Date(startUtc).getTime();
   const endMs = new Date(endUtc).getTime();
   const stepMs = intervalHours * 3600 * 1000;
   if (!(stepMs > 0) || !(endMs > startMs)) {
-    throw new Error('requires endUtc after startUtc and a positive intervalHours');
+    throw new Error(`${callerName} requires endUtc after startUtc and a positive intervalHours (got startUtc=${startUtc}, endUtc=${endUtc}, intervalHours=${intervalHours})`);
   }
   return { startMs, endMs, stepMs };
 }
@@ -68,7 +72,7 @@ function separationDerivativeAtJd(planetA, planetB, jd, halfStepDays) {
  */
 export function analyzeAppulse({ planetA, planetB, startUtc, endUtc, intervalHours = 24, ephemerisSource = 'kepler' }) {
   validateAppulseTargets(planetA, planetB);
-  const { startMs, endMs, stepMs } = validateRange(startUtc, endUtc, intervalHours);
+  const { startMs, endMs, stepMs } = validateRange('analyzeAppulse', startUtc, endUtc, intervalHours);
 
   const timesJd = [];
   const separationDegValues = [];

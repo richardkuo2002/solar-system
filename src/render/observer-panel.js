@@ -170,8 +170,10 @@ export function createObserverPanel(container, { onObserve } = {}) {
   container.appendChild(panel);
   // v1.11.1 — start collapsed on narrow viewports so a phone-width page load
   // isn't immediately covered; same one-time matchMedia check touch-controls.js
-  // already uses for its own pointer-coarse gate.
-  makeCollapsible(title, body, { startCollapsed: window.matchMedia('(max-width: 700px)').matches });
+  // already uses for its own pointer-coarse gate. `?.` twice (call + the
+  // .matches read after it) so an environment without matchMedia degrades
+  // to "not narrow" instead of throwing during panel construction.
+  makeCollapsible(title, body, { startCollapsed: Boolean(window.matchMedia?.('(max-width: 700px)')?.matches) });
 
   function setError(message) {
     errorText.hidden = !message;

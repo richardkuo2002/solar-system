@@ -40,7 +40,11 @@ export function createTouchControls(container, canvas, cameraRig) {
   // a mouse-only desktop. Known v1 limitation: (pointer: coarse) reflects
   // the PRIMARY pointer, so a touchscreen laptop with a mouse as primary
   // won't show these controls even though touch technically works.
-  if (!window.matchMedia?.('(pointer: coarse)').matches) {
+  // v1.11.2 risk audit — the `?.` only guarded the *call*; if matchMedia
+  // itself is undefined, `window.matchMedia?.(...)` is undefined, and the
+  // following `.matches` still throws. Needs a second `?.` to actually be
+  // safe in an environment without matchMedia.
+  if (!window.matchMedia?.('(pointer: coarse)')?.matches) {
     return { setMode() {} };
   }
 

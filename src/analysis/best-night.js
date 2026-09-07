@@ -55,7 +55,13 @@ export const MAX_NIGHTS_TO_SCAN = 3660;
 const MIN_REPORT_SCORE = 30;
 const MAX_CANDIDATES = 10;
 
+// v1.11.2 risk audit — a NaN `v` (which Math.min/Math.max both just pass
+// through unchanged) used to make clamp01 return NaN, which scoreNight
+// then silently pushed into the chart series alongside real 0-100 scores.
+// Treating NaN as "no signal, contributes nothing" (0) keeps the series
+// numeric even if an ephemeris call upstream ever returns NaN.
 function clamp01(v) {
+  if (Number.isNaN(v)) return 0;
   return Math.min(1, Math.max(0, v));
 }
 
@@ -149,10 +155,26 @@ function bestMomentInNight(nightStartMs, target, latDeg, lonDeg, elevationM) {
 export function analyzeBestObservationNight({ target, startUtc, endUtc, latDeg, lonDeg, elevationM = 0 }) {
   validateTarget(target);
   validateLatLon(latDeg, lonDeg);
-  const startMs = Date.UTC(new Date(startUtc).getUTCFullYear(), new Date(startUtc).getUTCMonth(), new Date(startUtc).getUTCDate(), 12);
-  const endMs = new Date(endUtc).getTime();
-  if (!(endMs > startMs)) throw new Error('analyzeBestObservationNight requires endUtc after startUtc');
+  // v1.11.2 risk audit — an unparseable startUtc/endUtc used to fall
+  // through into Date.UTC(NaN, NaN, NaN, ...) and land on the ordering
+  // check below, which then blamed "endUtc before startUtc" for what was
+  // actually a bad date string. observer.js/phase.js already validate
+  // this explicitly; this file had grown its own, less careful variant.
+  const startDate = new Date(startUtc);
+  const endDate = new Date(endUtc);
+  if (Number.isNaN(startDate.getTime())) throw new Error(`analyzeBestObservationNight: invalid startUtc: ${startUtc}`);
+  if (Number.isNaN(endDate.getTime())) throw new Error(`analyzeBestObservationNight: invalid endUtc: ${endUtc}`);
+  const startMs = Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate(), 12);
+  const endMs = endDate.getTime();
+  if (!(endMs > startMs)) throw new Error(`analyzeBestObservationNight requires endUtc after startUtc (got startUtc=${startUtc}, endUtc=${endUtc})`);
 
+  // v1.11.2 risk audit — unlike every other event type's dense sampler,
+  // this one scans whole calendar nights, each independently scored
+  // (bestMomentInNight already does its own internal multi-sample scan).
+  // A 1-night range is a legitimate request ("how good is tonight?"), not
+  // an under-sampled edge case the way <3 points is for the other files'
+  // zero-crossing/stationary-point solvers — so no minimum-nights guard
+  // is added here on purpose.
   const nightCount = Math.ceil((endMs - startMs) / 86400000);
   if (nightCount > MAX_NIGHTS_TO_SCAN) {
     throw new Error(`date range too long (~${nightCount} nights, max ${MAX_NIGHTS_TO_SCAN}) — shorten the range.`);
@@ -211,7 +233,10 @@ export function analyzeBestObservationNight({ target, startUtc, endUtc, latDeg, 
   const displaySource = getBodyState('earth', midJsDate, PLANETS.earth.elements, { forceSource: 'kepler' }).source;
 
   return {
-    id: `best-night-${target}-${startUtc.slice(0, 4)}`,
+    // v1.11.2 — startDate (not the raw startUtc param) so a Date object
+    // input works the same as a string one, matching how every other use
+    // of the start time in this file already goes through `new Date(...)`.
+    id: `best-night-${target}-${startDate.getUTCFullYear()}`,
     type: 'best-observation-night',
     target,
     observer: { type: 'topocentric', bodyId: 'earth', latDeg, lonDeg, elevationM },

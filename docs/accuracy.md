@@ -395,7 +395,13 @@ made eclipse detection meaningless). Simplifications, all deliberate:
   merely partial eclipse) is simply omitted (`null`), not computed. No
   path/footprint mapping across Earth's surface (solar eclipses still only
   answer "what does this one point see," not "where is the path of
-  totality").
+  totality"). **Solar contacts near sunrise/sunset (v1.11.2)** — a solar
+  eclipse's C1/C4 (or C2/C3) can fall while the Sun has already set or not
+  yet risen for this observer, if the eclipse is in progress right at the
+  horizon; those contacts also come back `null` (not a real clock time
+  presented as if it were observable), matching the same "Sun below the
+  horizon = nothing to report" rule the overall classification already
+  applies at the eclipse's central instant.
 - No Besselian elements — this is plain vector/spherical-trig geometry,
   not the precision apparatus real eclipse predictions use for path maps
   down to the kilometer.

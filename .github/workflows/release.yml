@@ -13,6 +13,13 @@ on:
 permissions:
   contents: write
 
+# v1.11.2 — deploy.yml already had this; a re-pushed tag (force-push, or
+# `git push --tags` after a retag) would otherwise start a second run
+# concurrently with one still creating the same release.
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest

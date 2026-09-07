@@ -34,7 +34,7 @@ import { analyzeGreatestElongation, analyzeInnerConjunction, INNER_TARGETS } fro
 import { phaseAngleRad, illuminatedFraction, analyzePhaseIllumination, PHASE_TARGETS } from '../src/analysis/phase.js';
 import { moonHeliocentricPositionAu } from '../src/core/orbital-elements.js';
 import { moonEclipticPosition } from '../src/core/lunar-theory.js';
-import { analyzeLunarEclipse, analyzeSolarEclipse, angularSeparationDeg } from '../src/analysis/eclipse.js';
+import { analyzeLunarEclipse, analyzeSolarEclipse, angularSeparationDeg, jdIfObservable } from '../src/analysis/eclipse.js';
 import { analyzeTransit } from '../src/analysis/transit.js';
 import { analyzeAppulse, APPULSE_TARGETS } from '../src/analysis/appulse.js';
 import { analyzeLunarOccultation, OCCULTATION_TARGETS } from '../src/analysis/occultation.js';
@@ -49,7 +49,7 @@ import { C_AU_PER_DAY } from '../src/core/units.js';
 import { J2000_JD } from '../src/core/orbital-elements.js';
 import { analyzeObserver, observeAt, OBSERVER_TARGETS } from '../src/analysis/observer.js';
 import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/url-state.js';
-import { applySavedDefaults } from '../src/core/event-toolkit-persistence.js';
+import { applySavedDefaults, clampNumberField, loadSaved, saveValues } from '../src/core/event-toolkit-persistence.js';
 import { scoreNight, analyzeBestObservationNight, MAX_NIGHTS_TO_SCAN } from '../src/analysis/best-night.js';
 
 // kepler: eccentric anomaly solver satisfies Kepler's equation
@@ -1507,6 +1507,20 @@ import { scoreNight, analyzeBestObservationNight, MAX_NIGHTS_TO_SCAN } from '../
   }));
 }
 
+// analysis/eclipse: jdIfObservable (v1.11.2 risk audit) — a contact time
+// found by pure disk geometry must come back null when the Sun is below
+// the horizon at that instant, not a clock time presented as observable.
+// Uses an equator/prime-meridian observer, where local solar noon and
+// midnight land close to 12:00/00:00 UTC regardless of season — no real
+// eclipse involved, this only exercises the horizon guard itself.
+{
+  const noonJd = julianDateFromDate(new Date('2024-06-15T12:00:00Z'));
+  const midnightJd = julianDateFromDate(new Date('2024-06-15T00:00:00Z'));
+  assert.equal(jdIfObservable(noonJd, 0, 0, 0), noonJd, 'a jd where the Sun is up must pass through unchanged');
+  assert.equal(jdIfObservable(midnightJd, 0, 0, 0), null, 'a jd where the Sun is below the horizon must come back null');
+  assert.equal(jdIfObservable(null, 0, 0, 0), null, 'null in (a contact that doesn\'t apply) must stay null, not throw');
+}
+
 // analysis/retrograde (v1.5, generalized): real reference case — Jupiter's
 // 2022 retrograde loop (station retrograde 2022-07-28, station direct
 // 2022-11-23, per Nolle's retrograde tables / astro-seek). Same
@@ -1929,6 +1943,71 @@ import { scoreNight, analyzeBestObservationNight, MAX_NIGHTS_TO_SCAN } from '../
   // A key this field set doesn't have is simply ignored, not an error.
   result = applySavedDefaults(fields, { nonexistentKey: 'whatever' });
   assert.deepEqual(result, fields);
+
+  // v1.11.2 risk audit regression — `saved` from JSON.parse can be any
+  // JSON value, not just an object ("hello", 123, true are all valid
+  // JSON). `field.key in saved` used to throw a TypeError on these,
+  // crashing the whole Event Toolkit's construction from one corrupted
+  // localStorage value.
+  for (const notAnObject of ['hello', 123, true, false, 0]) {
+    assert.deepEqual(applySavedDefaults(fields, notAnObject), fields, `non-object saved value ${JSON.stringify(notAnObject)} must return fields unchanged, not throw`);
+  }
+}
+
+// event-toolkit-persistence: clampNumberField's min-only/max-only/neither
+// branches directly (previously exercised only indirectly through
+// applySavedDefaults's number-field case, which always supplies both).
+{
+  assert.equal(clampNumberField(5, { min: 1, max: 100 }), 5, 'in-range value passes through');
+  assert.equal(clampNumberField(-5, { min: 1, max: 100 }), 1, 'clamps to min');
+  assert.equal(clampNumberField(500, { min: 1, max: 100 }), 100, 'clamps to max');
+  assert.equal(clampNumberField(-5, { min: 1 }), 1, 'min-only field still clamps below min');
+  assert.equal(clampNumberField(500, { min: 1 }), 500, 'min-only field does not clamp an upper value');
+  assert.equal(clampNumberField(500, { max: 100 }), 100, 'max-only field still clamps above max');
+  assert.equal(clampNumberField(-5, { max: 100 }), -5, 'max-only field does not clamp a lower value');
+  assert.equal(clampNumberField(5, {}), 5, 'a field with neither bound passes the value through unchanged');
+  assert.equal(clampNumberField(NaN, { min: 1, max: 100 }), null, 'non-finite input returns null regardless of bounds');
+}
+
+// event-toolkit-persistence: loadSaved/saveValues against a minimal
+// in-memory localStorage stub (Node has no browser Storage global) — this
+// exercises the actual JSON.stringify/parse + getItem/setItem round trip
+// and the try/catch failure paths, not just applySavedDefaults's pure
+// logic on an already-parsed object.
+{
+  function makeFakeStorage({ throwOnSet = false, throwOnGet = false } = {}) {
+    const store = new Map();
+    return {
+      getItem(key) {
+        if (throwOnGet) throw new Error('storage disabled');
+        return store.has(key) ? store.get(key) : null;
+      },
+      setItem(key, value) {
+        if (throwOnSet) throw new Error('quota exceeded');
+        store.set(key, value);
+      },
+    };
+  }
+
+  const originalLocalStorage = globalThis.localStorage;
+  try {
+    globalThis.localStorage = makeFakeStorage();
+    assert.equal(loadSaved('missing-key'), null, 'a key never written must load as null');
+    saveValues('event-toolkit:test', { target: 'venus', intervalHours: 24 });
+    assert.deepEqual(loadSaved('event-toolkit:test'), { target: 'venus', intervalHours: 24 }, 'round trip through saveValues then loadSaved must be lossless');
+
+    globalThis.localStorage = makeFakeStorage({ throwOnGet: true });
+    assert.equal(loadSaved('any-key'), null, 'a throwing getItem (disabled/private-mode storage) must fail safe to null, not throw');
+
+    globalThis.localStorage = makeFakeStorage({ throwOnSet: true });
+    assert.doesNotThrow(() => saveValues('any-key', { a: 1 }), 'a throwing setItem (quota/disabled storage) must not throw out of saveValues');
+
+    globalThis.localStorage = makeFakeStorage();
+    globalThis.localStorage.setItem('corrupted-key', 'not valid json {');
+    assert.equal(loadSaved('corrupted-key'), null, 'unparseable stored JSON must fail safe to null, not throw');
+  } finally {
+    globalThis.localStorage = originalLocalStorage;
+  }
 }
 
 // analysis/best-night (v1.11): scoreNight is pure — no ephemeris call — so
@@ -2009,17 +2088,41 @@ import { scoreNight, analyzeBestObservationNight, MAX_NIGHTS_TO_SCAN } from '../
 
 // css/style.css: the 700px mobile breakpoint (v1.11.1) exists specifically
 // because .left-column's 300px panels and .right-column's 340px
-// .event-toolkit can't fit side by side below it — this keeps that
-// number honest if either width ever changes.
+// .event-toolkit can't fit side by side below it. v1.11.2 risk audit —
+// this used to assert hardcoded literals instead of the CSS file itself,
+// so it couldn't actually catch anyone changing a panel width in the CSS
+// without updating the breakpoint; now it reads the real values.
 {
-  const MOBILE_BREAKPOINT_PX = 700;
-  const LEFT_PANEL_WIDTH_PX = 300;
-  const RIGHT_PANEL_WIDTH_PX = 340;
-  const MARGIN_PX = 12;
+  const css = readFileSync(new URL('../css/style.css', import.meta.url), 'utf8');
+  function cssPx(pattern, label) {
+    const match = css.match(pattern);
+    assert.ok(match, `expected to find ${label} in css/style.css`);
+    return Number(match[1]);
+  }
+  const breakpointPx = cssPx(/@media \(max-width:\s*(\d+)px\)/, 'the mobile breakpoint media query');
+  const leftPanelWidthPx = cssPx(/\.observer-panel\s*\{[^}]*\bwidth:\s*(\d+)px/, ".observer-panel's width");
+  const rightPanelWidthPx = cssPx(/\.event-toolkit\s*\{[^}]*\bwidth:\s*(\d+)px/, ".event-toolkit's width");
+  const marginPx = cssPx(/\.left-column\s*\{[^}]*\bleft:\s*(\d+)px/, ".left-column's left offset");
   assert.ok(
-    MOBILE_BREAKPOINT_PX >= LEFT_PANEL_WIDTH_PX + RIGHT_PANEL_WIDTH_PX + MARGIN_PX * 3,
-    'the 700px breakpoint must stay >= the two side panels\' combined width plus margins',
+    breakpointPx >= leftPanelWidthPx + rightPanelWidthPx + marginPx * 3,
+    `the ${breakpointPx}px breakpoint must stay >= the two side panels' combined width (${leftPanelWidthPx}+${rightPanelWidthPx}) plus margins (${marginPx}*3)`,
   );
+}
+
+// package.json's `three` devDependency exists purely so `npm outdated`/
+// Dependabot can notice it's behind upstream (v1.8.6) — the browser only
+// ever loads assets/vendor/three/three.module.js. Nothing previously
+// asserted those two copies actually agree; this catches the pin drifting
+// without the vendored file being re-fetched, or vice versa.
+{
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  const pinnedVersion = pkg.devDependencies.three; // e.g. "0.160.0"
+  const vendored = readFileSync(new URL('../assets/vendor/three/three.module.js', import.meta.url), 'utf8');
+  const match = vendored.match(/REVISION\s*=\s*'(\d+)'/);
+  assert.ok(match, 'expected to find a REVISION constant in the vendored three.module.js');
+  const vendoredRevision = match[1]; // three.js's REVISION is just the minor version number, e.g. "160"
+  const pinnedMinor = pinnedVersion.split('.')[1];
+  assert.equal(vendoredRevision, pinnedMinor, `package.json pins three@${pinnedVersion} but the vendored file's REVISION is ${vendoredRevision} — update whichever is behind`);
 }
 
 console.log('PASS: smoke-test.js all assertions passed');

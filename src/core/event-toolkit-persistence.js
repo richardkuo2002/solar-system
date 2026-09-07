@@ -7,10 +7,11 @@
 // event type, so switching types (or reloading the page) doesn't lose a
 // carefully-set date range or observer location.
 //
-// `applySavedDefaults` is pure and Node-testable — the actual localStorage
-// access (`loadSaved`/`saveValues`) is a thin, separately-untested wrapper,
-// same split as url-state.js keeps between its pure encode/decode and
-// app.js's DOM-facing history.replaceState call.
+// `applySavedDefaults` (and the `clampNumberField` helper it shares with
+// lab-panel.js, added v1.9.1) are pure and Node-testable — the actual
+// localStorage access (`loadSaved`/`saveValues`) is a thin wrapper, same
+// split as url-state.js keeps between its pure encode/decode and app.js's
+// DOM-facing history.replaceState call.
 
 /**
  * Returns a new `fields` array (same shape as EVENT_TYPES[].fields) with
@@ -35,7 +36,12 @@ export function clampNumberField(parsed, field) {
 }
 
 export function applySavedDefaults(fields, saved) {
-  if (!saved) return fields;
+  // v1.11.2 risk audit — `saved` comes from JSON.parse, which happily
+  // accepts non-object JSON ("hello", 123, true). `field.key in saved`
+  // throws a TypeError on any of those instead of just finding nothing,
+  // which used to crash the whole Event Toolkit's construction. Only a
+  // plain object has fields to look up.
+  if (!saved || typeof saved !== 'object') return fields;
   return fields.map((field) => {
     if (!(field.key in saved)) return field;
     const value = saved[field.key];

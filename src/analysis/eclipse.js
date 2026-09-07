@@ -38,12 +38,13 @@ function clampUnit(v) {
   return Math.min(1, Math.max(-1, v));
 }
 
-function validateRange(startUtc, endUtc, intervalHours) {
+// v1.11.2 risk audit — see appulse.js's identical comment.
+function validateRange(callerName, startUtc, endUtc, intervalHours) {
   const startMs = new Date(startUtc).getTime();
   const endMs = new Date(endUtc).getTime();
   const stepMs = intervalHours * 3600 * 1000;
   if (!(stepMs > 0) || !(endMs > startMs)) {
-    throw new Error('requires endUtc after startUtc and a positive intervalHours');
+    throw new Error(`${callerName} requires endUtc after startUtc and a positive intervalHours (got startUtc=${startUtc}, endUtc=${endUtc}, intervalHours=${intervalHours})`);
   }
   return { startMs, endMs, stepMs };
 }
@@ -80,8 +81,8 @@ function syzygyLabelFor(sign) {
  *  the shadow axis (those differ by up to roughly an hour, since ecliptic
  *  latitude changes slowly compared to elongation right at syzygy — a
  *  documented simplification, see docs/accuracy.md). */
-function findSyzygies(startUtc, endUtc, intervalHours) {
-  const { startMs, endMs, stepMs } = validateRange(startUtc, endUtc, intervalHours);
+function findSyzygies(callerName, startUtc, endUtc, intervalHours) {
+  const { startMs, endMs, stepMs } = validateRange(callerName, startUtc, endUtc, intervalHours);
   const timesJd = [];
   const elongationDot = [];
   for (let ms = startMs; ms <= endMs; ms += stepMs) {
@@ -239,7 +240,7 @@ function jdToUtcOrNull(jd) {
  * eclipse's classification doesn't reach that boundary.
  */
 export function analyzeLunarEclipse({ startUtc, endUtc, intervalHours = 6, ephemerisSource = 'kepler' }) {
-  const syzygies = findSyzygies(startUtc, endUtc, intervalHours).filter((s) => s.transition === 'full-moon');
+  const syzygies = findSyzygies('analyzeLunarEclipse', startUtc, endUtc, intervalHours).filter((s) => s.transition === 'full-moon');
 
   const events = syzygies.map((s) => {
     const { classification, magnitude } = lunarEclipseAt(s.epochJd);
@@ -414,11 +415,26 @@ function solarEclipseAt(epochJd, latDeg, lonDeg, elevationM) {
 const SOLAR_CONTACT_WINDOW_DAYS = LOCAL_REFINE_WINDOW_HOURS / 24; // same order as the local-epoch refinement window
 const SOLAR_CONTACT_STEP_DAYS = 2 / 1440; // 2 min
 
+/** `null` if `jd` is itself `null` (contact doesn't apply, e.g. C2/C3 for a
+ *  partial eclipse) OR the Sun is below the horizon at that instant — the
+ *  same "nothing observable here" rule solarEclipseAt's classification
+ *  already applies at the central epoch, extended to each individual
+ *  contact. v1.11.2 risk audit: this used to be missing, so an eclipse in
+ *  progress at local sunrise/sunset could report a C1/C4 clock time for a
+ *  moment the Sun hadn't risen (or had already set) yet — geometrically
+ *  real, but not something this observer could actually see. */
+export function jdIfObservable(jd, latDeg, lonDeg, elevationM) {
+  if (jd == null) return null;
+  return solarDiskGeometryAt(jd, latDeg, lonDeg, elevationM).sunAboveHorizon ? jd : null;
+}
+
 /**
  * C1-C4 contact times for a solar eclipse already found at `epochJd` (this
  * observer's local greatest-eclipse instant). C2/C3 (totality/annularity
  * begin/end) only exist when `classification` is 'total' or 'annular' — a
- * merely partial eclipse never reaches the diffRadiiDeg boundary.
+ * merely partial eclipse never reaches the diffRadiiDeg boundary. Any
+ * contact below the horizon comes back `null`, same as one that doesn't
+ * apply to this classification.
  */
 function solarEclipseContacts(epochJd, latDeg, lonDeg, elevationM, classification) {
   const outer = findContactCrossing(epochJd, SOLAR_CONTACT_WINDOW_DAYS, SOLAR_CONTACT_STEP_DAYS,
@@ -427,7 +443,12 @@ function solarEclipseContacts(epochJd, latDeg, lonDeg, elevationM, classificatio
       return g.separationDeg - g.sumRadiiDeg;
     });
 
-  const contacts = { c1Jd: outer.enterJd, c4Jd: outer.exitJd, c2Jd: null, c3Jd: null };
+  const contacts = {
+    c1Jd: jdIfObservable(outer.enterJd, latDeg, lonDeg, elevationM),
+    c4Jd: jdIfObservable(outer.exitJd, latDeg, lonDeg, elevationM),
+    c2Jd: null,
+    c3Jd: null,
+  };
 
   if (classification === 'total' || classification === 'annular') {
     const inner = findContactCrossing(epochJd, SOLAR_CONTACT_WINDOW_DAYS, SOLAR_CONTACT_STEP_DAYS,
@@ -435,8 +456,8 @@ function solarEclipseContacts(epochJd, latDeg, lonDeg, elevationM, classificatio
         const g = solarDiskGeometryAt(jd, latDeg, lonDeg, elevationM);
         return g.separationDeg - g.diffRadiiDeg;
       });
-    contacts.c2Jd = inner.enterJd;
-    contacts.c3Jd = inner.exitJd;
+    contacts.c2Jd = jdIfObservable(inner.enterJd, latDeg, lonDeg, elevationM);
+    contacts.c3Jd = jdIfObservable(inner.exitJd, latDeg, lonDeg, elevationM);
   }
 
   return contacts;
@@ -454,7 +475,7 @@ export function analyzeSolarEclipse({
   startUtc, endUtc, latDeg, lonDeg, elevationM = 0, intervalHours = 6, ephemerisSource = 'kepler',
 }) {
   validateLatLon(latDeg, lonDeg);
-  const syzygies = findSyzygies(startUtc, endUtc, intervalHours).filter((s) => s.transition === 'new-moon');
+  const syzygies = findSyzygies('analyzeSolarEclipse', startUtc, endUtc, intervalHours).filter((s) => s.transition === 'new-moon');
 
   const refined = syzygies.map((s) => ({
     ...s,

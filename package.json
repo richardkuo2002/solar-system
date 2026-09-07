@@ -21,13 +21,11 @@
   ],
   "author": "Richard Kuo",
   "license": "MIT",
-  "dependencies": {
-    "sharp": "^0.35.4"
-  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@tauri-apps/cli": "^2.11.4",
     "eslint": "^10.10.0",
+    "sharp": "^0.35.4",
     "three": "0.160.0"
   }
 }

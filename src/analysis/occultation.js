@@ -42,12 +42,13 @@ function validateLatLon(latDeg, lonDeg) {
   if (!(lonDeg >= -180 && lonDeg <= 180)) throw new Error('lonDeg must be in [-180, 180]');
 }
 
-function validateRange(startUtc, endUtc, intervalHours) {
+// v1.11.2 risk audit — see appulse.js's identical comment.
+function validateRange(callerName, startUtc, endUtc, intervalHours) {
   const startMs = new Date(startUtc).getTime();
   const endMs = new Date(endUtc).getTime();
   const stepMs = intervalHours * 3600 * 1000;
   if (!(stepMs > 0) || !(endMs > startMs)) {
-    throw new Error('requires endUtc after startUtc and a positive intervalHours');
+    throw new Error(`${callerName} requires endUtc after startUtc and a positive intervalHours (got startUtc=${startUtc}, endUtc=${endUtc}, intervalHours=${intervalHours})`);
   }
   return { startMs, endMs, stepMs };
 }
@@ -117,7 +118,7 @@ export function analyzeLunarOccultation({
 }) {
   validateOccultationTarget(target);
   validateLatLon(latDeg, lonDeg);
-  const { startMs, endMs, stepMs } = validateRange(startUtc, endUtc, intervalHours);
+  const { startMs, endMs, stepMs } = validateRange('analyzeLunarOccultation', startUtc, endUtc, intervalHours);
 
   const timesJd = [];
   const separationDot = [];
