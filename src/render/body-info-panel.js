@@ -13,52 +13,54 @@
 // approximation needing a "not modeled" disclaimer the way docs/accuracy.md
 // documents actual astronomy approximations.
 
-const CATEGORY_LABELS = {
-  sun: 'Star', planet: 'Planet', moon: 'Moon', comet: 'Comet', dwarf: 'Dwarf Planet',
+import { t } from '../core/i18n.js';
+
+const CATEGORY_KEYS = {
+  sun: 'star', planet: 'planet', moon: 'moon', comet: 'comet', dwarf: 'dwarfPlanet',
 };
 
 function formatMass(massKg, massRelativeToEarth) {
   // "m x 10^e kg" reads easier than raw toExponential()'s "5.972e+24".
   const exp = Math.floor(Math.log10(massKg));
   const mantissa = massKg / 10 ** exp;
-  return `${mantissa.toFixed(3)} × 10^${exp} kg (${massRelativeToEarth.toFixed(3)}× Earth)`;
+  return t('bodyInfo.mass.value', { mantissa: mantissa.toFixed(3), exp, earthRatio: massRelativeToEarth.toFixed(3) });
 }
 
 function formatInfoText(info) {
   const lines = [];
   if (info.radiusKm != null) {
     const note = info.radiusNote ? ` (${info.radiusNote})` : '';
-    lines.push(`Radius: ${Math.round(info.radiusKm).toLocaleString()} km${note}`);
+    lines.push(t('bodyInfo.radius', { value: Math.round(info.radiusKm).toLocaleString(), note }));
   }
   if (info.massKg != null) {
-    lines.push(`Mass: ${formatMass(info.massKg, info.massRelativeToEarth)}`);
+    lines.push(t('bodyInfo.mass', { value: formatMass(info.massKg, info.massRelativeToEarth) }));
   }
   if (info.rotationPeriodDays != null) {
-    const retro = info.rotationPeriodDays < 0 ? ' (retrograde)' : '';
-    lines.push(`Rotation period: ${Math.abs(info.rotationPeriodDays).toFixed(3)} days${retro}`);
+    const retro = info.rotationPeriodDays < 0 ? t('bodyInfo.retrogradeSuffix') : '';
+    lines.push(t('bodyInfo.rotationPeriod', { value: Math.abs(info.rotationPeriodDays).toFixed(3), retro }));
   }
   if (info.axialTiltDeg != null) {
-    lines.push(`Axial tilt: ${info.axialTiltDeg.toFixed(2)}°`);
+    lines.push(t('bodyInfo.axialTilt', { value: info.axialTiltDeg.toFixed(2) }));
   }
   if (info.orbitalPeriodDays != null) {
     const years = info.orbitalPeriodDays / 365.25;
-    const sourceNote = info.orbitalPeriodSource === 'kepler-derived' ? ' (Kepler\'s 3rd law estimate)' : '';
-    lines.push(`Orbital period: ${info.orbitalPeriodDays.toFixed(1)} days (${years.toFixed(2)} yr)${sourceNote}`);
+    const sourceNote = info.orbitalPeriodSource === 'kepler-derived' ? t('bodyInfo.keplerEstimateSuffix') : '';
+    lines.push(t('bodyInfo.orbitalPeriod', { days: info.orbitalPeriodDays.toFixed(1), years: years.toFixed(2), note: sourceNote }));
   }
   if (info.semiMajorAxisAu != null) {
-    lines.push(`Semi-major axis: ${info.semiMajorAxisAu.toFixed(3)} AU`);
+    lines.push(t('bodyInfo.semiMajorAxis', { value: info.semiMajorAxisAu.toFixed(3) }));
   }
   if (info.eccentricity != null) {
-    lines.push(`Eccentricity: ${info.eccentricity.toFixed(3)}`);
+    lines.push(t('bodyInfo.eccentricity', { value: info.eccentricity.toFixed(3) }));
   }
   if (info.inclinationDeg != null) {
-    lines.push(`Inclination: ${info.inclinationDeg.toFixed(2)}°`);
+    lines.push(t('bodyInfo.inclination', { value: info.inclinationDeg.toFixed(2) }));
   }
   if (info.orbitRadiusKm != null) {
-    lines.push(`Orbit radius: ${Math.round(info.orbitRadiusKm).toLocaleString()} km`);
+    lines.push(t('bodyInfo.orbitRadius', { value: Math.round(info.orbitRadiusKm).toLocaleString() }));
   }
   if (info.parentName != null) {
-    lines.push(`Orbits: ${info.parentName}`);
+    lines.push(t('bodyInfo.orbits', { name: info.parentName }));
   }
   return lines.join('\n');
 }
@@ -81,15 +83,16 @@ export function createBodyInfoPanel(container) {
 
   const hint = document.createElement('small');
   hint.className = 'body-info-panel-hint';
-  hint.textContent = 'Orbital periods for planets/comets/dwarf planets are a Kepler\'s-3rd-law '
-    + 'estimate (T ≈ a^1.5); moon/Charon periods are direct data. Mass shown for the Sun and 8 planets only.';
+  hint.textContent = t('bodyInfo.hint');
   panel.appendChild(hint);
 
   container.appendChild(panel);
 
   return {
     render(info) {
-      title.textContent = `${info.name} (${CATEGORY_LABELS[info.category] ?? info.category})`;
+      const categoryKey = CATEGORY_KEYS[info.category];
+      const category = categoryKey ? t(`bodyInfo.category.${categoryKey}`) : info.category;
+      title.textContent = `${info.name} (${category})`;
       resultsText.textContent = formatInfoText(info);
     },
   };

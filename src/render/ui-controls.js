@@ -1,5 +1,6 @@
 // DOM-only widgets. Holds no simulation state itself — emits callbacks into
 // app.js, which owns the actual timeController/camera state.
+import { t } from '../core/i18n.js';
 
 // v1.8.2 — replaces the old days/second ladder (0.1/1/10/100/365, whose
 // pre-selected "1 d/s" option was actually 86400x real time and never
@@ -20,13 +21,13 @@ export const REAL_TIME_DAYS_PER_SECOND = 1 / 86400;
 // exact bug class v1.8.2 fixed (a stale default that didn't match the
 // clock's real starting speed) — now it has a regression test.
 export const SPEED_OPTIONS = [
-  { daysPerSecond: REAL_TIME_DAYS_PER_SECOND, label: '1x (real time)' },
-  { daysPerSecond: 2 * REAL_TIME_DAYS_PER_SECOND, label: '2x' },
-  { daysPerSecond: 5 * REAL_TIME_DAYS_PER_SECOND, label: '5x' },
-  { daysPerSecond: 100 * REAL_TIME_DAYS_PER_SECOND, label: '100x' },
-  { daysPerSecond: 1000 * REAL_TIME_DAYS_PER_SECOND, label: '1000x' },
-  { daysPerSecond: 0.1, label: '0.1 d/s (8640x)' },
-  { daysPerSecond: 1, label: '1 d/s (86400x)' },
+  { daysPerSecond: REAL_TIME_DAYS_PER_SECOND, labelKey: 'speed.realTime' },
+  { daysPerSecond: 2 * REAL_TIME_DAYS_PER_SECOND, labelKey: 'speed.2x' },
+  { daysPerSecond: 5 * REAL_TIME_DAYS_PER_SECOND, labelKey: 'speed.5x' },
+  { daysPerSecond: 100 * REAL_TIME_DAYS_PER_SECOND, labelKey: 'speed.100x' },
+  { daysPerSecond: 1000 * REAL_TIME_DAYS_PER_SECOND, labelKey: 'speed.1000x' },
+  { daysPerSecond: 0.1, labelKey: 'speed.0.1dps' },
+  { daysPerSecond: 1, labelKey: 'speed.1dps' },
 ];
 
 /**
@@ -46,19 +47,19 @@ export function createTimeControlsUI(container, callbacks) {
   panel.className = 'time-controls';
 
   const playPauseBtn = document.createElement('button');
-  playPauseBtn.textContent = 'Pause';
+  playPauseBtn.textContent = t('time.pause');
   playPauseBtn.addEventListener('click', () => callbacks.onTogglePlayPause());
 
   const reverseBtn = document.createElement('button');
-  reverseBtn.textContent = 'Reverse';
+  reverseBtn.textContent = t('time.reverse');
   reverseBtn.addEventListener('click', () => callbacks.onReverse());
 
   const speedSelect = document.createElement('select');
-  speedSelect.setAttribute('aria-label', 'Playback speed');
-  for (const { daysPerSecond, label } of SPEED_OPTIONS) {
+  speedSelect.setAttribute('aria-label', t('time.speedAriaLabel'));
+  for (const { daysPerSecond, labelKey } of SPEED_OPTIONS) {
     const option = document.createElement('option');
     option.value = String(daysPerSecond);
-    option.textContent = label;
+    option.textContent = t(labelKey);
     if (daysPerSecond === REAL_TIME_DAYS_PER_SECOND) option.selected = true;
     speedSelect.appendChild(option);
   }
@@ -68,9 +69,9 @@ export function createTimeControlsUI(container, callbacks) {
 
   const dateInput = document.createElement('input');
   dateInput.type = 'date';
-  dateInput.setAttribute('aria-label', 'Jump to date');
+  dateInput.setAttribute('aria-label', t('time.jumpToDateAriaLabel'));
   const jumpBtn = document.createElement('button');
-  jumpBtn.textContent = 'Jump';
+  jumpBtn.textContent = t('time.jump');
   jumpBtn.addEventListener('click', () => {
     if (!dateInput.value) return;
     callbacks.onJumpToDate(new Date(`${dateInput.value}T00:00:00Z`));
@@ -85,7 +86,7 @@ export function createTimeControlsUI(container, callbacks) {
   return {
     element: panel, // v1.8.2 — app.js measures this to keep other bottom-left panels clear of it (see css .time-controls / .left-column comments)
     setPlayPauseLabel(playing) {
-      playPauseBtn.textContent = playing ? 'Pause' : 'Play';
+      playPauseBtn.textContent = playing ? t('time.pause') : t('time.play');
     },
     setCurrentDateDisplay(date) {
       dateLabel.textContent = date.toISOString().slice(0, 10);
@@ -94,10 +95,10 @@ export function createTimeControlsUI(container, callbacks) {
 }
 
 const VIEW_MODE_LABELS = [
-  { mode: 'heliocentric_topdown', label: 'Top-Down' },
-  { mode: 'surface_first_person', label: 'Surface' },
-  { mode: 'free_flight', label: 'Free Flight' },
-  { mode: 'geocentric', label: 'Geocentric' },
+  { mode: 'heliocentric_topdown', labelKey: 'viewMode.topDown' },
+  { mode: 'surface_first_person', labelKey: 'viewMode.surface' },
+  { mode: 'free_flight', labelKey: 'viewMode.freeFlight' },
+  { mode: 'geocentric', labelKey: 'viewMode.geocentric' },
 ];
 
 /**
@@ -114,9 +115,9 @@ export function createViewModeUI(container, onModeChange, enabledModes) {
   panel.className = 'view-mode-controls';
 
   const buttons = {};
-  for (const { mode, label } of VIEW_MODE_LABELS) {
+  for (const { mode, labelKey } of VIEW_MODE_LABELS) {
     const btn = document.createElement('button');
-    btn.textContent = label;
+    btn.textContent = t(labelKey);
     btn.disabled = !enabledModes.includes(mode);
     btn.addEventListener('click', () => onModeChange(mode));
     buttons[mode] = btn;
@@ -151,11 +152,11 @@ export function createSurfaceControlsUI(container, planetKeys, onGo, initial = {
   panel.className = 'surface-controls';
 
   const planetSelect = document.createElement('select');
-  planetSelect.setAttribute('aria-label', 'Planet to stand on');
+  planetSelect.setAttribute('aria-label', t('surface.planetAriaLabel'));
   for (const key of planetKeys) {
     const option = document.createElement('option');
     option.value = key;
-    option.textContent = key[0].toUpperCase() + key.slice(1);
+    option.textContent = t(`body.${key}`);
     if (key === initial.planet) option.selected = true;
     planetSelect.appendChild(option);
   }
@@ -165,19 +166,19 @@ export function createSurfaceControlsUI(container, planetKeys, onGo, initial = {
   latInput.min = '-90';
   latInput.max = '90';
   latInput.value = String(initial.lat);
-  latInput.title = 'Latitude';
-  latInput.setAttribute('aria-label', 'Latitude');
+  latInput.title = t('surface.latitude');
+  latInput.setAttribute('aria-label', t('surface.latitude'));
 
   const lonInput = document.createElement('input');
   lonInput.type = 'number';
   lonInput.min = '-180';
   lonInput.max = '180';
   lonInput.value = String(initial.lon);
-  lonInput.title = 'Longitude';
-  lonInput.setAttribute('aria-label', 'Longitude');
+  lonInput.title = t('surface.longitude');
+  lonInput.setAttribute('aria-label', t('surface.longitude'));
 
   const goBtn = document.createElement('button');
-  goBtn.textContent = 'Stand Here';
+  goBtn.textContent = t('surface.standHere');
   goBtn.addEventListener('click', () => {
     // v1.8.6 — `parseFloat(...) || 0` can't tell a legitimately-typed 0
     // apart from unparseable garbage (both produce 0 either way, so this
@@ -198,7 +199,7 @@ export function createSurfaceControlsUI(container, planetKeys, onGo, initial = {
   // explicitly chose would be worse than the tradeoff it's explaining.
   const speedHint = document.createElement('small');
   speedHint.className = 'surface-controls-hint';
-  speedHint.textContent = 'Tip: lower the time speed (e.g. 0.1 d/s) to watch the sky move smoothly.';
+  speedHint.textContent = t('surface.speedHint');
   panel.appendChild(speedHint);
 
   container.appendChild(panel);

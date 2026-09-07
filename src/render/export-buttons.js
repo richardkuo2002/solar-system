@@ -4,6 +4,7 @@
 // dependency, since the actual need (save a string as a downloaded file)
 // is well within a few lines of standard browser API.
 import { toExportableJson, toExportableCsv } from '../analysis/export.js';
+import { t } from '../core/i18n.js';
 
 function downloadBlob(content, filename, mimeType) {
   const blob = new Blob([content], { type: mimeType });
@@ -58,7 +59,7 @@ export function createExportButtons(container, getCurrentResult, canvases = {}) 
   wrapper.className = 'event-toolkit-export';
 
   const jsonBtn = document.createElement('button');
-  jsonBtn.textContent = 'Export JSON';
+  jsonBtn.textContent = t('export.json');
   jsonBtn.disabled = true;
   jsonBtn.addEventListener('click', () => {
     const result = getCurrentResult();
@@ -67,7 +68,7 @@ export function createExportButtons(container, getCurrentResult, canvases = {}) 
   });
 
   const csvBtn = document.createElement('button');
-  csvBtn.textContent = 'Export CSV';
+  csvBtn.textContent = t('export.csv');
   csvBtn.disabled = true;
   csvBtn.addEventListener('click', () => {
     const result = getCurrentResult();
@@ -93,8 +94,8 @@ export function createExportButtons(container, getCurrentResult, canvases = {}) 
     wrapper.appendChild(btn);
     pngButtons.push(btn);
   };
-  addPngButton(canvases.apparentPathCanvas, bothCanvasesPresent ? 'Download Path PNG' : 'Download Chart PNG', '-path');
-  addPngButton(canvases.timelineCanvas, bothCanvasesPresent ? 'Download Timeline PNG' : 'Download Chart PNG', '-timeline');
+  addPngButton(canvases.apparentPathCanvas, t(bothCanvasesPresent ? 'export.pngPath' : 'export.pngChart'), '-path');
+  addPngButton(canvases.timelineCanvas, t(bothCanvasesPresent ? 'export.pngTimeline' : 'export.pngChart'), '-timeline');
 
   container.appendChild(wrapper);
 

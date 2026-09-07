@@ -63,6 +63,10 @@ retrograde motion).
 - Distances and sizes are **compressed on a power-law curve** (not
   true-to-scale) so the whole system fits on screen at once — a standard
   approach for web solar-system visualizations.
+- **Settings (v1.12)** — a bottom-left gear button switches the UI language
+  (English/繁體中文; the whole app, including every event-analysis result,
+  is fully bilingual) and has a volume slider that persists but doesn't
+  control anything yet — there's no sound system to wire it to.
 
 ## Running it
 

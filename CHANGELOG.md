@@ -5,6 +5,40 @@ All notable changes to this project. Format loosely follows
 milestones in `docs/ROADMAP.md` (local-only), with each version's exact
 scope and accuracy notes in [docs/accuracy.md](docs/accuracy.md).
 
+## v1.12 — 2026-09-08
+
+Settings panel: language switch (English/繁體中文) + a volume UI stub.
+Requested as a "small feature," but the app had zero i18n infrastructure
+(100% hardcoded English) — clarified scope up front (full bilingual UI now,
+not architecture-first; volume slider persists but has no audio to control
+yet, since there's no sound system).
+
+- New bottom-left gear button (`src/render/settings-panel.js`) opens a
+  popover with a language `<select>` and a volume slider. Positioned to
+  clear `.touch-joystick-base` at every viewport width.
+- New `src/core/i18n.js`: `t(key, vars)` looks up the current language,
+  falls back to English, then to the bare key (so a missed translation is
+  visibly obvious). `getVolume()`/`setVolume()` are pure persistence for a
+  future music feature to read. Language switching saves the choice and
+  reloads the page — this codebase has no reactive re-render mechanism
+  anywhere, so a live/no-reload switch would mean building a whole new
+  rendering paradigm for one toggle.
+- Full bilingual translation across every panel: `src/i18n/en.js` /
+  `src/i18n/zh-tw.js`, 236 keys each, covering all UI text, every planet/
+  moon/comet/dwarf-planet display name, and the Event Toolkit's 12 event
+  types + 14 result-formatting functions.
+- Body display names and internal identifiers are kept separate: each data
+  table's `name:` field (used for `mesh.name`/raycasting/click-to-select)
+  stays an unchanged English identifier; a new `t(`body.${key}`)` path
+  handles anything shown to the user (panel titles, hover tooltips, dropdown
+  options), resolved via the existing `nameToKey` reverse-lookup map.
+- `scripts/smoke-test.js`: new dictionary key-parity check (`en.js`/
+  `zh-tw.js` must have identical key sets — the only automated way to catch
+  a missed translation) plus direct `t()` unit tests.
+
+`npm test`/`npm run lint` pass. No browser/WebGL in this sandbox, so actual
+layout after switching language needs a manual look in a real browser.
+
 ## v1.11.3 — 2026-09-08
 
 Second full risk audit round — two Explore agents this time swept areas

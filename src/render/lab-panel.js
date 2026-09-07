@@ -8,6 +8,7 @@ import { drawApparentPathCanvas, drawLongitudeTimelineCanvas, highlightCursorOnC
 import { createExportButtons } from './export-buttons.js';
 import { dateFromJulianDate } from '../core/orbital-elements.js';
 import { applySavedDefaults, loadSaved, saveValues, clampNumberField } from '../core/event-toolkit-persistence.js';
+import { t } from '../core/i18n.js';
 
 // v1.8.5 — see the analyzeBtn click handler below: caps startUtc/endUtc
 // range divided by intervalHours. 50,000 is generous headroom over every
@@ -125,7 +126,7 @@ export function createLabPanel(container, config, callbacks = {}) {
       const el = inputs[field.key];
       if (field.type === 'date') {
         if (!el.value) {
-          setError(`${field.label} is required`);
+          setError(t('labPanel.fieldRequired', { label: field.label }));
           return;
         }
         params[field.key] = `${el.value}T00:00:00Z`;
@@ -155,7 +156,7 @@ export function createLabPanel(container, config, callbacks = {}) {
       const rangeHours = (new Date(params.endUtc).getTime() - new Date(params.startUtc).getTime()) / 3600000;
       const estimatedSamples = rangeHours / params.intervalHours;
       if (estimatedSamples > MAX_SAMPLES) {
-        setError(`Sample interval too fine for this date range (~${Math.round(estimatedSamples).toLocaleString()} samples, max ${MAX_SAMPLES.toLocaleString()}) — increase the interval or shorten the range.`);
+        setError(t('labPanel.tooManySamples', { estimated: Math.round(estimatedSamples).toLocaleString(), max: MAX_SAMPLES.toLocaleString() }));
         return;
       }
     }
@@ -168,7 +169,7 @@ export function createLabPanel(container, config, callbacks = {}) {
 
   const resultsText = document.createElement('pre');
   resultsText.className = `${className}-results`;
-  resultsText.textContent = 'No analysis run yet.';
+  resultsText.textContent = t('labPanel.noResults');
   panel.appendChild(resultsText);
 
   let apparentPathCanvas = null;
@@ -199,7 +200,7 @@ export function createLabPanel(container, config, callbacks = {}) {
   // aria-valuetext (updated alongside the visible chart highlight below)
   // gives it the actual date being scrubbed to instead of a meaningless
   // sample index.
-  scrub.setAttribute('aria-label', 'Scrub through result over time');
+  scrub.setAttribute('aria-label', t('labPanel.scrubAriaLabel'));
   if (chartKind !== 'none') panel.appendChild(scrub);
 
   let currentResult = null;
@@ -226,7 +227,7 @@ export function createLabPanel(container, config, callbacks = {}) {
   return {
     setBusy(busy) {
       analyzeBtn.disabled = busy;
-      analyzeBtn.textContent = busy ? 'Analyzing…' : analyzeLabel;
+      analyzeBtn.textContent = busy ? t('labPanel.analyzing') : analyzeLabel;
     },
 
     setError,

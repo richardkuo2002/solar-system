@@ -9,25 +9,12 @@
 // visual consistency, not the JS builder itself.
 import { drawAltitudeCurveCanvas } from './event-charts.js';
 import { makeCollapsible } from './collapsible-panel.js';
+import { t } from '../core/i18n.js';
 
-const TARGET_OPTIONS = [
-  { value: 'sun', label: 'Sun' },
-  { value: 'moon', label: 'Moon' },
-  { value: 'mercury', label: 'Mercury' },
-  { value: 'venus', label: 'Venus' },
-  { value: 'mars', label: 'Mars' },
-  { value: 'jupiter', label: 'Jupiter' },
-  { value: 'saturn', label: 'Saturn' },
-  { value: 'uranus', label: 'Uranus' },
-  { value: 'neptune', label: 'Neptune' },
-];
+const TARGET_KEYS = ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune'];
 const DEFAULT_LAT_DEG = 22.6273;  // Kaohsiung
 const DEFAULT_LON_DEG = 120.3014;
 const DEFAULT_ELEVATION_M = 0;
-
-const EVENT_LABELS = {
-  rise: 'Rise', set: 'Set', transit: 'Transit', 'lower-transit': 'Lower transit',
-};
 
 function pad2(n) {
   return String(n).padStart(2, '0');
@@ -53,23 +40,23 @@ function formatResultText(result) {
   const utcText = input.atUtc;
   const localText = new Date(input.atUtc).toLocaleString();
   const lines = [
-    `Target: ${target[0].toUpperCase()}${target.slice(1)}`,
-    `UTC:   ${utcText}`,
-    `Local: ${localText}`,
+    t('observer.result.target', { name: t(`body.${target}`) }),
+    t('observer.result.utc', { value: utcText }),
+    t('observer.result.local', { value: localText }),
     '',
-    `RA: ${r.raDeg.toFixed(3)}°  Dec: ${r.decDeg.toFixed(3)}°`,
-    `Alt: ${r.altDeg.toFixed(3)}°  Az: ${r.azDeg.toFixed(3)}°  — ${r.aboveHorizon ? 'above horizon' : 'below horizon'}`,
-    `Distance: ${r.distanceAu.toFixed(5)} AU`,
+    t('observer.result.raDec', { ra: r.raDeg.toFixed(3), dec: r.decDeg.toFixed(3) }),
+    t('observer.result.altAz', { alt: r.altDeg.toFixed(3), az: r.azDeg.toFixed(3), horizon: t(r.aboveHorizon ? 'observer.horizon.above' : 'observer.horizon.below') }),
+    t('observer.result.distance', { value: r.distanceAu.toFixed(5) }),
     '',
   ];
   if (r.note) {
     lines.push(r.note);
   } else if (r.events.length === 0) {
-    lines.push('No rise/transit/set found on this UTC day.');
+    lines.push(t('observer.result.noEvents'));
   } else {
-    lines.push(`Rise/transit/set for the UTC day of ${input.atUtc.slice(0, 10)}:`);
+    lines.push(t('observer.result.eventsHeader', { date: input.atUtc.slice(0, 10) }));
     for (const e of r.events) {
-      const label = (EVENT_LABELS[e.event] ?? e.event).padEnd(14, ' ');
+      const label = t(`observer.event.${e.event}`).padEnd(14, ' ');
       lines.push(`${label} ${e.epochUtc}  (alt ${e.altDeg.toFixed(1)}°, az ${e.azDeg.toFixed(1)}°)`);
     }
   }
@@ -87,7 +74,7 @@ export function createObserverPanel(container, { onObserve } = {}) {
 
   const title = document.createElement('div');
   title.className = 'observer-panel-title';
-  title.textContent = 'Observer Mode';
+  title.textContent = t('observer.title');
   panel.appendChild(title);
 
   const body = document.createElement('div');
@@ -99,45 +86,45 @@ export function createObserverPanel(container, { onObserve } = {}) {
 
   const latInput = document.createElement('input');
   latInput.type = 'number'; latInput.step = '0.0001'; latInput.min = '-90'; latInput.max = '90'; latInput.value = String(DEFAULT_LAT_DEG);
-  form.appendChild(field('Latitude (°)', latInput));
+  form.appendChild(field(t('observer.field.latitude'), latInput));
 
   const lonInput = document.createElement('input');
   lonInput.type = 'number'; lonInput.step = '0.0001'; lonInput.min = '-180'; lonInput.max = '180'; lonInput.value = String(DEFAULT_LON_DEG);
-  form.appendChild(field('Longitude (°)', lonInput));
+  form.appendChild(field(t('observer.field.longitude'), lonInput));
 
   const elevInput = document.createElement('input');
   elevInput.type = 'number'; elevInput.step = '1'; elevInput.value = String(DEFAULT_ELEVATION_M);
-  form.appendChild(field('Elevation (m)', elevInput));
+  form.appendChild(field(t('observer.field.elevation'), elevInput));
 
   const timeInput = document.createElement('input');
   timeInput.type = 'datetime-local';
   timeInput.value = toDatetimeLocalValue(new Date());
-  form.appendChild(field('Observation time', timeInput));
+  form.appendChild(field(t('observer.field.time'), timeInput));
 
   const timeHint = document.createElement('small');
   timeHint.className = 'observer-panel-hint';
-  timeHint.textContent = 'Local time — the altitude curve covers the full UTC day of this instant.';
+  timeHint.textContent = t('observer.hint.time');
   form.appendChild(timeHint);
 
   const targetSelect = document.createElement('select');
-  for (const opt of TARGET_OPTIONS) {
+  for (const key of TARGET_KEYS) {
     const option = document.createElement('option');
-    option.value = opt.value;
-    option.textContent = opt.label;
+    option.value = key;
+    option.textContent = t(`body.${key}`);
     targetSelect.appendChild(option);
   }
-  form.appendChild(field('Target', targetSelect));
+  form.appendChild(field(t('observer.field.target'), targetSelect));
 
   const errorText = document.createElement('pre');
   errorText.className = 'observer-panel-error';
   errorText.hidden = true;
 
   const observeBtn = document.createElement('button');
-  observeBtn.textContent = 'Observe';
+  observeBtn.textContent = t('observer.button.observe');
   observeBtn.addEventListener('click', () => {
     const atDate = new Date(timeInput.value);
     if (!timeInput.value || Number.isNaN(atDate.getTime())) {
-      setError('Observation time is required');
+      setError(t('observer.error.timeRequired'));
       return;
     }
     const latDeg = parseFloat(latInput.value);
@@ -158,7 +145,7 @@ export function createObserverPanel(container, { onObserve } = {}) {
 
   const resultsText = document.createElement('pre');
   resultsText.className = 'observer-panel-results';
-  resultsText.textContent = 'No observation run yet.';
+  resultsText.textContent = t('observer.results.none');
   body.appendChild(resultsText);
 
   const canvas = document.createElement('canvas');

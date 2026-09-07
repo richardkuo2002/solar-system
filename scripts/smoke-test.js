@@ -52,6 +52,9 @@ import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/ur
 import { applySavedDefaults, clampNumberField, loadSaved, saveValues } from '../src/core/event-toolkit-persistence.js';
 import { scoreNight, analyzeBestObservationNight, MAX_NIGHTS_TO_SCAN } from '../src/analysis/best-night.js';
 import { fetchJsonOrFallback } from '../src/render/fetch-json.js';
+import { en } from '../src/i18n/en.js';
+import { zhTw } from '../src/i18n/zh-tw.js';
+import { t } from '../src/core/i18n.js';
 
 // kepler: eccentric anomaly solver satisfies Kepler's equation
 {
@@ -2210,6 +2213,25 @@ import { fetchJsonOrFallback } from '../src/render/fetch-json.js';
   assert.deepEqual(result, { features: ['real'] }, 'a successful response should be returned as-is, not the fallback');
 
   globalThis.fetch = originalFetch;
+}
+
+// i18n (v1.12): en.js/zh-tw.js are two hand-maintained flat dictionaries —
+// nothing else enforces they cover the same keys, so a missed translation
+// would otherwise sit silently until a user actually switched language and
+// saw a bare dictionary key fall through t()'s English/key fallback chain.
+{
+  const enKeys = Object.keys(en).sort();
+  const zhKeys = Object.keys(zhTw).sort();
+  const missingInZh = enKeys.filter((k) => !zhKeys.includes(k));
+  const extraInZh = zhKeys.filter((k) => !enKeys.includes(k));
+  assert.deepEqual(missingInZh, [], `zh-tw.js is missing translations for: ${missingInZh.join(', ')}`);
+  assert.deepEqual(extraInZh, [], `zh-tw.js has keys not present in en.js: ${extraInZh.join(', ')}`);
+  assert.ok(enKeys.length > 0, 'expected en.js to have at least one key');
+
+  // t(): lookup, fallback-to-English, missing-key fallback, {placeholder} substitution.
+  assert.equal(t('settings.title'), en['settings.title']);
+  assert.equal(t('this.key.does.not.exist'), 'this.key.does.not.exist', 'a missing key should fall back to itself, not silently blank');
+  assert.equal(t('observer.result.target', { name: 'Mars' }), en['observer.result.target'].replace('{name}', 'Mars'));
 }
 
 console.log('PASS: smoke-test.js all assertions passed');

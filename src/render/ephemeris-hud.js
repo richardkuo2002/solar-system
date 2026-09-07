@@ -5,18 +5,13 @@
 // Same createXxxUI(container, ...) shape as ui-controls.js's builders.
 
 import { J2000_JD } from '../core/orbital-elements.js';
+import { t } from '../core/i18n.js';
 
-const SOURCE_LABELS = {
-  'horizons-live': 'JPL Horizons (live)',
-  'horizons-cache': 'JPL Horizons (cached)',
-  kepler: 'Kepler propagation',
+const SOURCE_KEYS = {
+  'horizons-live': 'horizonsLive',
+  'horizons-cache': 'horizonsCache',
+  kepler: 'kepler',
 };
-
-// Moons/Charon are deliberately outside the AU body-state contract (see
-// core/body-state.js and docs/accuracy.md) — always the same honest,
-// hardcoded descriptor rather than a fabricated AU position.
-const MOON_SOURCE_LABEL = 'Kepler propagation (circular approx.)';
-const MOON_FRAME_LABEL = 'orbital plane (parent-relative, not AU)';
 
 export function createEphemerisHud(container) {
   const el = document.createElement('div');
@@ -45,19 +40,24 @@ export function createEphemerisHud(container) {
       const d = String(currentDate.getUTCDate()).padStart(2, '0');
       const hh = String(currentDate.getUTCHours()).padStart(2, '0');
       const mm = String(currentDate.getUTCMinutes()).padStart(2, '0');
-      simTime.textContent = `Simulation time: ${y}-${mo}-${d} ${hh}:${mm} UTC`;
-      selected.textContent = `Selected body: ${bodyName}`;
+      simTime.textContent = t('hud.simTime', { value: `${y}-${mo}-${d} ${hh}:${mm} UTC` });
+      selected.textContent = t('hud.selectedBody', { name: bodyName });
       if (moonParentName) {
-        source.textContent = `Ephemeris source: ${MOON_SOURCE_LABEL}`;
-        center.textContent = `Reference center: ${moonParentName}`;
-        frame.textContent = `Reference frame: ${MOON_FRAME_LABEL}`;
-        unit.textContent = 'Position unit: scene units (not AU)';
+        source.textContent = t('hud.source', { value: t('hud.source.moon') });
+        center.textContent = t('hud.center', { value: moonParentName });
+        frame.textContent = t('hud.frame', { value: t('hud.frame.moon') });
+        unit.textContent = t('hud.unit.scene');
         reliability.textContent = '';
       } else {
-        source.textContent = `Ephemeris source: ${SOURCE_LABELS[state.source]}`;
-        center.textContent = `Reference center: ${state.center[0]}${state.center.slice(1).toLowerCase()}`;
-        frame.textContent = `Reference frame: ${state.frame}`;
-        unit.textContent = 'Position unit: AU';
+        source.textContent = t('hud.source', { value: t(`hud.source.${SOURCE_KEYS[state.source]}`) });
+        // `state.center`/`state.frame` are always the 'SUN'/'ECLIPJ2000'
+        // protocol constants (core/body-state.js) — center is translated
+        // as a body name, frame is a reference-frame code shown verbatim
+        // (not prose — same convention as an astronomy paper would use in
+        // any language).
+        center.textContent = t('hud.center', { value: t('body.sun') });
+        frame.textContent = t('hud.frame', { value: state.frame });
+        unit.textContent = t('hud.unit.au');
         // v1.4 — Kepler-only positions drift further from truth the further
         // the date is from J2000 (docs/accuracy.md already states this);
         // Horizons-cache and the Sun's exact origin stay silent here since
@@ -67,8 +67,7 @@ export function createEphemerisHud(container) {
           const outOfRange = state.validity && (
             currentDate < new Date(state.validity.startUtc) || currentDate > new Date(state.validity.endUtc)
           );
-          reliability.textContent = `Precision: ~${yearsFromJ2000.toFixed(0)} yr from J2000 elements`
-            + (outOfRange ? " — outside the table's valid date range" : '');
+          reliability.textContent = t('hud.reliability', { years: yearsFromJ2000.toFixed(0), note: outOfRange ? t('hud.reliability.outOfRange') : '' });
         } else {
           reliability.textContent = '';
         }

@@ -10,8 +10,12 @@ import * as THREE from 'three';
  * @param {(mesh: THREE.Object3D) => void} [onSelect] — fired on click when
  * a body is currently hovered — app.js uses this to update the selected
  * body (ephemeris HUD, camera focus). Same raycast, no extra work.
+ * @param {(mesh: THREE.Object3D) => string} [getDisplayName] — v1.12: mesh.name
+ * is the internal English identifier (see app.js's nameToKey map, used for
+ * click-to-select); this resolves it to the current-language display name
+ * instead. Defaults to mesh.name itself so this stays independently testable.
  */
-export function createHoverLabels(canvas, camera, pickables, onHover, onSelect) {
+export function createHoverLabels(canvas, camera, pickables, onHover, onSelect, getDisplayName = (mesh) => mesh.name) {
   const el = document.createElement('div');
   el.className = 'hover-label';
   el.hidden = true;
@@ -28,7 +32,7 @@ export function createHoverLabels(canvas, camera, pickables, onHover, onSelect) 
     raycaster.setFromCamera(pointer, camera);
     const [hit] = raycaster.intersectObjects(pickables, false);
     if (hit) {
-      el.textContent = hit.object.name;
+      el.textContent = getDisplayName(hit.object);
       el.style.left = `${event.clientX + 14}px`;
       el.style.top = `${event.clientY + 14}px`;
       el.hidden = false;

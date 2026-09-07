@@ -360,6 +360,59 @@ html, body {
   color: #99b8d6;
 }
 
+/* v1.12 — the only other bottom-left fixed element is .touch-joystick-base
+   (bottom:20px, left:20px, 90x90px, touch devices only). bottom:120px clears
+   it with margin to spare on every viewport, so no matchMedia/touch-capable
+   branching is needed just to place this button (same "one position works
+   everywhere" choice as .attribution-footer's fixed corner). */
+.settings-button {
+  pointer-events: auto;
+  position: fixed;
+  left: 20px;
+  bottom: 120px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(10, 10, 20, 0.75);
+  color: #eee;
+  border: 1px solid #444;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.settings-panel {
+  pointer-events: auto;
+  position: fixed;
+  left: 20px;
+  bottom: 170px;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(10, 10, 20, 0.75);
+  color: #eee;
+  border: 1px solid #444;
+  border-radius: 4px;
+  font: 13px system-ui, sans-serif;
+}
+
+.settings-panel-title {
+  font-weight: 600;
+}
+
+.settings-panel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settings-panel-hint {
+  font-size: 11px;
+  color: #888;
+}
+
 .event-toolkit {
   pointer-events: auto;
   flex: 0 1 auto;

@@ -14,6 +14,7 @@ import { initTextureLoader } from './render/texture-loader.js';
 import { createTimeControlsUI, createViewModeUI, createSurfaceControlsUI, REAL_TIME_DAYS_PER_SECOND } from './render/ui-controls.js';
 import { createHoverLabels } from './render/hover-labels.js';
 import { createAttributionFooter } from './render/attribution-footer.js';
+import { createSettingsPanel } from './render/settings-panel.js';
 import { createEphemerisHud } from './render/ephemeris-hud.js';
 import { createCameraRig } from './render/camera-rig.js';
 import { createTouchControls } from './render/touch-controls.js';
@@ -40,6 +41,11 @@ import { PLANETS, PLANET_ORDER, SUN } from './data/planets.js';
 import { MOONS, MOON_ORDER } from './data/moons.js';
 import { COMETS, COMET_ORDER } from './data/comets.js';
 import { DWARF_PLANETS, DWARF_PLANET_ORDER, CHARON } from './data/dwarf-planets.js';
+import { t, getLanguage } from './core/i18n.js';
+
+// v1.12 — index.html's <html lang="en"> is static markup; this keeps it
+// honest once a user actually switches language (see settings-panel.js).
+document.documentElement.lang = getLanguage();
 
 const canvas = document.getElementById('scene');
 const renderer = createRenderer(canvas);
@@ -321,8 +327,12 @@ createHoverLabels(canvas, camera, pickableMeshes, loadFullFor, (mesh) => {
   selectedBodyKey = key;
   cameraState = setFocusBody(cameraState, key);
   bodyInfoPanel.render(buildBodyInfo(key));
+}, (mesh) => {
+  const key = nameToKey.get(mesh.name);
+  return key ? t(`body.${key}`) : mesh.name;
 });
 createAttributionFooter(document.getElementById('ui-root'));
+createSettingsPanel(document.getElementById('ui-root'));
 const ephemerisHud = createEphemerisHud(rightColumn);
 bodyInfoPanel.render(buildBodyInfo(selectedBodyKey)); // shows the Sun immediately on load, matching ephemerisHud's own always-populated-from-load behavior
 
@@ -503,18 +513,21 @@ function applySurfaceSkyProxies() {
   }
 }
 
-/** MOONS/CHARON keyed lookup + display name + parent name for the HUD's
- *  moon branch — the only place moon-vs-AU-body branching logic lives. */
+/** MOONS/CHARON keyed lookup + parent name for the HUD's moon branch — the
+ *  only place moon-vs-AU-body branching logic lives. */
 function moonHudInfo(bodyKey) {
   const moonData = MOONS[bodyKey] ?? (bodyKey === 'charon' ? CHARON : null);
   if (!moonData) return null;
-  const parentName = moonData.parent === 'pluto' ? DWARF_PLANETS.pluto.name : PLANETS[moonData.parent].name;
-  return { name: moonData.name, parentName };
+  const parentName = t(`body.${moonData.parent}`);
+  return { parentName };
 }
 
+// v1.12 — was `PLANETS[bodyKey]?.name ?? ...`, i.e. each table's raw
+// (always-English) `name` field. Every bodyKey this app knows about has a
+// `body.${bodyKey}` dictionary entry (see src/i18n/en.js|zh-tw.js), so this
+// just translates directly instead of chasing through the data tables.
 function bodyDisplayName(bodyKey) {
-  return PLANETS[bodyKey]?.name ?? COMETS[bodyKey]?.name ?? DWARF_PLANETS[bodyKey]?.name
-    ?? MOONS[bodyKey]?.name ?? (bodyKey === 'charon' ? CHARON.name : null) ?? SUN.name;
+  return t(`body.${bodyKey}`);
 }
 
 /**
@@ -528,7 +541,7 @@ function buildBodyInfo(bodyKey) {
   const planetData = PLANETS[bodyKey];
   if (planetData) {
     return {
-      name: planetData.name,
+      name: t(`body.${bodyKey}`),
       category: 'planet',
       radiusKm: planetData.radiusKm,
       massKg: planetData.massKg,
@@ -545,10 +558,10 @@ function buildBodyInfo(bodyKey) {
   const cometData = COMETS[bodyKey];
   if (cometData) {
     return {
-      name: cometData.name,
+      name: t(`body.${bodyKey}`),
       category: 'comet',
       radiusKm: cometData.radiusKm,
-      radiusNote: 'exaggerated for visibility — see ATTRIBUTION.md',
+      radiusNote: t('bodyInfo.radiusNote.exaggerated'),
       orbitalPeriodDays: orbitalPeriodDaysFromSemiMajorAxisAu(cometData.elements.a[0]),
       orbitalPeriodSource: 'kepler-derived',
       semiMajorAxisAu: cometData.elements.a[0],
@@ -559,7 +572,7 @@ function buildBodyInfo(bodyKey) {
   const dwarfData = DWARF_PLANETS[bodyKey];
   if (dwarfData) {
     return {
-      name: dwarfData.name,
+      name: t(`body.${bodyKey}`),
       category: 'dwarf',
       radiusKm: dwarfData.radiusKm,
       orbitalPeriodDays: orbitalPeriodDaysFromSemiMajorAxisAu(dwarfData.elements.a[0]),
@@ -571,9 +584,9 @@ function buildBodyInfo(bodyKey) {
   }
   const moonData = MOONS[bodyKey] ?? (bodyKey === 'charon' ? CHARON : null);
   if (moonData) {
-    const parentName = moonData.parent === 'pluto' ? DWARF_PLANETS.pluto.name : PLANETS[moonData.parent].name;
+    const parentName = t(`body.${moonData.parent}`);
     return {
-      name: moonData.name,
+      name: t(`body.${bodyKey}`),
       category: 'moon',
       radiusKm: moonData.radiusKm,
       orbitalPeriodDays: moonData.periodDays,
@@ -585,7 +598,7 @@ function buildBodyInfo(bodyKey) {
   // Falls through here only for 'sun' (SUN has no key in any table above,
   // same as bodyDisplayName's own fallback).
   return {
-    name: SUN.name,
+    name: t('body.sun'),
     category: 'sun',
     radiusKm: SUN.radiusKm,
     massKg: SUN.massKg,
