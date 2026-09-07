@@ -5,6 +5,34 @@ All notable changes to this project. Format loosely follows
 milestones in `docs/ROADMAP.md` (local-only), with each version's exact
 scope and accuracy notes in [docs/accuracy.md](docs/accuracy.md).
 
+## v1.12.1 — 2026-09-08
+
+Critical production fix + mobile layout follow-up.
+
+- **Reverted v1.11.3's `<script type="importmap" src="importmap.json">`**:
+  no browser actually supports an external import map via `src` (it's an
+  unshipped WICG proposal) — that change silently broke every
+  `import ... from 'three'`, producing a fully blank/black scene on every
+  deployment, confirmed on the live GitHub Pages site. Back to the
+  working inline import map; `importmap.json` removed;
+  `scripts/build-tauri-frontend.mjs` no longer stages it. The CSP concern
+  that motivated the original change only applies inside the Tauri
+  desktop webview, not the web build, and remains unverified pending a
+  local `tauri:dev` run.
+- Fixed `.settings-panel` rendering permanently open regardless of its
+  `hidden` attribute: an author `display: flex` rule beat the browser's
+  default `[hidden] { display: none }` — added `.settings-panel[hidden]`.
+- Fixed mobile layout crowding (viewports ≤700px): `.left-column` and
+  `.right-column` had both become nearly full-viewport width (after an
+  earlier fix widened their child panels) while still independently
+  `position: fixed` to opposite corners, landing on identical bounding
+  boxes and overlapping every panel across the two columns. Un-fixed
+  both to `position: static` so they stack in normal document flow.
+  Also fixed `.time-controls` overflowing the viewport width (wraps
+  instead) and its overlap with `.attribution-footer`/`.settings-button`
+  (both now flow in normal document order instead of sharing a
+  hardcoded fixed corner).
+
 ## v1.12 — 2026-09-08
 
 Settings panel: language switch (English/繁體中文) + a volume UI stub.

@@ -5,14 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Solar System</title>
   <link rel="stylesheet" href="css/style.css" />
-  <!-- v1.11.3 risk audit — was an inline <script type="importmap"> with the
-       JSON written directly in the tag. src-tauri/tauri.conf.json's CSP is
-       `script-src 'self'` (no 'unsafe-inline', no nonce/hash), which governs
-       import maps the same as any other <script> — an inline one silently
-       never registers under that policy, so every `import ... from 'three'`
-       would fail and the Tauri bundle wouldn't boot. An external, same-
-       origin file is covered by 'self' like any other script asset. -->
-  <script type="importmap" src="importmap.json"></script>
+  <!-- v1.12.1 — REVERTED v1.11.3's change to an external
+       `<script type="importmap" src="importmap.json">`: no browser
+       (Chrome/Firefox/Safari, verified against Chrome 152) actually
+       supports an external import map via `src` — it's an unshipped
+       WICG proposal, not a working feature — so that "fix" silently broke
+       `import ... from 'three'` everywhere, including the live GitHub
+       Pages deployment (confirmed: a fully blank/black scene in
+       production). It also targeted the wrong deployment: the CSP that
+       motivated it (`script-src 'self'`, no inline scripts) only applies
+       inside the Tauri desktop webview (src-tauri/tauri.conf.json) — the
+       plain web build this file also serves was never subject to it.
+       Tauri's own docs say it auto-hashes inline <script>/<style> tags at
+       build time to satisfy a CSP like this, which is the real fix for
+       the desktop build — but that claim is STILL NOT verified in this
+       repo (no cargo/rustc available in the environment that keeps
+       working on this); confirm with `npm run tauri:dev` before trusting
+       it, and fall back to loosening the Tauri-only CSP if it doesn't
+       pan out, rather than breaking the web build again. -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./assets/vendor/three/three.module.js",
+        "three/addons/": "./assets/vendor/three/addons/"
+      }
+    }
+  </script>
 </head>
 <body>
   <canvas id="scene"></canvas>

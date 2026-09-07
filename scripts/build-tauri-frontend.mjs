@@ -23,11 +23,13 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = join(repoRoot, 'web-dist');
-// v1.11.3 risk audit — importmap.json is now a separate file index.html
-// references (see index.html's comment); ATTRIBUTION.md was missing
-// entirely, so the Tauri bundle's attribution-footer.js link 404'd —
-// a real problem given the CC BY 4.0 textures it exists to credit.
-const ENTRIES = ['index.html', 'importmap.json', 'css', 'src', 'assets', 'ATTRIBUTION.md'];
+// v1.11.3 risk audit — ATTRIBUTION.md was missing entirely, so the Tauri
+// bundle's attribution-footer.js link 404'd — a real problem given the CC
+// BY 4.0 textures it exists to credit. (v1.12.1 reverted that same
+// audit's importmap.json split — external import maps aren't supported by
+// any browser — so it's back to being part of index.html, not a separate
+// entry here.)
+const ENTRIES = ['index.html', 'css', 'src', 'assets', 'ATTRIBUTION.md'];
 
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir);

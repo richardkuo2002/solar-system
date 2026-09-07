@@ -1,6 +1,0 @@
-{
-  "imports": {
-    "three": "./assets/vendor/three/three.module.js",
-    "three/addons/": "./assets/vendor/three/addons/"
-  }
-}

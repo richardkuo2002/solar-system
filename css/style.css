@@ -380,6 +380,18 @@ html, body {
   cursor: pointer;
 }
 
+/* v1.12.1 — `.settings-panel[hidden]` must come first (or otherwise win
+   on specificity) so the JS `panel.hidden` toggle actually hides it: an
+   author `display: flex` on a plain class selector overrides the
+   browser's default `[hidden] { display: none }` UA rule regardless of
+   source order (author origin always beats user-agent origin at equal
+   specificity) — the panel was rendering permanently open on every load,
+   click-to-close included, contributing real clutter on top of the
+   overlap issues below. */
+.settings-panel[hidden] {
+  display: none;
+}
+
 .settings-panel {
   pointer-events: auto;
   position: fixed;
@@ -683,7 +695,38 @@ html, body {
    asserted in scripts/smoke-test.js so this number can't silently drift
    out of sync with those widths). Below it, side-by-side panels
    mathematically cannot fit a typical 375-414px phone screen without
-   full overlap — full-width single-column panels instead. */
+   full overlap — full-width single-column panels instead.
+   v1.12.1 — that width fix was necessary but not sufficient: it widened
+   .observer-panel/.body-info-panel/.event-toolkit to fill the viewport,
+   but .left-column and .right-column themselves are still two
+   independent `position: fixed` boxes each anchored to their own corner
+   and shrink-wrapped to their widest child — once that child is
+   (100vw - 24px) wide, BOTH columns individually become nearly full
+   viewport width and land on IDENTICAL bounding boxes (verified: on a
+   390px-wide viewport both measured exactly left:12/right:378/top:12/
+   bottom:582 — completely coincident, not just visually close). Every
+   panel in one column then overlaps whatever panel happens to occupy the
+   same vertical range in the other, regardless of how narrow any single
+   panel's own width fix made it. This is the same "two independently-
+   sized stacks sharing one corner with no combined height budget" bug
+   class .left-column's own v1.8.1 fix and .right-column's own v1.11.1
+   fix already eliminated *within* each column — it was just never
+   applied *between* the two columns. Fix: at this width, un-fix both
+   columns (`position: static`) so they fall into normal document flow as
+   plain stacked siblings (left-column's children first, then right-
+   column's — both are already `display: flex; flex-direction: column`
+   internally, so this only changes how the two columns relate to each
+   other, not their own internal layout) — each one's real rendered
+   height now pushes the next down automatically, the same principle
+   extended one level up. Collapsible sections (.event-toolkit,
+   .observer-panel) default to collapsed, keeping the combined stack
+   short enough to fit typical 660-900px-tall phone viewports without
+   scrolling; a viewport that can't fit everything (very short landscape,
+   or several panels expanded at once) will clip at the top with no
+   scroll affordance — #ui-root staying `pointer-events: none` (so clicks
+   pass through empty space to the 3D scene/drag-to-look) is incompatible
+   with also making it a touch-scrollable region, so this is a known,
+   accepted limitation rather than a solved edge case. */
 @media (max-width: 700px) {
   .observer-panel,
   .body-info-panel,
@@ -691,10 +734,59 @@ html, body {
     width: calc(100vw - 24px);
   }
 
-  /* Clears .attribution-footer (right:8px, bottom:4px), which sits in
-     the same corner directly below these buttons at their old bottom:20px. */
-  .touch-vertical-buttons,
-  .touch-cycle-buttons {
-    bottom: 76px;
+  .left-column,
+  .right-column {
+    position: static;
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+    max-height: none;
+    bottom: auto;
+    margin: 0 auto 8px;
+  }
+
+  /* .time-controls is `width: fit-content` sized to its full desktop
+     button row (measured 546px), wider than a 390px phone — it overflowed
+     the viewport with the rightmost buttons pushed off-screen and
+     unreachable. flex-wrap lets it fold onto a second line instead of
+     spilling sideways, capped to the viewport like every other panel here. */
+  .time-controls {
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: calc(100vw - 24px);
+  }
+
+  /* .attribution-footer is `position: fixed; bottom: 4px` — a fine corner
+     on desktop, where .time-controls is a short one-line bar nowhere near
+     it. Wrapping .time-controls to 2 lines above makes its box (anchored
+     to #ui-root's bottom edge, growing upward) tall enough to reach that
+     same corner and print over this text (measured: 18px overlap).
+     Reusing --time-bar-clearance as its `bottom` instead — the value
+     app.js's ResizeObserver already keeps in sync with .time-controls'
+     real height for exactly this purpose — lifts it clear, but plants it
+     mid-screen instead, where it now collides with whatever the (also
+     newly-static) .right-column stack happens to occupy at that height.
+     Putting it back in normal flow sidesteps both: it renders in DOM
+     order (after .right-column, before .time-controls — see app.js),
+     so it always lands in the gap between them with no measurement
+     needed, the same principle as .left-column/.right-column above. */
+  .attribution-footer {
+    position: static;
+    display: block;
+    width: fit-content;
+    margin: 0 auto 8px;
+    text-align: center;
+  }
+
+  /* .settings-button's fixed bottom:120px was chosen to clear
+     .touch-joystick-base (bottom:20px, 90px tall) on desktop/tablet, where
+     nothing else ever occupies that band. .attribution-footer flowing
+     into normal document position above now lands in that same band
+     (DOM order: footer, then this button, then .time-controls — see
+     app.js) and visibly prints under the gear icon. Flowing this button
+     too puts it in its natural DOM slot, between them, matching every
+     other element this breakpoint already un-fixes for the same reason. */
+  .settings-button {
+    position: static;
+    margin: 0 auto 8px;
   }
 }
