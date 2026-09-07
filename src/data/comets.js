@@ -18,7 +18,11 @@ export const COMETS = {
   halley: {
     name: 'Halley',
     radiusKm: 8980, // exaggerated for visibility — see file comment
-    color: 0xcfd6dd,
+    // v1.11.3 risk audit — a `color` field here was dead: buildBodyMesh
+    // never applies bodyData.color as a material tint (see bodies.js's
+    // comment), and this body's own orbit line uses a hardcoded color
+    // (app.js) rather than reading it, unlike planets.js's color, which
+    // IS read for its orbit line. Removed rather than kept unused.
     proceduralPalette: 'comet', // comets don't have a standard photographic surface map — see ATTRIBUTION.md
     elements: {
       a: [17.834, 0],

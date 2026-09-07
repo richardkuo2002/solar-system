@@ -124,8 +124,16 @@ export async function fetchHeliocentricPosition(bodyCode, jsDate, { timeoutMs = 
     } catch (err) {
       throw new HorizonsUnavailableError('Horizons response was not valid JSON', err);
     }
-    if (!json.result) {
-      throw new HorizonsUnavailableError('Horizons JSON response missing "result"');
+    // v1.11.3 risk audit — `!json.result` only caught a falsy `result`
+    // (missing, empty string). A response like `{result: 42}` or
+    // `{result: {...}}` (or `json` itself being `null`) is a shape this
+    // API shouldn't ever send, but "shouldn't" isn't "can't" for a flaky
+    // connection truncating/mangling a response — and passing a non-
+    // string into parseVectorsBlock's `rawText.indexOf(...)` threw a bare
+    // TypeError, breaking this function's own documented contract of
+    // normalizing every failure into one error type callers can catch.
+    if (typeof json?.result !== 'string' || json.result.length === 0) {
+      throw new HorizonsUnavailableError('Horizons JSON response missing a string "result"');
     }
     // sourceUrl carried through so ephemeris.js can record it in the cache
     // entry without rebuilding the URL itself — construction stays here.

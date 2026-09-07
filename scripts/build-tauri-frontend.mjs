@@ -7,13 +7,27 @@
 // config override (src-tauri/tauri.build.conf.json) points frontendDist
 // at instead. `tauri dev` is untouched and keeps serving the live source
 // tree directly.
+//
+// v1.11.3 risk audit — this does mean `tauri dev`'s frontendDist ("../")
+// exposes the whole repo root (.git/, node_modules/, src-tauri/target/,
+// package-lock.json) to the webview, unlike the scoped build output above.
+// Deliberately left as-is: there's no injection/XSS path in this app that
+// could navigate the webview to those paths, so this is a defense-in-depth
+// gap with no demonstrated attacker, only reachable during local dev — and
+// pointing dev at web-dist/ too would cost the live-source-edit-and-reload
+// workflow this script exists to preserve, for a hardening benefit with no
+// real exploit scenario behind it.
 import { cpSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = join(repoRoot, 'web-dist');
-const ENTRIES = ['index.html', 'css', 'src', 'assets'];
+// v1.11.3 risk audit — importmap.json is now a separate file index.html
+// references (see index.html's comment); ATTRIBUTION.md was missing
+// entirely, so the Tauri bundle's attribution-footer.js link 404'd —
+// a real problem given the CC BY 4.0 textures it exists to credit.
+const ENTRIES = ['index.html', 'importmap.json', 'css', 'src', 'assets', 'ATTRIBUTION.md'];
 
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir);

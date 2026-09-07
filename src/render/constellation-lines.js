@@ -6,12 +6,7 @@
 import * as THREE from 'three';
 import { constellationLineSegments } from '../core/star-catalog.js';
 import { STAR_SHELL_RADIUS } from './starfield.js';
-
-async function fetchJson(path) {
-  const res = await fetch(path);
-  if (!res.ok) throw new Error(`fetch ${path} failed: HTTP ${res.status}`);
-  return res.json();
-}
+import { fetchJsonOrFallback } from './fetch-json.js';
 
 /**
  * Builds the constellation-line segments as one THREE.LineSegments mesh.
@@ -19,7 +14,8 @@ async function fetchJson(path) {
  * competing with the star points themselves.
  */
 export async function createConstellationLines() {
-  const linesGeoJson = await fetchJson('assets/stars/constellations.lines.json');
+  // v1.11.3 — falls back to no lines (not a crash) if this fails to load.
+  const linesGeoJson = await fetchJsonOrFallback('assets/stars/constellations.lines.json', { features: [] });
   const segmentPositions = constellationLineSegments(linesGeoJson);
 
   const scaled = new Float32Array(segmentPositions.length);

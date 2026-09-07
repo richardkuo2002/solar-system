@@ -1,9 +1,13 @@
 [package]
 name = "app"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
-license = ""
+# v1.11.3 risk audit — description/authors/license were the unedited
+# `tauri create` scaffold defaults ("A Tauri App"/["you"]/""); filled in to
+# match package.json and LICENSE. `repository` left blank — no public repo
+# URL exists to put here (this doesn't affect a local build either way).
+description = "Interactive 3D solar system simulation (Three.js, browser-only, zero-build) — Tauri desktop shell"
+authors = ["Richard Kuo"]
+license = "MIT"
 repository = ""
 edition = "2021"
 rust-version = "1.77.2"

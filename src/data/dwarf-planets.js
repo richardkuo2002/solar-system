@@ -14,7 +14,9 @@ export const DWARF_PLANETS = {
   pluto: {
     name: 'Pluto',
     radiusKm: 1188.3,
-    color: 0xc9b29b,
+    // v1.11.3 risk audit — `color` removed: dead, same reasoning as
+    // comets.js (never applied as a material tint, and this body's orbit
+    // line uses a hardcoded color, not this field).
     proceduralPalette: 'pluto', // no stable/appropriately-sized real texture — see ATTRIBUTION.md
     elements: {
       a: [39.48211675, -0.00031596],
@@ -38,5 +40,5 @@ export const DWARF_PLANET_ORDER = ['pluto'];
 export const CHARON = {
   name: 'Charon', parent: 'pluto',
   radiusKm: 606, orbitKm: 19591, periodDays: 6.387,
-  textureKey: 'charon', color: 0xb9b0a8,
+  textureKey: 'charon', // v1.11.3 — dropped a dead `color` field here too
 };

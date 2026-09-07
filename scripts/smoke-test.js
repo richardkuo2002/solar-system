@@ -14,7 +14,7 @@ import { MOONS, MOON_ORDER } from '../src/data/moons.js';
 import { COMETS, COMET_ORDER } from '../src/data/comets.js';
 import { DWARF_PLANETS, DWARF_PLANET_ORDER, CHARON } from '../src/data/dwarf-planets.js';
 import { hasRealTextureFile } from '../src/core/texture-resolution.js';
-import { parseVectorsBlock, HorizonsUnavailableError } from '../src/core/horizons-client.js';
+import { parseVectorsBlock, HorizonsUnavailableError, fetchHeliocentricPosition } from '../src/core/horizons-client.js';
 import { getBodyState, sunBodyState, isHorizonsAvailable, resetCircuitBreaker, getLightTimeCorrectedState } from '../src/core/ephemeris.js';
 import { createBodyState } from '../src/core/body-state.js';
 import {
@@ -51,6 +51,7 @@ import { analyzeObserver, observeAt, OBSERVER_TARGETS } from '../src/analysis/ob
 import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/url-state.js';
 import { applySavedDefaults, clampNumberField, loadSaved, saveValues } from '../src/core/event-toolkit-persistence.js';
 import { scoreNight, analyzeBestObservationNight, MAX_NIGHTS_TO_SCAN } from '../src/analysis/best-night.js';
+import { fetchJsonOrFallback } from '../src/render/fetch-json.js';
 
 // kepler: eccentric anomaly solver satisfies Kepler's equation
 {
@@ -639,11 +640,33 @@ import { scoreNight, analyzeBestObservationNight, MAX_NIGHTS_TO_SCAN } from '../
   assert.throws(() => parseVectorsBlock('$$SOE\nnothing useful\n$$EOE'), HorizonsUnavailableError);
 }
 
+// horizons-client: fetchHeliocentricPosition rejects a non-string/empty
+// "result" (a truthy-but-wrong-shape response like `{result: 42}` used to
+// reach parseVectorsBlock's rawText.indexOf(...) as a bare TypeError instead
+// of this function's documented HorizonsUnavailableError contract)
+{
+  const originalFetch = globalThis.fetch;
+  for (const badResult of [42, {}, null, '']) {
+    globalThis.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ result: badResult }) });
+    await assert.rejects(
+      () => fetchHeliocentricPosition('499', new Date('2026-03-01T00:00:00Z')),
+      HorizonsUnavailableError,
+      `result: ${JSON.stringify(badResult)} should be rejected as HorizonsUnavailableError`,
+    );
+  }
+  globalThis.fetch = originalFetch;
+}
+
 // ephemeris: getBodyState always returns synchronously (never awaits
 // Horizons in the caller), and falls back to source:'kepler',
 // quality:'approximate' with a finite position+velocity when the (stubbed)
 // fetch fails — the render loop must never crash or block on a dead
 // network. No live network calls: global.fetch is stubbed manually.
+//
+// v1.11.3 risk audit — the breaker now requires CIRCUIT_BREAKER_TRIP_THRESHOLD
+// (2) consecutive failures, not 1, so one body's one bad response can't
+// disable Horizons for every other body too. This exercises both halves:
+// a single failure must NOT yet trip it, and a second must.
 {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = () => Promise.reject(new Error('stubbed: network down'));
@@ -657,10 +680,50 @@ import { scoreNight, analyzeBestObservationNight, MAX_NIGHTS_TO_SCAN } from '../
   assert.ok(Number.isFinite(result.positionAu.x) && Number.isFinite(result.positionAu.y) && Number.isFinite(result.positionAu.z));
   assert.ok(Number.isFinite(result.velocityAuPerDay.x) && Number.isFinite(result.velocityAuPerDay.y) && Number.isFinite(result.velocityAuPerDay.z));
 
-  // let the background fetch attempt settle so the circuit breaker trips
-  // and so there's no unhandled-rejection warning when the process exits
+  // let the background fetch attempt settle
   await new Promise((resolve) => setTimeout(resolve, 20));
-  assert.equal(isHorizonsAvailable(), false, 'a failed Horizons attempt should open the circuit breaker');
+  assert.equal(isHorizonsAvailable(), true, 'one failed Horizons attempt must not yet open the circuit breaker');
+
+  // A second failed attempt (a different date bucket, so it's not deduped
+  // against the first by `inFlight`) is the one that should trip it.
+  getBodyState('mars', new Date('2026-06-20T00:00:00Z'), PLANETS.mars.elements);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(isHorizonsAvailable(), false, 'a second consecutive failed Horizons attempt should open the circuit breaker');
+
+  globalThis.fetch = originalFetch;
+  resetCircuitBreaker();
+}
+
+// ephemeris: a success resets the consecutive-failure count — the breaker
+// must not "remember" an old, already-recovered-from failure toward a
+// future trip. fail, succeed, fail: the second failure alone must not
+// trip a threshold-of-2 breaker, which is only possible if the success in
+// between actually reset the count back to 0.
+{
+  const originalFetch = globalThis.fetch;
+  let callCount = 0;
+  globalThis.fetch = () => {
+    callCount += 1;
+    if (callCount === 2) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ result: '$$SOE\nX = 1.0 Y = 0.0 Z = 0.0\n$$EOE' }),
+      });
+    }
+    return Promise.reject(new Error('stubbed: transient failure'));
+  };
+  resetCircuitBreaker();
+
+  getBodyState('venus', new Date('2026-07-01T00:00:00Z'), PLANETS.venus.elements); // call 1: fails
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(isHorizonsAvailable(), true, 'still available after one failure');
+
+  getBodyState('venus', new Date('2026-07-05T00:00:00Z'), PLANETS.venus.elements); // call 2: succeeds, should reset the count
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  getBodyState('venus', new Date('2026-07-10T00:00:00Z'), PLANETS.venus.elements); // call 3: fails again
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(isHorizonsAvailable(), true, 'a success in between must reset the consecutive-failure count, so this lone failure must not trip the breaker');
 
   globalThis.fetch = originalFetch;
   resetCircuitBreaker();
@@ -2123,6 +2186,30 @@ import { scoreNight, analyzeBestObservationNight, MAX_NIGHTS_TO_SCAN } from '../
   const vendoredRevision = match[1]; // three.js's REVISION is just the minor version number, e.g. "160"
   const pinnedMinor = pinnedVersion.split('.')[1];
   assert.equal(vendoredRevision, pinnedMinor, `package.json pins three@${pinnedVersion} but the vendored file's REVISION is ${vendoredRevision} — update whichever is behind`);
+}
+
+// fetch-json.js: fetchJsonOrFallback degrades to the caller's fallback
+// instead of throwing, on both a non-ok HTTP response and a network/parse
+// error — v1.11.3 replaced 3 duplicated throwing fetchJson()s (starfield,
+// constellation-lines, constellation-labels) with this shared helper
+// specifically so a flaky static-asset fetch can't abort app.js's startup
+// Promise.all([...]).
+{
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = () => Promise.resolve({ ok: false, status: 404 });
+  let result = await fetchJsonOrFallback('missing.json', { features: [] });
+  assert.deepEqual(result, { features: [] }, 'a non-ok response should degrade to the fallback, not throw');
+
+  globalThis.fetch = () => Promise.reject(new Error('stubbed: network down'));
+  result = await fetchJsonOrFallback('unreachable.json', { features: [] });
+  assert.deepEqual(result, { features: [] }, 'a network error should degrade to the fallback, not throw');
+
+  globalThis.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ features: ['real'] }) });
+  result = await fetchJsonOrFallback('present.json', { features: [] });
+  assert.deepEqual(result, { features: ['real'] }, 'a successful response should be returned as-is, not the fallback');
+
+  globalThis.fetch = originalFetch;
 }
 
 console.log('PASS: smoke-test.js all assertions passed');

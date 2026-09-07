@@ -8,6 +8,7 @@
 // falloff) live here instead of being baked into that 2D image.
 import * as THREE from 'three';
 import { loadStarCatalog } from '../core/star-catalog.js';
+import { fetchJsonOrFallback } from './fetch-json.js';
 
 // Comfortably inside the camera's far plane (5000, see scene-setup.js) and
 // the Milky Way sky sphere's radius (4000), and far outside every real
@@ -51,12 +52,6 @@ const FRAGMENT_SHADER = `
   }
 `;
 
-async function fetchJson(path) {
-  const res = await fetch(path);
-  if (!res.ok) throw new Error(`fetch ${path} failed: HTTP ${res.status}`);
-  return res.json();
-}
-
 /**
  * Builds the star point cloud from the vendored real catalog
  * (assets/stars/stars.6.json — ~5000 Hipparcos stars to mag 6.5).
@@ -72,7 +67,10 @@ async function fetchJson(path) {
  * the camera), and resize never touches this at all.
  */
 export async function createStarfield({ pixelRatio = 1 } = {}) {
-  const starsGeoJson = await fetchJson('assets/stars/stars.6.json');
+  // v1.11.3 — falls back to an empty star field (no stars, not a crash)
+  // if the catalog fails to load; loadStarCatalog already handles a
+  // features array of length 0 fine, it's just an empty BufferGeometry.
+  const starsGeoJson = await fetchJsonOrFallback('assets/stars/stars.6.json', { features: [] });
   const { positions, colors, sizes, brightness } = loadStarCatalog(starsGeoJson);
 
   const scaledPositions = new Float32Array(positions.length);

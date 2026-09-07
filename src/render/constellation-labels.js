@@ -8,12 +8,7 @@
 import * as THREE from 'three';
 import { constellationLabelPositions } from '../core/star-catalog.js';
 import { STAR_SHELL_RADIUS } from './starfield.js';
-
-async function fetchJson(path) {
-  const res = await fetch(path);
-  if (!res.ok) throw new Error(`fetch ${path} failed: HTTP ${res.status}`);
-  return res.json();
-}
+import { fetchJsonOrFallback } from './fetch-json.js';
 
 /**
  * Builds one absolutely-positioned <div> per major constellation inside a
@@ -21,7 +16,8 @@ async function fetchJson(path) {
  * mouse/touch input meant for the 3D scene).
  */
 export async function createConstellationLabels() {
-  const constellationsGeoJson = await fetchJson('assets/stars/constellations.json');
+  // v1.11.3 — falls back to no labels (not a crash) if this fails to load.
+  const constellationsGeoJson = await fetchJsonOrFallback('assets/stars/constellations.json', { features: [] });
   const labels = constellationLabelPositions(constellationsGeoJson);
 
   const container = document.createElement('div');

@@ -98,6 +98,15 @@ export function createCameraRig(camera, domElement) {
       pendingCycleDirections = [];
       touchMoveVector = { x: 0, y: 0 };
       touchVertical = 0;
+      // v1.11.3 risk audit — pendingYaw/pendingPitch were never reset here.
+      // HELIOCENTRIC_TOPDOWN is the one mode whose own updates
+      // (updateTopDownPan + OrbitControls) never drain these two — only
+      // updateFreeFlight/updateGeocentricLook do. So every mouse-drag while
+      // in top-down kept accumulating unread yaw/pitch; switching to
+      // Free-flight or Geocentric afterward then applied the entire
+      // backlog in one frame as a sudden camera snap.
+      pendingYaw = 0;
+      pendingPitch = 0;
     },
 
     /** v0.10 — the on-screen joystick calls this continuously while dragging (and resets to {0,0} on release). */

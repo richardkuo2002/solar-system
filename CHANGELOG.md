@@ -5,6 +5,126 @@ All notable changes to this project. Format loosely follows
 milestones in `docs/ROADMAP.md` (local-only), with each version's exact
 scope and accuracy notes in [docs/accuracy.md](docs/accuracy.md).
 
+## v1.11.3 — 2026-09-08
+
+Second full risk audit round — two Explore agents this time swept areas
+the v1.11.2 round hadn't covered (the render layer, `src/data/`, the
+Tauri/Rust side, and the network/circuit-breaker/URL-state logic). 4
+Critical, several Moderate/Minor findings, all fixed:
+
+- **Critical: the Tauri desktop bundle wouldn't boot at all** —
+  `index.html`'s import map was an inline `<script type="importmap">`,
+  but `src-tauri/tauri.conf.json`'s CSP is `script-src 'self'` with no
+  `'unsafe-inline'`/nonce/hash, which governs import maps the same as
+  any other script tag — an inline one silently never registers under
+  that policy, so every `import ... from 'three'` would fail. Moved to
+  an external same-origin `importmap.json` (covered by `'self'`), which
+  also surfaced that `ATTRIBUTION.md` was missing from the Tauri build
+  entirely (its footer link 404'd) — both now included by
+  `scripts/build-tauri-frontend.mjs`.
+- **Critical: `texture-loader.js`'s per-texture consumer list could grow
+  unbounded, double-load the same texture, or resurrect an evicted one**
+  — three related bugs from the same root cause (no in-flight-load
+  tracking, and `Set`-based consumer dedup silently failing on
+  object-literal identity). Rewritten together: a new `inFlight` guard
+  prevents concurrent duplicate loads (closing both the GPU-texture leak
+  from two concurrent loads and the race where a slow load resolving
+  after eviction could resurrect a texture that should stay evicted),
+  and consumers now dedup correctly via an array + explicit equality
+  check.
+- **Moderate: the LRU full-texture cache (cap 10) could silently evict
+  the Sun/Earth/Moon** despite comments claiming they "always load
+  full-res immediately" — the app's own eager-load calls for those three
+  weren't exempt from the same cap the idle background queue counts
+  against. New `pin` option on `ensureFull` exempts a texture key from
+  eviction; wired up for the Sun, Earth (map/night-lights/clouds), and
+  the Moon.
+- **Moderate: `url-state.js` could crash the render loop** — encoding a
+  `Date` outside a representable extended-ISO year (or a non-finite
+  lat/lon) into the shareable URL either round-tripped lossy or threw a
+  `RangeError` from the per-frame `syncUrl()` call inside `animate()`.
+  New `isEncodableDate()` bounds dates to years 1-9999 on both encode and
+  decode, and NaN-guards lat/lon on encode — matching this module's own
+  documented contract that a hand-edited/stale URL must degrade to
+  defaults, never crash.
+- **Moderate: the Horizons circuit breaker tripped on a single failure**
+  — one transient network hiccup disabled real ephemeris data for a full
+  60s cooldown. Now requires 2 *consecutive* failures (any success resets
+  the count).
+- **Moderate: `horizons-client.js`'s response-shape check only caught a
+  falsy `result`** — a truthy-but-wrong-shape response (`{result: 42}`,
+  `{result: {}}`) reached `parseVectorsBlock`'s string indexing as a bare
+  `TypeError` instead of this function's own documented
+  `HorizonsUnavailableError` contract. Now validates `typeof json?.result
+  === 'string'` explicitly.
+- **Moderate: texture upgrade could shift a body's color** —
+  `ensureFull`'s default `colorSpace` was `SRGBColorSpace`, but Earth's
+  cloud layer and Venus/other planets' atmosphere alpha masks aren't
+  color data (`bodies.js`'s preview construction already uses
+  `NoColorSpace` for them) — full-res upgrade silently disagreed with the
+  preview it replaced. Now threaded through consistently.
+- **Moderate: switching out of top-down camera mode could snap the view**
+  — `camera-rig.js#setMode` reset every per-mode accumulator except
+  `pendingYaw`/`pendingPitch`, the two `HELIOCENTRIC_TOPDOWN` never
+  drains (only Free-flight/Geocentric do) — a mouse drag while in
+  top-down silently accumulated unread yaw/pitch, applied all at once as
+  a sudden jump on switching modes. Now reset alongside the others.
+- **3 unguarded static-asset fetches could abort app startup entirely**
+  — `starfield.js`/`constellation-lines.js`/`constellation-labels.js`
+  each had a byte-identical `fetchJson` that threw on any non-ok/network
+  failure, inside `app.js`'s startup `Promise.all([...])` — one flaky
+  request meant a blank canvas, no fallback. Unified into one shared
+  `fetchJsonOrFallback` (new `render/fetch-json.js`) that degrades to an
+  empty-features fallback instead, same principle already applied
+  everywhere else a non-essential asset is fetched.
+- Minor: Callisto/Halley/Pluto (proceduralPalette-only, no real texture
+  file) were still getting a `textureKey: undefined` lazy-load registry
+  entry that every hover/idle-queue/eager-load pass would walk for
+  nothing; `registerLazy` now drops entries with no `textureKey`.
+- Minor: removed a `color` field from every moon/comet/dwarf-planet data
+  entry — dead since `buildBodyMesh` never applies it as a material tint
+  and none of those bodies' orbit lines read it either (unlike
+  `planets.js`'s `color`, which orbit lines do use).
+- Minor: `src-tauri/Cargo.toml`'s `description`/`authors`/`license` were
+  the unedited `tauri create` scaffold defaults; filled in to match
+  `package.json`/`LICENSE`.
+- Added regression tests for the `horizons-client.js` result-shape
+  validation and the new `fetchJsonOrFallback` helper, and rewrote the
+  circuit-breaker test to cover the 2-consecutive-failures threshold and
+  the success-resets-the-count case.
+
+Deliberately left as-is (found, considered, not a defect or not worth
+the trade-off):
+- Horizons cache entries have no TTL — unlike a typical API cache, a
+  cached position is keyed to an immutable past/future date bucket, not
+  a "current state" that goes stale; `MAX_CACHE_ENTRIES`'s existing FIFO
+  eviction already bounds memory.
+- `tauri dev`'s `frontendDist: "../"` exposes the whole repo root
+  (`.git/`, `node_modules/`, etc.) to the webview, unlike the scoped
+  build output — but only during local development, with no
+  injection/XSS path in this app that could actually navigate there, and
+  fixing it would cost the live-edit-and-reload dev workflow
+  `scripts/build-tauri-frontend.mjs` exists to preserve.
+- The top-level `.expect()` on `tauri::Builder::run()` panicking on
+  startup failure is the standard Tauri entry-point pattern, not a bug —
+  there's no app left to report an error to at that point, and `expect`'s
+  panic message already includes the underlying error, so nothing is
+  swallowed.
+- `event-toolkit-panel.js#mount()`'s `panelMount.replaceChildren()` on
+  every event-type switch: verified every listener `lab-panel.js`/
+  `export-buttons.js` attach lives on an element inside the replaced
+  subtree (never on `window`/`document`/the wrapper), so this doesn't
+  leak.
+
+`camera-rig.js`'s yaw/pitch fix and `texture-loader.js`'s pin/in-flight
+behavior aren't covered by a `scripts/smoke-test.js` regression test —
+both need a real `THREE.PerspectiveCamera` + DOM `domElement`/renderer,
+the same render-layer/WebGL boundary this Node-only test suite has
+never crossed (no browser available in this sandbox); verified by
+reading, not by a runnable check.
+
+`npm test`/`npm run lint` all pass.
+
 ## v1.11.2 — 2026-09-07
 
 Follow-up risk audit requested after v1.11.1 — two Explore agents swept

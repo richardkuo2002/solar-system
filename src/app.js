@@ -81,11 +81,17 @@ const textureLoader = await initTextureLoader(renderer);
 // `loadFullFor(someMesh)` instead of repeating per-body texture bookkeeping.
 const lazyBodies = new Map();
 function registerLazy(mesh, entries) {
-  lazyBodies.set(mesh, entries);
+  // v1.11.3 risk audit — Callisto/Halley/Pluto have no textureKey (they're
+  // proceduralPalette-only, see data/moons.js|comets.js|dwarf-planets.js),
+  // so their entry's textureKey was always undefined. Harmless in practice
+  // (ensureFull's manifest lookup just no-ops on it) but a meaningless
+  // registry entry that every hover/idle-queue/eager-load pass would still
+  // walk — drop entries with no textureKey instead of registering them.
+  lazyBodies.set(mesh, entries.filter((entry) => entry.textureKey));
 }
 function loadFullFor(mesh) {
-  for (const { textureKey, material, property } of lazyBodies.get(mesh) ?? []) {
-    textureLoader.ensureFull(textureKey, material, { property });
+  for (const { textureKey, material, property, pin, colorSpace } of lazyBodies.get(mesh) ?? []) {
+    textureLoader.ensureFull(textureKey, material, { property, pin, colorSpace });
   }
 }
 
@@ -95,7 +101,7 @@ sunTiltGroup.rotation.z = THREE.MathUtils.degToRad(SUN.axialTiltDeg);
 sunTiltGroup.add(sunMesh);
 scene.add(sunTiltGroup);
 scene.add(sunLight);
-textureLoader.ensureFull(SUN.textureKey, sunMesh.material); // Sun always loads full-res immediately
+textureLoader.ensureFull(SUN.textureKey, sunMesh.material, { pin: true }); // Sun always loads full-res immediately, and (v1.11.3) stays that way — see texture-loader.js's LRU comment
 
 const startJD = julianDateFromDate(new Date());
 
@@ -124,19 +130,27 @@ for (const key of PLANET_ORDER) {
   const mesh = buildPlanetMesh(planetData, textureLoader);
   tiltGroup.add(mesh);
 
-  const lazyEntries = [{ textureKey: planetData.textureKey, material: mesh.material, property: 'map' }];
+  // v1.11.3 — only Earth is pinned here (it's the one loadFullFor'd
+  // eagerly right after this loop, below); every other planet's entries
+  // stay ordinary LRU-managed loads.
+  const pin = key === 'earth';
+  const lazyEntries = [{ textureKey: planetData.textureKey, material: mesh.material, property: 'map', pin }];
   if (planetData.nightTextureKey) {
-    lazyEntries.push({ textureKey: planetData.nightTextureKey, material: mesh.material, property: 'emissiveMap' });
+    lazyEntries.push({ textureKey: planetData.nightTextureKey, material: mesh.material, property: 'emissiveMap', pin });
   }
   if (planetData.cloudsTextureKey) {
     const cloudsMesh = buildAtmosphereShell(planetData, planetData.cloudsTextureKey, textureLoader, { opacity: 0.5 });
     tiltGroup.add(cloudsMesh);
-    lazyEntries.push({ textureKey: planetData.cloudsTextureKey, material: cloudsMesh.material, property: 'alphaMap' });
+    // v1.11.3 — bodies.js's preview alphaMap explicitly uses NoColorSpace
+    // (an alpha mask isn't color data); ensureFull's default is
+    // SRGBColorSpace (right for a diffuse map, wrong here), so without
+    // this the mask visibly re-decoded the moment it upgraded to full-res.
+    lazyEntries.push({ textureKey: planetData.cloudsTextureKey, material: cloudsMesh.material, property: 'alphaMap', pin, colorSpace: THREE.NoColorSpace });
   }
   if (planetData.atmosphereTextureKey) {
     const atmosphereMesh = buildAtmosphereShell(planetData, planetData.atmosphereTextureKey, textureLoader, { opacity: 0.45 });
     tiltGroup.add(atmosphereMesh);
-    lazyEntries.push({ textureKey: planetData.atmosphereTextureKey, material: atmosphereMesh.material, property: 'alphaMap' });
+    lazyEntries.push({ textureKey: planetData.atmosphereTextureKey, material: atmosphereMesh.material, property: 'alphaMap', colorSpace: THREE.NoColorSpace });
   }
   if (key === 'saturn') {
     const ring = buildSaturnRing(planetData, textureLoader);
@@ -160,9 +174,10 @@ for (const moonKey of MOON_ORDER) {
   planetGroups[moonData.parent].add(mesh);
   moonMeshesByParent[moonData.parent].push({ key: moonKey, mesh, moonData });
   pickableMeshes.push(mesh);
-  registerLazy(mesh, [{ textureKey: moonData.textureKey, material: mesh.material, property: 'map' }]);
+  // v1.11.3 — only the Moon (loadFullFor'd eagerly right below) is pinned.
+  registerLazy(mesh, [{ textureKey: moonData.textureKey, material: mesh.material, property: 'map', pin: moonKey === 'moon' }]);
 }
-loadFullFor(moonMeshesByParent.earth[0].mesh); // the Moon always loads full-res immediately
+loadFullFor(moonMeshesByParent.earth[0].mesh); // the Moon always loads full-res immediately, and (v1.11.3) stays that way
 
 // v1.8.4 — per-moon extra orbit-radius floor (scale.js#spacedMoonOrbitRadii)
 // so Jupiter's four Galilean moons don't render overlapping each other,

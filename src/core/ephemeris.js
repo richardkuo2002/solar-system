@@ -31,10 +31,27 @@ const STANDISH_VALIDITY = { startUtc: '1800-01-01T00:00:00Z', endUtc: '2050-01-0
 const CACHE_BUCKET_MS = 6 * 60 * 60 * 1000; // 6-hour buckets — fine-grained enough, avoids one fetch per frame
 const MAX_CACHE_ENTRIES = 5000;
 const CIRCUIT_BREAKER_COOLDOWN_MS = 60 * 1000;
+// v1.11.3 risk audit — the breaker used to open on any single failure,
+// undiscriminated: one body's one malformed response (a transient
+// hiccup, not "Horizons is down") disabled fetching for all 8 planets
+// for a full minute. Requiring 2 CONSECUTIVE failures (reset by any
+// success) still opens fast against a genuinely down API — every body's
+// bucket independently hits this within a few frames of each other, all
+// well before the cooldown from the first trip would expire anyway — but
+// no longer over-reacts to one bad response.
+const CIRCUIT_BREAKER_TRIP_THRESHOLD = 2;
 
+// v1.11.3 risk audit — considered, deliberately not adding a TTL here.
+// Unlike a typical API cache (current status that goes stale over real
+// time), a cache entry here is "body X's position at [fixed past/future
+// date bucket]" — a computed fact about a specific instant that doesn't
+// change on re-query. `fetchedAtMs` exists only for the human-readable
+// "fetched at / from" note in the returned validity metadata, not for
+// expiry. `MAX_CACHE_ENTRIES`'s FIFO eviction already bounds memory.
 const cache = new Map(); // `${bodyKey}:${bucketStartMs}` -> {x,y,z,vx,vy,vz,fetchedAtMs,sourceUrl}
 const inFlight = new Set(); // cache keys currently being fetched, avoids duplicate requests
 let horizonsDisabledUntil = 0;
+let consecutiveFailures = 0;
 
 function bucketKey(bodyKey, jsDate) {
   const bucketed = Math.floor(jsDate.getTime() / CACHE_BUCKET_MS) * CACHE_BUCKET_MS;
@@ -60,6 +77,7 @@ export function isHorizonsAvailable() {
 /** Test/debug hook: force the circuit breaker open or closed. */
 export function resetCircuitBreaker() {
   horizonsDisabledUntil = 0;
+  consecutiveFailures = 0;
 }
 
 /**
@@ -106,10 +124,14 @@ export function getBodyState(bodyKey, jsDate, baseElements, { forceSource } = {}
     inFlight.add(key);
     fetchHeliocentricPosition(bodyCode, jsDate)
       .then((pos) => {
+        consecutiveFailures = 0;
         cacheSet(key, { ...pos, fetchedAtMs: Date.now() });
       })
       .catch(() => {
-        horizonsDisabledUntil = Date.now() + CIRCUIT_BREAKER_COOLDOWN_MS;
+        consecutiveFailures += 1;
+        if (consecutiveFailures >= CIRCUIT_BREAKER_TRIP_THRESHOLD) {
+          horizonsDisabledUntil = Date.now() + CIRCUIT_BREAKER_COOLDOWN_MS;
+        }
       })
       .finally(() => {
         inFlight.delete(key);
