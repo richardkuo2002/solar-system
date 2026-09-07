@@ -5,6 +5,41 @@ All notable changes to this project. Format loosely follows
 milestones in `docs/ROADMAP.md` (local-only), with each version's exact
 scope and accuracy notes in [docs/accuracy.md](docs/accuracy.md).
 
+## v1.11.1 — 2026-09-07
+
+Fixes the recurring "panels overlap" bug class properly instead of
+patching one more reported instance (v1.8.1-v1.8.4 each fixed a single
+symptom without touching the underlying architecture):
+
+- **`.event-toolkit` no longer hardcodes `top: 120px`** — that was a
+  guess at `.ephemeris-hud`'s height (which varies: its `reliability`
+  row only appears, with variable-length text, for Kepler-approximate
+  or out-of-validity-range bodies), the exact same stale-offset bug
+  class `.left-column` was built to eliminate in v1.8.1, just never
+  migrated on this side. New `.right-column` flex wrapper (mirrors
+  `.left-column`) makes `.event-toolkit` position itself below
+  `.ephemeris-hud`'s real rendered height automatically.
+- **First responsive breakpoint in this stylesheet** (`@media
+  (max-width: 700px)`) — previously zero `@media` queries existed
+  anywhere, so the same fixed-pixel-width side panels
+  (`.observer-panel`/`.body-info-panel` 300px, `.event-toolkit` 340px)
+  were used unchanged on phone screens, where they mathematically can't
+  fit side by side (300+340+margins ≈ 676px, wider than a typical
+  375-414px phone) — this is why mobile overlap was worse than desktop.
+  Below 700px, these panels go full-width instead of side-by-side, and
+  now start collapsed on page load (`makeCollapsible`'s new
+  `startCollapsed` option) so the 3D view isn't immediately covered.
+- Touch-only vertical/cycle buttons raised from `bottom: 20px` to `76px`
+  below the same breakpoint, clearing `.attribution-footer` in the same
+  corner with margin to spare.
+
+`npm test`/`npm run lint` all pass. No browser/WebGL available in this
+sandbox (same standing limitation as prior UI-visual work) — the layout
+was verified by measurement/arithmetic (the 700px breakpoint's own
+justification is asserted in `scripts/smoke-test.js`), not by
+rendering; a quick visual check on an actual phone width is still
+worthwhile after deploy.
+
 ## v1.11 — 2026-09-06
 
 - **Best Observation Night Finder** — new Event Toolkit type: for a

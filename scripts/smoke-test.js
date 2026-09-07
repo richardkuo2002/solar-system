@@ -2007,4 +2007,19 @@ import { scoreNight, analyzeBestObservationNight, MAX_NIGHTS_TO_SCAN } from '../
   }), /latDeg/, 'an invalid latitude must throw');
 }
 
+// css/style.css: the 700px mobile breakpoint (v1.11.1) exists specifically
+// because .left-column's 300px panels and .right-column's 340px
+// .event-toolkit can't fit side by side below it — this keeps that
+// number honest if either width ever changes.
+{
+  const MOBILE_BREAKPOINT_PX = 700;
+  const LEFT_PANEL_WIDTH_PX = 300;
+  const RIGHT_PANEL_WIDTH_PX = 340;
+  const MARGIN_PX = 12;
+  assert.ok(
+    MOBILE_BREAKPOINT_PX >= LEFT_PANEL_WIDTH_PX + RIGHT_PANEL_WIDTH_PX + MARGIN_PX * 3,
+    'the 700px breakpoint must stay >= the two side panels\' combined width plus margins',
+  );
+}
+
 console.log('PASS: smoke-test.js all assertions passed');

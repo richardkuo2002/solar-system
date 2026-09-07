@@ -103,11 +103,27 @@ html, body {
   flex: 0 0 auto;
 }
 
-.ephemeris-hud {
-  pointer-events: auto;
+/* v1.11.1 — mirrors .left-column: .event-toolkit used to hardcode
+   `top: 120px` as a guess at .ephemeris-hud's height, the same
+   stale-offset bug class .left-column was built to eliminate in v1.8.1,
+   except this side was never migrated. A flex column makes
+   .ephemeris-hud's real rendered height (which varies — see its own
+   comment) push .event-toolkit down automatically; no guess needed. */
+.right-column {
   position: fixed;
   top: 12px;
   right: 12px;
+  bottom: var(--time-bar-clearance);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.ephemeris-hud {
+  pointer-events: auto;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -346,10 +362,9 @@ html, body {
 
 .event-toolkit {
   pointer-events: auto;
-  position: fixed;
-  top: 120px;
-  right: 12px;
-  max-height: calc(100vh - 120px - 12px);
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 100%;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -607,4 +622,26 @@ html, body {
   letter-spacing: 0.5px;
   text-shadow: 0 0 4px rgba(0, 0, 0, 0.9);
   white-space: nowrap;
+}
+
+/* v1.11.1 — first responsive breakpoint in this stylesheet. 700px is the
+   smallest width that comfortably fits .left-column's 300px panels next
+   to .right-column's 340px .event-toolkit with margin (300+340+12*3=676,
+   asserted in scripts/smoke-test.js so this number can't silently drift
+   out of sync with those widths). Below it, side-by-side panels
+   mathematically cannot fit a typical 375-414px phone screen without
+   full overlap — full-width single-column panels instead. */
+@media (max-width: 700px) {
+  .observer-panel,
+  .body-info-panel,
+  .event-toolkit {
+    width: calc(100vw - 24px);
+  }
+
+  /* Clears .attribution-footer (right:8px, bottom:4px), which sits in
+     the same corner directly below these buttons at their old bottom:20px. */
+  .touch-vertical-buttons,
+  .touch-cycle-buttons {
+    bottom: 76px;
+  }
 }

@@ -522,7 +522,8 @@ export function createEventToolkitPanel(container, callbacks) {
   const panelMount = document.createElement('div');
   body.appendChild(panelMount);
   container.appendChild(wrapper);
-  makeCollapsible(title, body);
+  // v1.11.1 — see observer-panel.js's identical comment.
+  makeCollapsible(title, body, { startCollapsed: window.matchMedia('(max-width: 700px)').matches });
 
   function mount(eventTypeKey) {
     panelMount.replaceChildren();

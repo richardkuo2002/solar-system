@@ -298,6 +298,11 @@ before with zero extra UI.
 - **Free-flight vertical movement** (v1.7) — bottom-right ▲/▼ buttons are
   Q/E's touch equivalent, press-and-hold (not tap) since vertical motion
   is continuous, closing what had been a known gap since v0.10.
+- **Narrow-viewport layout** (v1.11.1) — below 700px wide (typical
+  phones), the left panels (Observer Mode / Planet Info) and the right
+  Event Toolkit panel switch to full-width single-column instead of
+  fixed 300px/340px side-by-side, and start collapsed so the 3D view
+  isn't immediately covered on load.
 - **Known limits**: a touchscreen laptop with a mouse as its primary
   pointer won't show the touch UI even though touch works.
 

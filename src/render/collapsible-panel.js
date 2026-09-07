@@ -12,8 +12,12 @@
  * is an opt-in per click, not a new default state to relearn.
  * @param {HTMLElement} titleEl
  * @param {HTMLElement} bodyEl
+ * @param {{startCollapsed?: boolean}} [options] - v1.11.1: start collapsed
+ *   instead of expanded, so a narrow-viewport page load isn't immediately
+ *   covered by these panels (see app.js's matchMedia call site).
  */
-export function makeCollapsible(titleEl, bodyEl) {
+export function makeCollapsible(titleEl, bodyEl, { startCollapsed = false } = {}) {
+  if (startCollapsed) bodyEl.hidden = true;
   const baseText = titleEl.textContent;
   titleEl.classList.add('collapsible-title');
   // v1.8.6 — titleEl was a plain <div> with only a click handler: no

@@ -286,6 +286,15 @@ const leftColumn = document.createElement('div');
 leftColumn.className = 'left-column';
 document.getElementById('ui-root').appendChild(leftColumn);
 
+// v1.11.1 — mirrors leftColumn above: .ephemeris-hud/.event-toolkit used to
+// each be independent `position: fixed` elements in the same top-right
+// corner, with .event-toolkit's `top` a hardcoded guess at the HUD's
+// height (see its CSS comment). One flex column now bounds them the same
+// way leftColumn already bounds its own corner's panels.
+const rightColumn = document.createElement('div');
+rightColumn.className = 'right-column';
+document.getElementById('ui-root').appendChild(rightColumn);
+
 // v0.7 Planet Info Panel — click-driven only (see buildBodyInfo above):
 // every field it shows is static per body, so nothing here touches the
 // animate() loop, unlike ephemerisHud's per-frame time/source updates.
@@ -299,7 +308,7 @@ createHoverLabels(canvas, camera, pickableMeshes, loadFullFor, (mesh) => {
   bodyInfoPanel.render(buildBodyInfo(key));
 });
 createAttributionFooter(document.getElementById('ui-root'));
-const ephemerisHud = createEphemerisHud(document.getElementById('ui-root'));
+const ephemerisHud = createEphemerisHud(rightColumn);
 bodyInfoPanel.render(buildBodyInfo(selectedBodyKey)); // shows the Sun immediately on load, matching ephemerisHud's own always-populated-from-load behavior
 
 // Background idle queue — everything not already eager-loaded (Sun/Earth/
@@ -720,7 +729,7 @@ const analysisTargetMarker = createAnalysisTargetMarker();
 let activeTargetKey = 'mars';
 let analysisHasScenePosition = false;
 
-createEventToolkitPanel(document.getElementById('ui-root'), {
+createEventToolkitPanel(rightColumn, {
   // v1.10 — clicking Analyze now jumps the main clock straight to the
   // result's first event epoch, the same pause+jump the scrubber already
   // does (see the v1.7 comment above), instead of leaving the scene
