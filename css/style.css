@@ -83,12 +83,24 @@ html, body {
    expanded Observer Mode panel was painting over the time-controls bar
    (and, at the old fixed offset, over .body-info-panel too) — the same
    stale-offset bug class this comment already describes, just at the
-   bottom edge instead of the top. */
+   bottom edge instead of the top.
+   v1.12.2 — `--time-bar-clearance` alone wasn't enough: .settings-button
+   is a separate `position: fixed` circle at `bottom: 120px` (see its own
+   comment), never counted in this column's height budget, so a tall
+   .body-info-panel could still render text underneath it once the
+   column's real bottom edge (viewport height minus clearance, which can
+   be well past 156px on a short time bar) reached down that far —
+   confirmed happening on a real desktop viewport. `max()` with 164px
+   (settings-button's own bottom:120 + its 36px height + an 8px gap —
+   the same numbers that already size the button, not a fresh guess)
+   guarantees the column stops above the button regardless of how small
+   --time-bar-clearance is, while still growing past it via
+   --time-bar-clearance whenever the time bar itself needs more room. */
 .left-column {
   position: fixed;
   top: 12px;
   left: 12px;
-  bottom: var(--time-bar-clearance);
+  bottom: max(var(--time-bar-clearance), 164px);
   display: flex;
   flex-direction: column;
   align-items: flex-start;

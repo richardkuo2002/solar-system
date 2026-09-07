@@ -5,6 +5,16 @@ All notable changes to this project. Format loosely follows
 milestones in `docs/ROADMAP.md` (local-only), with each version's exact
 scope and accuracy notes in [docs/accuracy.md](docs/accuracy.md).
 
+## v1.12.2 — 2026-09-08
+
+Fixed `.settings-button` (bottom-left gear FAB) overlapping `.body-info-panel`
+text on desktop: the button's `position: fixed; bottom: 120px` was never
+counted in `.left-column`'s own height budget, so a long body-info panel
+could render text underneath it once the column's real bottom edge reached
+that far. `.left-column`'s `bottom` is now `max(var(--time-bar-clearance),
+164px)` — 164px derived directly from the button's own bottom/height/gap
+numbers — so the column always stops clear of it.
+
 ## v1.12.1 — 2026-09-08
 
 Critical production fix + mobile layout follow-up.
