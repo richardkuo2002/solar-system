@@ -4,6 +4,8 @@
 
 **Live demo: https://richardkuo2002.github.io/solar-system/**
 
+![Heliocentric top-down view — the inner solar system with the asteroid belt, real constellation lines, and the observer/retrograde tool panels](docs/screenshot-topdown.png)
+
 An interactive 3D solar system simulation, in the browser, with zero build
 step. Real orbital mechanics, real textures, and four different ways to
 look at the sky — top-down, free-flight, standing on a planet's surface, or
