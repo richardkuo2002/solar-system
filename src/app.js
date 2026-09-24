@@ -32,7 +32,7 @@ import { createCameraState, setMode, setFocusBody, enterGeocentric, computePose,
 import { encodeAppStateToParams, decodeAppStateFromParams } from './core/url-state.js';
 import {
   julianDateFromDate, dateFromJulianDate, moonLocalPosition, moonLocalPositionMeeus, moonGeocentricJ2000, circularOrbitAngle,
-  orbitalPeriodDaysFromSemiMajorAxisAu,
+  orbitalPeriodDaysFromSemiMajorAxisAu, J2000_JD,
 } from './core/orbital-elements.js';
 import { compressSize, compressMoonOrbit, spacedMoonOrbitRadii, MOON_MIN_GAP_SCENE, apparentAngularRadiusRad, SUN_SIZE_CAP } from './core/scale.js';
 import { KM_PER_AU } from './core/units.js';
@@ -407,13 +407,13 @@ function updateAllPositions(currentDate) {
       // same date. Every other moon keeps the circular approximation.
       const localPos = moonData === MOONS.moon
         ? moonLocalPositionMeeus(currentJD, planetData.radiusKm, parentSceneRadius)
-        : moonLocalPosition(moonData, planetData.radiusKm, parentSceneRadius, currentJD, startJD, moonOrbitFloorByKey[moonKey]);
+        : moonLocalPosition(moonData, planetData.radiusKm, parentSceneRadius, currentJD, J2000_JD, moonOrbitFloorByKey[moonKey]);
       mesh.position.set(localPos.x, localPos.y, localPos.z);
     }
   }
   const plutoData = DWARF_PLANETS.pluto;
   const plutoSceneRadius = compressSize(plutoData.radiusKm);
-  const charonLocalPos = moonLocalPosition(CHARON, plutoData.radiusKm, plutoSceneRadius, currentJD, startJD);
+  const charonLocalPos = moonLocalPosition(CHARON, plutoData.radiusKm, plutoSceneRadius, currentJD, J2000_JD);
   charonMesh.position.set(charonLocalPos.x, charonLocalPos.y, charonLocalPos.z);
 }
 
