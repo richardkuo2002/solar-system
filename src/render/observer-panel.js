@@ -65,10 +65,10 @@ function formatResultText(result) {
 
 /**
  * @param {HTMLElement} container
- * @param {{ onObserve: (params:{target,atUtc,latDeg,lonDeg,elevationM}) => void }} callbacks
+ * @param {{ onObserve: (params:{target,atUtc,latDeg,lonDeg,elevationM}) => void, onLocationFound?: (lat:number, lon:number) => void }} callbacks  `onLocationFound` (v1.13) fires after a successful "Use my location", so app.js can keep Surface Mode's own lat/lon fields in sync
  * @returns {{ renderResult(result:object):void, setError(message:string|null):void }}
  */
-export function createObserverPanel(container, { onObserve } = {}) {
+export function createObserverPanel(container, { onObserve, onLocationFound } = {}) {
   const panel = document.createElement('div');
   panel.className = 'observer-panel';
 
@@ -109,8 +109,11 @@ export function createObserverPanel(container, { onObserve } = {}) {
     setError(null);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        latInput.value = pos.coords.latitude.toFixed(4);
-        lonInput.value = pos.coords.longitude.toFixed(4);
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        latInput.value = lat.toFixed(4);
+        lonInput.value = lon.toFixed(4);
+        onLocationFound?.(lat, lon);
       },
       (err) => {
         const key = err.code === err.PERMISSION_DENIED ? 'observer.error.geoDenied'
