@@ -694,7 +694,7 @@ const viewModeUI = createViewModeUI(
 );
 viewModeUI.setActiveMode(cameraState.mode);
 
-createSurfaceControlsUI(
+const surfaceControlsUI = createSurfaceControlsUI(
   leftColumn,
   PLANET_ORDER,
   (planet, lat, lon) => {
@@ -723,6 +723,14 @@ const observerPanel = createObserverPanel(leftColumn, {
     } catch (err) {
       observerPanel.setError(err.message);
     }
+  },
+  // v1.13 — keep Surface Mode's own lat/lon fields in sync with a
+  // successful "Use my location", so switching to Surface Mode (Earth)
+  // afterward doesn't require re-entering the same coordinates by hand.
+  // Doesn't touch which planet Surface Mode has selected, or switch to
+  // Surface Mode itself — see ui-controls.js#setLatLon's comment.
+  onLocationFound(lat, lon) {
+    surfaceControlsUI.setLatLon(lat, lon);
   },
 });
 
