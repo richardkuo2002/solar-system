@@ -210,14 +210,5 @@ export function createSurfaceControlsUI(container, planetKeys, onGo, initial = {
       latInput.value = String(lat);
       lonInput.value = String(lon);
     },
-    // v1.13 — Observer Mode's "Use my location" fills these fields too
-    // (see app.js), without touching whichever planet is currently
-    // selected here: geolocation is real-world/Earth-only, so it's only
-    // actionable once Earth is picked and Stand Here is clicked, but
-    // pre-filling the coordinates is harmless regardless.
-    setLatLon(lat, lon) {
-      latInput.value = String(lat);
-      lonInput.value = String(lon);
-    },
   };
 }
