@@ -694,17 +694,22 @@ const viewModeUI = createViewModeUI(
 );
 viewModeUI.setActiveMode(cameraState.mode);
 
+// v1.13 — shared by the "Stand Here" button below and Observer Mode's
+// "Use my location" (see onLocationFound), so both actually move the
+// camera the same way instead of Observer Mode only syncing fields.
+function standAt(planet, lat, lon) {
+  cameraState = setMode(cameraState, CAMERA_MODES.SURFACE_FIRST_PERSON, { planet, lat, lon });
+  cameraRig.setMode(cameraState.mode);
+  touchControls.setMode(cameraState.mode);
+  cameraRig.applyPose(computePose(cameraState, scenePositions, bodyRotations));
+  viewModeUI.setActiveMode(cameraState.mode);
+  loadFullFor(planetMeshes[planet]);
+}
+
 const surfaceControlsUI = createSurfaceControlsUI(
   leftColumn,
   PLANET_ORDER,
-  (planet, lat, lon) => {
-    cameraState = setMode(cameraState, CAMERA_MODES.SURFACE_FIRST_PERSON, { planet, lat, lon });
-    cameraRig.setMode(cameraState.mode);
-    touchControls.setMode(cameraState.mode);
-    cameraRig.applyPose(computePose(cameraState, scenePositions, bodyRotations));
-    viewModeUI.setActiveMode(cameraState.mode);
-    loadFullFor(planetMeshes[planet]);
-  },
+  standAt,
   urlRestored.mode === CAMERA_MODES.SURFACE_FIRST_PERSON
     ? { planet: restoredSurfacePlanet, lat: urlRestored.lat ?? 0, lon: urlRestored.lon ?? 0 }
     : undefined
@@ -724,13 +729,15 @@ const observerPanel = createObserverPanel(leftColumn, {
       observerPanel.setError(err.message);
     }
   },
-  // v1.13 — keep Surface Mode's own lat/lon fields in sync with a
-  // successful "Use my location", so switching to Surface Mode (Earth)
-  // afterward doesn't require re-entering the same coordinates by hand.
-  // Doesn't touch which planet Surface Mode has selected, or switch to
-  // Surface Mode itself — see ui-controls.js#setLatLon's comment.
+  // v1.13 — a successful "Use my location" jumps straight into Surface
+  // Mode standing on Earth at that spot (unconditionally — real-world
+  // geolocation only ever means Earth, regardless of whichever planet
+  // Surface Mode had selected or whether it was even the active camera
+  // mode), the same as clicking Stand Here. setValue keeps the panel's
+  // own planet/lat/lon fields showing what the camera just did.
   onLocationFound(lat, lon) {
-    surfaceControlsUI.setLatLon(lat, lon);
+    surfaceControlsUI.setValue('earth', lat, lon);
+    standAt('earth', lat, lon);
   },
 });
 
