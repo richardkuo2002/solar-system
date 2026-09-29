@@ -335,6 +335,26 @@ import { t } from '../src/core/i18n.js';
   }
 }
 
+// orbital-elements (v1.12.3 regression): Jupiter's 4 moons must NOT all
+// land on the same ray from Jupiter at the epoch used for their initial
+// phase. This is exactly the bug that shipped: using the page-load
+// timestamp as both `currentJD` and the phase epoch made
+// circularOrbitAngle(currentJD - epochJD, period) evaluate to 0 for every
+// moon regardless of period, lining them all up. The fix is a fixed
+// epoch (J2000_JD) distinct from "now" — assert that distinctness here.
+{
+  const jd = julianDateFromDate(new Date());
+  const jupiterMoons = ['io', 'europa', 'ganymede', 'callisto'];
+  const parentRadiusKm = PLANETS.jupiter.radiusKm;
+  const parentSceneRadius = compressSize(parentRadiusKm);
+  const angles = jupiterMoons.map((key) => {
+    const pos = moonLocalPosition(MOONS[key], parentRadiusKm, parentSceneRadius, jd, J2000_JD);
+    return Math.atan2(pos.z, pos.x);
+  });
+  const allSame = angles.every((a) => Math.abs(a - angles[0]) < 1e-6);
+  assert.ok(!allSame, `Jupiter's moons must not all share one initial angle, got [${angles}]`);
+}
+
 // orbital-elements (v1.5): moonLocalPositionMeeus — THE Moon's 3D-scene
 // position now derives from the same Meeus/J2000-aligned source the
 // analysis path uses (moonGeocentricJ2000). Drift guard: the scene
