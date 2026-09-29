@@ -447,6 +447,40 @@ html, body {
   flex-direction: column;
   gap: 6px;
   width: 340px;
+  background-color: rgba(10, 10, 20, 0.75); /* .event-toolkit-title/-lab already paint their own opaque backgrounds; this is only the scroll-shadow trick's own backdrop, see the shared rule below */
+}
+
+/* v1.13 — .observer-panel/.event-toolkit/.body-info-panel are each their
+   own overflow-y:auto scroll region (v1.8.1-v1.12.2's shared-column-
+   budget design, see .left-column's own comment above) so a tall result
+   never overlaps a sibling panel — but with no visual cue that a panel
+   has more content below, a browser's overlay scrollbar (invisible until
+   hovered, the default on macOS and increasingly elsewhere) makes it
+   look like content is simply missing rather than scrollable. Confirmed
+   on a real 1366x768 viewport: Observer Mode ~157px, Event Toolkit
+   ~168px, and even the static body-info-panel ~51px of content sits
+   below the fold by default.
+   Fix: the classic pure-CSS "scrolling shadows without JavaScript"
+   technique (Lea Verou) — two gradients that scroll WITH the content
+   (background-attachment: local) mask a shadow at whichever end is
+   already fully scrolled into view, while two shadow gradients stay
+   fixed to the element (background-attachment: scroll) and only show
+   through where the mask doesn't cover them. No JS, and it tracks scroll
+   position exactly (no separate "am I scrolled to the end" state to keep
+   in sync). The masking gradients match each panel's own flat background
+   color so they blend in rather than adding a visible seam. */
+.observer-panel,
+.event-toolkit,
+.body-info-panel {
+  background-image:
+    linear-gradient(rgba(10, 10, 20, 0.75) 30%, rgba(10, 10, 20, 0)),
+    linear-gradient(rgba(10, 10, 20, 0), rgba(10, 10, 20, 0.75) 70%),
+    radial-gradient(farthest-side at 50% 0, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0)),
+    radial-gradient(farthest-side at 50% 100%, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0));
+  background-position: top, bottom, top, bottom;
+  background-repeat: no-repeat;
+  background-size: 100% 24px, 100% 24px, 100% 10px, 100% 10px;
+  background-attachment: local, local, scroll, scroll;
 }
 
 .event-toolkit-title {
