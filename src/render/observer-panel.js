@@ -92,6 +92,37 @@ export function createObserverPanel(container, { onObserve } = {}) {
   lonInput.type = 'number'; lonInput.step = '0.0001'; lonInput.min = '-180'; lonInput.max = '180'; lonInput.value = String(DEFAULT_LON_DEG);
   form.appendChild(field(t('observer.field.longitude'), lonInput));
 
+  // v1.13 — one-shot "use my real location" via the browser Geolocation
+  // API. Native platform feature, zero new dependency. Fills lat/lon only:
+  // coords.altitude is usually null (needs GPS, most devices don't have
+  // it), so elevation stays a manual field. HTTPS/localhost only, which
+  // both GitHub Pages and `python3 -m http.server` satisfy.
+  const useLocationBtn = document.createElement('button');
+  useLocationBtn.type = 'button';
+  useLocationBtn.className = 'observer-panel-use-location';
+  useLocationBtn.textContent = t('observer.button.useLocation');
+  useLocationBtn.addEventListener('click', () => {
+    if (!navigator.geolocation) {
+      setError(t('observer.error.geoUnsupported'));
+      return;
+    }
+    setError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        latInput.value = pos.coords.latitude.toFixed(4);
+        lonInput.value = pos.coords.longitude.toFixed(4);
+      },
+      (err) => {
+        const key = err.code === err.PERMISSION_DENIED ? 'observer.error.geoDenied'
+          : err.code === err.TIMEOUT ? 'observer.error.geoTimeout'
+          : 'observer.error.geoUnavailable';
+        setError(t(key));
+      },
+      { timeout: 10000 },
+    );
+  });
+  form.appendChild(useLocationBtn);
+
   const elevInput = document.createElement('input');
   elevInput.type = 'number'; elevInput.step = '1'; elevInput.value = String(DEFAULT_ELEVATION_M);
   form.appendChild(field(t('observer.field.elevation'), elevInput));

@@ -32,3 +32,4 @@ logs/
 # won't look inside an excluded directory even with a `!` negation.
 docs/ROADMAP.md
 docs/NOTES.md
+.playwright-mcp/
