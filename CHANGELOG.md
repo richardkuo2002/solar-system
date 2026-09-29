@@ -5,6 +5,15 @@ All notable changes to this project. Format loosely follows
 milestones in `docs/ROADMAP.md` (local-only), with each version's exact
 scope and accuracy notes in [docs/accuracy.md](docs/accuracy.md).
 
+## v1.12.3 — 2026-09-24
+
+Fixed moons (and Charon) all rendering lined up in a straight ray on page
+load instead of scattered around their orbits: `circularOrbitAngle` used
+`startJD` (the page-load moment) as its epoch, so on the very first frame
+`currentJD === startJD` and every moon's phase angle came out `0`
+regardless of its orbital period. Now uses the fixed `J2000_JD` epoch
+instead, so each moon's initial phase reflects its actual period.
+
 ## v1.12.2 — 2026-09-08
 
 Fixed `.settings-button` (bottom-left gear FAB) overlapping `.body-info-panel`
