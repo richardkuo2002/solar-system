@@ -5,6 +5,33 @@ All notable changes to this project. Format loosely follows
 milestones in `docs/ROADMAP.md` (local-only), with each version's exact
 scope and accuracy notes in [docs/accuracy.md](docs/accuracy.md).
 
+## v1.13.0 — 2026-09-29
+
+- **Observer Mode geolocation** — a "📍 Use my location" button uses the
+  browser's native Geolocation API to fill in real coordinates, then
+  jumps straight into Surface Mode standing on Earth at that spot (same
+  as clicking Stand Here) — real-world geolocation only ever means
+  Earth, regardless of whichever planet Surface Mode had selected.
+  Denied/timeout/unsupported all surface through the panel's existing
+  error text.
+- **Event Toolkit: denser scrub bar for short windows** — a short custom
+  analysis window (e.g. a 1-day retrograde scan) used to inherit the
+  solver's coarse `intervalHours` grid as its only scrub-bar resolution
+  (as few as 4 steps). The display series (chart + scrub) is now
+  resampled to at least 96 points via linear interpolation for the event
+  types where that's safe (a genuine dense scan, not a sparse
+  one-point-per-candidate-event list like eclipses) — display-only, the
+  solver's own math is untouched.
+- **Event Toolkit: 3D apparent-path trail** — the analyzed target's path
+  across the result's series is now also drawn in the main 3D scene (not
+  just the small 2D chart canvas), alongside the existing Earth→target
+  line-of-sight line, with the same Surface Mode visibility rules.
+- **Event Toolkit: dates default to today** — every event type's
+  start/end (or single date) fields now default to today's date instead
+  of a fixed historical example window, keeping each type's original
+  window *length*. Most event types will legitimately report "no events
+  found" by default now — same as typing today's date in by hand.
+
 ## v1.12.3 — 2026-09-24
 
 Fixed moons (and Charon) all rendering lined up in a straight ray on page

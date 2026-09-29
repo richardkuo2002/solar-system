@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Solar System",
-  "version": "1.12.3",
+  "version": "1.13.0",
   "identifier": "com.richardkuo2002.solarsystem",
   "build": {
     "frontendDist": "../"
