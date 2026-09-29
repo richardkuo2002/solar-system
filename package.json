@@ -1,6 +1,6 @@
 {
   "name": "solar-system",
-  "version": "0.1.0",
+  "version": "1.12.3",
   "description": "Interactive 3D solar system simulation (Three.js, browser-only, zero-build)",
   "type": "module",
   "scripts": {
