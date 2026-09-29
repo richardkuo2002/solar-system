@@ -106,6 +106,10 @@ export function analysisVisualState(cameraState, analysisHasScenePosition, activ
   return {
     showLineOfSight: Boolean(analysisHasScenePosition) && !surfacePlanetKey,
     showTargetMarker: Boolean(analysisHasScenePosition) && surfacePlanetKey != null && activeTargetKey !== surfacePlanetKey,
+    // v1.13 — the apparent-path trail shares lineOfSight's Surface Mode
+    // exclusion: both come from compressed scenePositions, meaningless
+    // once Surface Mode's true-angular-direction sky proxies take over.
+    showTrail: Boolean(analysisHasScenePosition) && !surfacePlanetKey,
   };
 }
 

@@ -24,6 +24,7 @@ import { createObserverPanel } from './render/observer-panel.js';
 import { createBodyInfoPanel } from './render/body-info-panel.js';
 import { createLineOfSightLine } from './render/retrograde-los-line.js';
 import { createAnalysisTargetMarker } from './render/analysis-target-marker.js';
+import { createAnalysisTrail } from './render/analysis-trail.js';
 import { analyzeObserver } from './analysis/observer.js';
 import {
   createTimeController, tick, togglePlayPause, setSpeed, reverse, jumpToDate, pause,
@@ -754,6 +755,7 @@ const observerPanel = createObserverPanel(leftColumn, {
 // without one.
 const lineOfSight = createLineOfSightLine(scene);
 const analysisTargetMarker = createAnalysisTargetMarker();
+const analysisTrail = createAnalysisTrail(scene);
 let activeTargetKey = 'mars';
 let analysisHasScenePosition = false;
 
@@ -762,10 +764,22 @@ createEventToolkitPanel(rightColumn, {
   // result's first event epoch, the same pause+jump the scrubber already
   // does (see the v1.7 comment above), instead of leaving the scene
   // sitting at whatever date it was on before you ran the analysis.
-  onAnalyzed(result, targetKey, primaryEpochJd) {
+  onAnalyzed(result, targetKey, primaryEpochJd, displaySeries) {
     activeTargetKey = targetKey;
     analysisHasScenePosition = targetKey in scenePositions;
     analysisTargetMarker.setLabel(bodyDisplayName(targetKey));
+    // v1.13 — rebuild the 3D apparent-path trail from the same
+    // (possibly densified) series driving the chart/scrub bar.
+    // forceSource: 'kepler' — up to DISPLAY_MIN_POINTS positions, same
+    // unbounded-Horizons-calls guard analyzeRetrograde's own coarse scan
+    // already applies. Left stale (harmless) when there's no scene
+    // position to plot; visibility is separately gated every frame below.
+    if (analysisHasScenePosition && displaySeries?.timesJd?.length > 1) {
+      const elements = BODY_REGISTRY.find((b) => b.key === targetKey)?.elements;
+      const points = displaySeries.timesJd.map((jd) =>
+        toScenePosition(getBodyState(targetKey, dateFromJulianDate(jd), elements, { forceSource: 'kepler' }).positionAu));
+      analysisTrail.setPoints(points);
+    }
     if (primaryEpochJd != null) {
       timeState = jumpToDate(pause(timeState), dateFromJulianDate(primaryEpochJd));
       updateAllPositions(timeState.currentDate);
@@ -843,12 +857,13 @@ function animate() {
   // v1.8.1 — the two analysis visuals are mutually exclusive by camera
   // mode; decision extracted to core/camera-modes.js#analysisVisualState
   // (v1.8.5) so it's Node-testable without a DOM/THREE scene.
-  const { showLineOfSight, showTargetMarker } = analysisVisualState(cameraState, analysisHasScenePosition, activeTargetKey);
+  const { showLineOfSight, showTargetMarker, showTrail } = analysisVisualState(cameraState, analysisHasScenePosition, activeTargetKey);
   lineOfSight.line.visible = showLineOfSight;
   if (showLineOfSight) {
     lineOfSight.update(scenePositions.earth, scenePositions[activeTargetKey]);
   }
   analysisTargetMarker.update(camera, showTargetMarker ? planetGroups[activeTargetKey] : null);
+  analysisTrail.line.visible = showTrail;
 
   if (cameraState.mode === CAMERA_MODES.FREE_FLIGHT) {
     cameraState = cameraRig.updateFreeFlight(cameraState, delta);

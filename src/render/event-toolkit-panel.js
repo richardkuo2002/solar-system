@@ -16,6 +16,13 @@ import { analyzeAppulse, APPULSE_TARGETS } from '../analysis/appulse.js';
 import { analyzeLunarOccultation, OCCULTATION_TARGETS } from '../analysis/occultation.js';
 import { analyzeMoonConjunction, MOON_CONJUNCTION_TARGETS } from '../analysis/moon-conjunction.js';
 import { analyzeBestObservationNight, BEST_NIGHT_TARGETS } from '../analysis/best-night.js';
+import { densifySeries } from '../analysis/series-resample.js';
+
+// v1.13 — short custom windows (e.g. a 1-day retrograde scan) otherwise
+// inherit the solver's coarse intervalHours grid as their only scrub-bar
+// resolution; see densifySeries's own doc comment for why this is
+// display-only and never fed back into analysis.
+const DISPLAY_MIN_POINTS = 96;
 
 const SOURCE_OPTIONS = [
   { value: 'auto', labelKey: 'sourceOption.auto' },
@@ -275,6 +282,7 @@ export const EVENT_TYPES = [
     ],
     analyzeLabel: t('eventType.retrograde.analyzeLabel'),
     chartKind: 'path+timeline',
+    densifyDisplay: true, // dense scan series, safe to interpolate for display
     analyze: (params) => analyzeRetrograde(params),
     formatResult: formatRetrogradeResult,
     getMarkers: (result) => [result.start?.epochJd, result.end?.epochJd].filter((v) => v != null),
@@ -295,6 +303,7 @@ export const EVENT_TYPES = [
     ],
     analyzeLabel: t('eventType.opposition.analyzeLabel'),
     chartKind: 'path+timeline',
+    densifyDisplay: true,
     analyze: (params) => analyzeOppositionConjunction(params),
     formatResult: formatOppositionResult,
     getMarkers: (result) => result.result.events.map((e) => e.epochJd),
@@ -314,6 +323,7 @@ export const EVENT_TYPES = [
     ],
     analyzeLabel: t('eventType.elongation.analyzeLabel'),
     chartKind: 'timeline',
+    densifyDisplay: true,
     analyze: (params) => analyzeGreatestElongation(params),
     formatResult: formatSignedElongationResult('result.none.greatestElongation'),
     getMarkers: (result) => result.result.events.map((e) => e.epochJd),
@@ -333,6 +343,7 @@ export const EVENT_TYPES = [
     ],
     analyzeLabel: t('eventType.innerConjunction.analyzeLabel'),
     chartKind: 'timeline',
+    densifyDisplay: true,
     analyze: (params) => analyzeInnerConjunction(params),
     formatResult: formatSignedElongationResult('result.none.innerConjunction'),
     getMarkers: (result) => result.result.events.map((e) => e.epochJd),
@@ -439,6 +450,7 @@ export const EVENT_TYPES = [
     ],
     analyzeLabel: t('eventType.appulse.analyzeLabel'),
     chartKind: 'timeline',
+    densifyDisplay: true,
     analyze: (params) => analyzeAppulse(params),
     formatResult: formatAppulseResult,
     getMarkers: (result) => result.result.events.map((e) => e.epochJd),
@@ -481,6 +493,7 @@ export const EVENT_TYPES = [
     ],
     analyzeLabel: t('eventType.moonConjunction.analyzeLabel'),
     chartKind: 'timeline',
+    densifyDisplay: true,
     analyze: (params) => analyzeMoonConjunction(params),
     formatResult: formatMoonConjunctionResult,
     getMarkers: (result) => result.result.events.map((e) => e.epochJd),
@@ -512,7 +525,7 @@ export const EVENT_TYPES = [
 /**
  * @param {HTMLElement} container
  * @param {object} callbacks
- * @param {(result:object, targetKey:string, primaryEpochJd:number|null) => void} callbacks.onAnalyzed  fired after a successful analysis; `primaryEpochJd` is the event type's first marker epoch (v1.10), or `null` if it found none
+ * @param {(result:object, targetKey:string, primaryEpochJd:number|null, displaySeries:object) => void} callbacks.onAnalyzed  fired after a successful analysis; `primaryEpochJd` is the event type's first marker epoch (v1.10), or `null` if it found none; `displaySeries` (v1.13) is `result.series` after densifyDisplay resampling (or unchanged if the event type opted out), for app.js's 3D trail
  * @param {(cursorJd:number) => void} [callbacks.onCursorChange]
  */
 export function createEventToolkitPanel(container, callbacks) {
@@ -568,12 +581,19 @@ export function createEventToolkitPanel(container, callbacks) {
         labPanel.setBusy(true);
         try {
           const result = eventType.analyze(params);
-          labPanel.renderResult(result, result.series);
+          // v1.13 — dense-scan event types get their chart/scrub series
+          // resampled to a minimum density for display; opted-out types
+          // (sparse one-point-per-candidate series, e.g. eclipses) pass
+          // result.series through unchanged. Never fed back into `result`
+          // itself, so formatResult/getMarkers/getHighlight/export all
+          // still see the solver's real series.
+          const displaySeries = eventType.densifyDisplay ? densifySeries(result.series, DISPLAY_MIN_POINTS) : result.series;
+          labPanel.renderResult(result, displaySeries);
           // v1.10 — pass the first marker epoch (if any) so app.js can jump
           // the main simulated clock straight to it, the same way scrubbing
           // already does, instead of leaving the scene sitting wherever it
           // was before Analyze was clicked.
-          callbacks.onAnalyzed?.(result, eventType.resultTarget(result), eventType.getMarkers(result)[0] ?? null);
+          callbacks.onAnalyzed?.(result, eventType.resultTarget(result), eventType.getMarkers(result)[0] ?? null, displaySeries);
         } catch (err) {
           labPanel.setError(err.message);
         } finally {

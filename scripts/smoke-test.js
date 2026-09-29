@@ -51,6 +51,7 @@ import { analyzeObserver, observeAt, OBSERVER_TARGETS } from '../src/analysis/ob
 import { encodeAppStateToParams, decodeAppStateFromParams } from '../src/core/url-state.js';
 import { applySavedDefaults, clampNumberField, loadSaved, saveValues } from '../src/core/event-toolkit-persistence.js';
 import { scoreNight, analyzeBestObservationNight, MAX_NIGHTS_TO_SCAN } from '../src/analysis/best-night.js';
+import { densifySeries } from '../src/analysis/series-resample.js';
 import { fetchJsonOrFallback } from '../src/render/fetch-json.js';
 import { en } from '../src/i18n/en.js';
 import { zhTw } from '../src/i18n/zh-tw.js';
@@ -576,10 +577,31 @@ import { t } from '../src/core/i18n.js';
   const onMars = setMode(createCameraState(), CAMERA_MODES.SURFACE_FIRST_PERSON, { planet: 'mars' });
   const onJupiter = setMode(createCameraState(), CAMERA_MODES.SURFACE_FIRST_PERSON, { planet: 'jupiter' });
 
-  assert.deepEqual(analysisVisualState(heliocentric, false, 'mars'), { showLineOfSight: false, showTargetMarker: false }, 'no active analysis: neither visual shows, in any mode');
-  assert.deepEqual(analysisVisualState(heliocentric, true, 'mars'), { showLineOfSight: true, showTargetMarker: false }, 'active analysis outside Surface Mode: line only');
-  assert.deepEqual(analysisVisualState(onMars, true, 'mars'), { showLineOfSight: false, showTargetMarker: false }, 'standing on the analyzed body itself: neither (nothing to point at)');
-  assert.deepEqual(analysisVisualState(onJupiter, true, 'mars'), { showLineOfSight: false, showTargetMarker: true }, 'Surface Mode, analyzing a different body: marker only');
+  assert.deepEqual(analysisVisualState(heliocentric, false, 'mars'), { showLineOfSight: false, showTargetMarker: false, showTrail: false }, 'no active analysis: neither visual shows, in any mode');
+  assert.deepEqual(analysisVisualState(heliocentric, true, 'mars'), { showLineOfSight: true, showTargetMarker: false, showTrail: true }, 'active analysis outside Surface Mode: line + trail');
+  assert.deepEqual(analysisVisualState(onMars, true, 'mars'), { showLineOfSight: false, showTargetMarker: false, showTrail: false }, 'standing on the analyzed body itself: neither (nothing to point at)');
+  assert.deepEqual(analysisVisualState(onJupiter, true, 'mars'), { showLineOfSight: false, showTargetMarker: true, showTrail: false }, 'Surface Mode, analyzing a different body: marker only');
+}
+
+// analysis/series-resample: densifySeries (v1.13) — short display series
+// get padded to at least minPoints via linear interpolation, without
+// touching an already-dense series or corrupting endpoint values.
+{
+  const sparse = { timesJd: [0, 1, 2, 3], valueDeg: [0, 10, 20, 30] };
+  const dense = densifySeries(sparse, 8);
+  assert.equal(dense.timesJd.length, 8, 'sparse series must be padded up to minPoints');
+  assert.equal(dense.valueDeg.length, 8, 'parallel value array must be resampled to the same length');
+  assert.ok(Math.abs(dense.timesJd[0] - 0) < 1e-9 && Math.abs(dense.timesJd[7] - 3) < 1e-9, 'resampled timesJd must span the original range exactly');
+  assert.ok(Math.abs(dense.valueDeg[0] - 0) < 1e-9 && Math.abs(dense.valueDeg[7] - 30) < 1e-9, 'endpoint values must be preserved');
+  for (let i = 1; i < dense.timesJd.length; i += 1) {
+    assert.ok(dense.timesJd[i] > dense.timesJd[i - 1], 'resampled timesJd must stay strictly increasing');
+  }
+  // midpoint (t=1.5) must land between the original samples at t=1 (10) and t=2 (20)
+  const midIdx = dense.timesJd.findIndex((t) => Math.abs(t - 1.5) < 1e-6);
+  if (midIdx >= 0) assert.ok(dense.valueDeg[midIdx] > 10 && dense.valueDeg[midIdx] < 20, 'interpolated value must fall between its bracketing samples');
+
+  const alreadyDense = { timesJd: Array.from({ length: 200 }, (_, i) => i), valueDeg: Array.from({ length: 200 }, (_, i) => i * 2) };
+  assert.strictEqual(densifySeries(alreadyDense, 96), alreadyDense, 'a series already at/above minPoints must be returned unchanged (identity)');
 }
 
 // render/ui-controls: SPEED_OPTIONS's default-selected option (v1.8.2)
