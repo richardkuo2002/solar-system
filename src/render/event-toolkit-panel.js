@@ -16,6 +16,29 @@ import { analyzeAppulse, APPULSE_TARGETS } from '../analysis/appulse.js';
 import { analyzeLunarOccultation, OCCULTATION_TARGETS } from '../analysis/occultation.js';
 import { analyzeMoonConjunction, MOON_CONJUNCTION_TARGETS } from '../analysis/moon-conjunction.js';
 import { analyzeBestObservationNight, BEST_NIGHT_TARGETS } from '../analysis/best-night.js';
+import { densifySeries } from '../analysis/series-resample.js';
+
+// v1.13 — short custom windows (e.g. a 1-day retrograde scan) otherwise
+// inherit the solver's coarse intervalHours grid as their only scrub-bar
+// resolution; see densifySeries's own doc comment for why this is
+// display-only and never fed back into analysis.
+const DISPLAY_MIN_POINTS = 96;
+
+// v1.13 — every event type's date fields used to default to a fixed
+// historical example window (e.g. retrograde's 2007-09-01/2008-03-01),
+// hand-picked to guarantee a real event inside it. Now anchored to
+// "today" instead, keeping each type's original window LENGTH (so the
+// solver still gets the same search-space size it was tuned for) — this
+// makes the panel open ready to analyze right now, at the cost of the
+// window not being guaranteed to contain a real event (most event types
+// will legitimately report "none found" until the user picks a window
+// that has one, same as if they'd typed today's date in by hand before).
+function todayUtcDateString() {
+  return new Date().toISOString().slice(0, 10);
+}
+function daysFromTodayUtcDateString(days) {
+  return new Date(Date.now() + days * 86400 * 1000).toISOString().slice(0, 10);
+}
 
 const SOURCE_OPTIONS = [
   { value: 'auto', labelKey: 'sourceOption.auto' },
@@ -268,13 +291,14 @@ export const EVENT_TYPES = [
     fixedText: t('eventType.geocentricFixedText'),
     fields: [
       { key: 'target', type: 'select', label: FIELD.target, default: 'mars', options: targetOptions(RETROGRADE_TARGETS) },
-      { key: 'startUtc', type: 'date', label: FIELD.startDate, default: '2007-09-01' },
-      { key: 'endUtc', type: 'date', label: FIELD.endDate, default: '2008-03-01' },
+      { key: 'startUtc', type: 'date', label: FIELD.startDate, default: todayUtcDateString() },
+      { key: 'endUtc', type: 'date', label: FIELD.endDate, default: daysFromTodayUtcDateString(182) },
       { key: 'intervalHours', type: 'number', label: FIELD.intervalHours, default: 6, min: 1 },
       { key: 'ephemerisSource', type: 'select', label: FIELD.ephemerisSource, default: 'kepler', options: SOURCE_OPTIONS },
     ],
     analyzeLabel: t('eventType.retrograde.analyzeLabel'),
     chartKind: 'path+timeline',
+    densifyDisplay: true, // dense scan series, safe to interpolate for display
     analyze: (params) => analyzeRetrograde(params),
     formatResult: formatRetrogradeResult,
     getMarkers: (result) => [result.start?.epochJd, result.end?.epochJd].filter((v) => v != null),
@@ -288,13 +312,14 @@ export const EVENT_TYPES = [
     fixedText: t('eventType.geocentricFixedText'),
     fields: [
       { key: 'target', type: 'select', label: FIELD.target, default: 'mars', options: targetOptions(OUTER_TARGETS) },
-      { key: 'startUtc', type: 'date', label: FIELD.startDate, default: '2022-01-01' },
-      { key: 'endUtc', type: 'date', label: FIELD.endDate, default: '2023-06-01' },
+      { key: 'startUtc', type: 'date', label: FIELD.startDate, default: todayUtcDateString() },
+      { key: 'endUtc', type: 'date', label: FIELD.endDate, default: daysFromTodayUtcDateString(516) },
       { key: 'intervalHours', type: 'number', label: FIELD.intervalHours, default: 24, min: 1 },
       { key: 'ephemerisSource', type: 'select', label: FIELD.ephemerisSource, default: 'kepler', options: SOURCE_OPTIONS },
     ],
     analyzeLabel: t('eventType.opposition.analyzeLabel'),
     chartKind: 'path+timeline',
+    densifyDisplay: true,
     analyze: (params) => analyzeOppositionConjunction(params),
     formatResult: formatOppositionResult,
     getMarkers: (result) => result.result.events.map((e) => e.epochJd),
@@ -307,13 +332,14 @@ export const EVENT_TYPES = [
     fixedText: t('eventType.geocentricFixedText'),
     fields: [
       { key: 'target', type: 'select', label: FIELD.target, default: 'venus', options: targetOptions(INNER_TARGETS) },
-      { key: 'startUtc', type: 'date', label: FIELD.startDate, default: '2023-01-01' },
-      { key: 'endUtc', type: 'date', label: FIELD.endDate, default: '2023-12-01' },
+      { key: 'startUtc', type: 'date', label: FIELD.startDate, default: todayUtcDateString() },
+      { key: 'endUtc', type: 'date', label: FIELD.endDate, default: daysFromTodayUtcDateString(334) },
       { key: 'intervalHours', type: 'number', label: FIELD.intervalHours, default: 12, min: 1 },
       { key: 'ephemerisSource', type: 'select', label: FIELD.ephemerisSource, default: 'kepler', options: SOURCE_OPTIONS },
     ],
     analyzeLabel: t('eventType.elongation.analyzeLabel'),
     chartKind: 'timeline',
+    densifyDisplay: true,
     analyze: (params) => analyzeGreatestElongation(params),
     formatResult: formatSignedElongationResult('result.none.greatestElongation'),
     getMarkers: (result) => result.result.events.map((e) => e.epochJd),
@@ -326,13 +352,14 @@ export const EVENT_TYPES = [
     fixedText: t('eventType.geocentricFixedText'),
     fields: [
       { key: 'target', type: 'select', label: FIELD.target, default: 'venus', options: targetOptions(INNER_TARGETS) },
-      { key: 'startUtc', type: 'date', label: FIELD.startDate, default: '2023-01-01' },
-      { key: 'endUtc', type: 'date', label: FIELD.endDate, default: '2023-12-01' },
+      { key: 'startUtc', type: 'date', label: FIELD.startDate, default: todayUtcDateString() },
+      { key: 'endUtc', type: 'date', label: FIELD.endDate, default: daysFromTodayUtcDateString(334) },
       { key: 'intervalHours', type: 'number', label: FIELD.intervalHours, default: 12, min: 1 },
       { key: 'ephemerisSource', type: 'select', label: FIELD.ephemerisSource, default: 'kepler', options: SOURCE_OPTIONS },
     ],
     analyzeLabel: t('eventType.innerConjunction.analyzeLabel'),
     chartKind: 'timeline',
+    densifyDisplay: true,
     analyze: (params) => analyzeInnerConjunction(params),
     formatResult: formatSignedElongationResult('result.none.innerConjunction'),
     getMarkers: (result) => result.result.events.map((e) => e.epochJd),
@@ -345,7 +372,7 @@ export const EVENT_TYPES = [
     fixedText: t('eventType.geocentricFixedText'),
     fields: [
       { key: 'target', type: 'select', label: FIELD.target, default: 'moon', options: targetOptions(PHASE_TARGETS) },
-      { key: 'atUtc', type: 'date', label: FIELD.date, default: '2024-01-01' },
+      { key: 'atUtc', type: 'date', label: FIELD.date, default: todayUtcDateString() },
       { key: 'ephemerisSource', type: 'select', label: FIELD.ephemerisSource, default: 'kepler', options: SOURCE_OPTIONS },
     ],
     analyzeLabel: t('eventType.phase.analyzeLabel'),
@@ -372,8 +399,8 @@ export const EVENT_TYPES = [
     label: t('eventType.lunarEclipse.label'),
     fixedText: t('eventType.lunarEclipse.fixedText'),
     fields: [
-      { key: 'startUtc', type: 'date', label: FIELD.startDate, default: '2022-10-01' },
-      { key: 'endUtc', type: 'date', label: FIELD.endDate, default: '2022-12-01' },
+      { key: 'startUtc', type: 'date', label: FIELD.startDate, default: todayUtcDateString() },
+      { key: 'endUtc', type: 'date', label: FIELD.endDate, default: daysFromTodayUtcDateString(61) },
       { key: 'intervalHours', type: 'number', label: FIELD.intervalHours, default: 6, min: 1 },
     ],
     analyzeLabel: t('eventType.lunarEclipse.analyzeLabel'),
@@ -389,8 +416,8 @@ export const EVENT_TYPES = [
     label: t('eventType.solarEclipse.label'),
     fixedText: t('eventType.solarEclipse.fixedText'),
     fields: [
-      { key: 'startUtc', type: 'date', label: FIELD.startDate, default: '2024-03-01' },
-      { key: 'endUtc', type: 'date', label: FIELD.endDate, default: '2024-05-01' },
+      { key: 'startUtc', type: 'date', label: FIELD.startDate, default: todayUtcDateString() },
+      { key: 'endUtc', type: 'date', label: FIELD.endDate, default: daysFromTodayUtcDateString(61) },
       { key: 'intervalHours', type: 'number', label: FIELD.intervalHours, default: 6, min: 1 },
       { key: 'latDeg', type: 'number', label: FIELD.observerLat, default: 32.7767, min: -90, max: 90 },
       { key: 'lonDeg', type: 'number', label: FIELD.observerLon, default: -96.7970, min: -180, max: 180 },
@@ -410,8 +437,8 @@ export const EVENT_TYPES = [
     fixedText: t('eventType.transit.fixedText'),
     fields: [
       { key: 'target', type: 'select', label: FIELD.target, default: 'mercury', options: targetOptions(INNER_TARGETS) },
-      { key: 'startUtc', type: 'date', label: FIELD.startDate, default: '2019-11-01' },
-      { key: 'endUtc', type: 'date', label: FIELD.endDate, default: '2019-12-01' },
+      { key: 'startUtc', type: 'date', label: FIELD.startDate, default: todayUtcDateString() },
+      { key: 'endUtc', type: 'date', label: FIELD.endDate, default: daysFromTodayUtcDateString(30) },
       { key: 'intervalHours', type: 'number', label: FIELD.intervalHours, default: 24, min: 1 },
       { key: 'latDeg', type: 'number', label: FIELD.observerLat, default: 40.7128, min: -90, max: 90 },
       { key: 'lonDeg', type: 'number', label: FIELD.observerLon, default: -74.0060, min: -180, max: 180 },
@@ -432,13 +459,14 @@ export const EVENT_TYPES = [
     fields: [
       { key: 'planetA', type: 'select', label: FIELD.planetA, default: 'jupiter', options: targetOptions(APPULSE_TARGETS) },
       { key: 'planetB', type: 'select', label: FIELD.planetB, default: 'saturn', options: targetOptions(APPULSE_TARGETS) },
-      { key: 'startUtc', type: 'date', label: FIELD.startDate, default: '2020-11-01' },
-      { key: 'endUtc', type: 'date', label: FIELD.endDate, default: '2021-01-15' },
+      { key: 'startUtc', type: 'date', label: FIELD.startDate, default: todayUtcDateString() },
+      { key: 'endUtc', type: 'date', label: FIELD.endDate, default: daysFromTodayUtcDateString(75) },
       { key: 'intervalHours', type: 'number', label: FIELD.intervalHours, default: 24, min: 1 },
       { key: 'ephemerisSource', type: 'select', label: FIELD.ephemerisSource, default: 'kepler', options: SOURCE_OPTIONS },
     ],
     analyzeLabel: t('eventType.appulse.analyzeLabel'),
     chartKind: 'timeline',
+    densifyDisplay: true,
     analyze: (params) => analyzeAppulse(params),
     formatResult: formatAppulseResult,
     getMarkers: (result) => result.result.events.map((e) => e.epochJd),
@@ -451,8 +479,8 @@ export const EVENT_TYPES = [
     fixedText: t('eventType.lunarOccultation.fixedText'),
     fields: [
       { key: 'target', type: 'select', label: FIELD.target, default: 'venus', options: targetOptions(OCCULTATION_TARGETS) },
-      { key: 'startUtc', type: 'date', label: FIELD.startDate, default: '2021-11-01' },
-      { key: 'endUtc', type: 'date', label: FIELD.endDate, default: '2021-11-15' },
+      { key: 'startUtc', type: 'date', label: FIELD.startDate, default: todayUtcDateString() },
+      { key: 'endUtc', type: 'date', label: FIELD.endDate, default: daysFromTodayUtcDateString(14) },
       { key: 'intervalHours', type: 'number', label: FIELD.intervalHours, default: 24, min: 1 },
       { key: 'latDeg', type: 'number', label: FIELD.observerLat, default: 35.6762, min: -90, max: 90 },
       { key: 'lonDeg', type: 'number', label: FIELD.observerLon, default: 139.6503, min: -180, max: 180 },
@@ -472,8 +500,8 @@ export const EVENT_TYPES = [
     fixedText: t('eventType.moonConjunction.fixedText'),
     fields: [
       { key: 'target', type: 'select', label: FIELD.target, default: 'venus', options: targetOptions(MOON_CONJUNCTION_TARGETS) },
-      { key: 'startUtc', type: 'date', label: FIELD.startDate, default: '2022-05-20' },
-      { key: 'endUtc', type: 'date', label: FIELD.endDate, default: '2022-06-01' },
+      { key: 'startUtc', type: 'date', label: FIELD.startDate, default: todayUtcDateString() },
+      { key: 'endUtc', type: 'date', label: FIELD.endDate, default: daysFromTodayUtcDateString(12) },
       { key: 'intervalHours', type: 'number', label: FIELD.intervalHours, default: 24, min: 1 },
       { key: 'latDeg', type: 'number', label: FIELD.observerLat, default: 35.6892, min: -90, max: 90 },
       { key: 'lonDeg', type: 'number', label: FIELD.observerLon, default: 51.3890, min: -180, max: 180 },
@@ -481,6 +509,7 @@ export const EVENT_TYPES = [
     ],
     analyzeLabel: t('eventType.moonConjunction.analyzeLabel'),
     chartKind: 'timeline',
+    densifyDisplay: true,
     analyze: (params) => analyzeMoonConjunction(params),
     formatResult: formatMoonConjunctionResult,
     getMarkers: (result) => result.result.events.map((e) => e.epochJd),
@@ -493,8 +522,8 @@ export const EVENT_TYPES = [
     fixedText: t('eventType.bestNight.fixedText'),
     fields: [
       { key: 'target', type: 'select', label: FIELD.target, default: 'jupiter', options: targetOptions(BEST_NIGHT_TARGETS) },
-      { key: 'startUtc', type: 'date', label: FIELD.startDate, default: '2024-10-01' },
-      { key: 'endUtc', type: 'date', label: FIELD.endDate, default: '2024-12-01' },
+      { key: 'startUtc', type: 'date', label: FIELD.startDate, default: todayUtcDateString() },
+      { key: 'endUtc', type: 'date', label: FIELD.endDate, default: daysFromTodayUtcDateString(61) },
       { key: 'latDeg', type: 'number', label: FIELD.observerLat, default: 35.6892, min: -90, max: 90 },
       { key: 'lonDeg', type: 'number', label: FIELD.observerLon, default: 51.3890, min: -180, max: 180 },
       { key: 'elevationM', type: 'number', label: FIELD.observerElevation, default: 0, min: 0 },
@@ -512,7 +541,7 @@ export const EVENT_TYPES = [
 /**
  * @param {HTMLElement} container
  * @param {object} callbacks
- * @param {(result:object, targetKey:string, primaryEpochJd:number|null) => void} callbacks.onAnalyzed  fired after a successful analysis; `primaryEpochJd` is the event type's first marker epoch (v1.10), or `null` if it found none
+ * @param {(result:object, targetKey:string, primaryEpochJd:number|null, displaySeries:object) => void} callbacks.onAnalyzed  fired after a successful analysis; `primaryEpochJd` is the event type's first marker epoch (v1.10), or `null` if it found none; `displaySeries` (v1.13) is `result.series` after densifyDisplay resampling (or unchanged if the event type opted out), for app.js's 3D trail
  * @param {(cursorJd:number) => void} [callbacks.onCursorChange]
  */
 export function createEventToolkitPanel(container, callbacks) {
@@ -568,12 +597,19 @@ export function createEventToolkitPanel(container, callbacks) {
         labPanel.setBusy(true);
         try {
           const result = eventType.analyze(params);
-          labPanel.renderResult(result, result.series);
+          // v1.13 — dense-scan event types get their chart/scrub series
+          // resampled to a minimum density for display; opted-out types
+          // (sparse one-point-per-candidate series, e.g. eclipses) pass
+          // result.series through unchanged. Never fed back into `result`
+          // itself, so formatResult/getMarkers/getHighlight/export all
+          // still see the solver's real series.
+          const displaySeries = eventType.densifyDisplay ? densifySeries(result.series, DISPLAY_MIN_POINTS) : result.series;
+          labPanel.renderResult(result, displaySeries);
           // v1.10 — pass the first marker epoch (if any) so app.js can jump
           // the main simulated clock straight to it, the same way scrubbing
           // already does, instead of leaving the scene sitting wherever it
           // was before Analyze was clicked.
-          callbacks.onAnalyzed?.(result, eventType.resultTarget(result), eventType.getMarkers(result)[0] ?? null);
+          callbacks.onAnalyzed?.(result, eventType.resultTarget(result), eventType.getMarkers(result)[0] ?? null, displaySeries);
         } catch (err) {
           labPanel.setError(err.message);
         } finally {
