@@ -6,6 +6,7 @@
 
 import { J2000_JD } from '../core/orbital-elements.js';
 import { t } from '../core/i18n.js';
+import { makeCollapsible } from './collapsible-panel.js';
 
 const SOURCE_KEYS = {
   'horizons-live': 'horizonsLive',
@@ -16,15 +17,33 @@ const SOURCE_KEYS = {
 export function createEphemerisHud(container) {
   const el = document.createElement('div');
   el.className = 'ephemeris-hud';
-  const simTime = document.createElement('div');
-  const selected = document.createElement('div');
+
+  // v1.14 — used to be 7 permanently-expanded lines; on mobile that was
+  // (along with body-info-panel.js's same-vintage bug) a big chunk of the
+  // fixed vertical space pushing the 3D scene off-screen. Sim time +
+  // selected body are the two fields people actually glance at mid-drag,
+  // so they stay as the always-visible title/summary line; the rest
+  // (source/center/frame/unit/reliability — the "where did this number
+  // come from" detail, see docs/accuracy.md) moves into the collapsible
+  // body, same `makeCollapsible` + mobile-default-collapsed pattern as
+  // Observer Mode/Event Toolkit/body-info-panel.js.
+  const title = document.createElement('div');
+  title.className = 'ephemeris-hud-title';
+  el.appendChild(title);
+
+  const body = document.createElement('div');
+  body.className = 'ephemeris-hud-body';
+  el.appendChild(body);
+
   const source = document.createElement('div');
   const center = document.createElement('div');
   const frame = document.createElement('div');
   const unit = document.createElement('div');
   const reliability = document.createElement('div');
-  el.append(simTime, selected, source, center, frame, unit, reliability);
+  body.append(source, center, frame, unit, reliability);
   container.appendChild(el);
+
+  const collapsible = makeCollapsible(title, body, { startCollapsed: Boolean(window.matchMedia?.('(max-width: 700px)')?.matches) });
 
   return {
     /**
@@ -40,8 +59,9 @@ export function createEphemerisHud(container) {
       const d = String(currentDate.getUTCDate()).padStart(2, '0');
       const hh = String(currentDate.getUTCHours()).padStart(2, '0');
       const mm = String(currentDate.getUTCMinutes()).padStart(2, '0');
-      simTime.textContent = t('hud.simTime', { value: `${y}-${mo}-${d} ${hh}:${mm} UTC` });
-      selected.textContent = t('hud.selectedBody', { name: bodyName });
+      const simTimeText = t('hud.simTime', { value: `${y}-${mo}-${d} ${hh}:${mm} UTC` });
+      const selectedText = t('hud.selectedBody', { name: bodyName });
+      collapsible.setTitle(`${simTimeText} · ${selectedText}`);
       if (moonParentName) {
         source.textContent = t('hud.source', { value: t('hud.source.moon') });
         center.textContent = t('hud.center', { value: moonParentName });

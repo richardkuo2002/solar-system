@@ -14,6 +14,7 @@
 // documents actual astronomy approximations.
 
 import { t } from '../core/i18n.js';
+import { makeCollapsible } from './collapsible-panel.js';
 
 const CATEGORY_KEYS = {
   sun: 'star', planet: 'planet', moon: 'moon', comet: 'comet', dwarf: 'dwarfPlanet',
@@ -77,22 +78,34 @@ export function createBodyInfoPanel(container) {
   title.className = 'body-info-panel-title';
   panel.appendChild(title);
 
+  const body = document.createElement('div');
+  body.className = 'body-info-panel-body';
+  panel.appendChild(body);
+
   const resultsText = document.createElement('pre');
   resultsText.className = 'body-info-panel-results';
-  panel.appendChild(resultsText);
+  body.appendChild(resultsText);
 
   const hint = document.createElement('small');
   hint.className = 'body-info-panel-hint';
   hint.textContent = t('bodyInfo.hint');
-  panel.appendChild(hint);
+  body.appendChild(hint);
 
   container.appendChild(panel);
+
+  // v1.14 — used to be a permanent, non-collapsible readout; on mobile that
+  // was the single biggest consumer of fixed vertical space, pushing the
+  // 3D scene (the app's whole point) off-screen even with every other
+  // panel collapsed. Same `makeCollapsible` used by Observer Mode/Event
+  // Toolkit, same mobile-default-collapsed matchMedia check — the title's
+  // "name (category)" line still works as a one-line summary when collapsed.
+  const collapsible = makeCollapsible(title, body, { startCollapsed: Boolean(window.matchMedia?.('(max-width: 700px)')?.matches) });
 
   return {
     render(info) {
       const categoryKey = CATEGORY_KEYS[info.category];
       const category = categoryKey ? t(`bodyInfo.category.${categoryKey}`) : info.category;
-      title.textContent = `${info.name} (${category})`;
+      collapsible.setTitle(`${info.name} (${category})`);
       resultsText.textContent = formatInfoText(info);
     },
   };
