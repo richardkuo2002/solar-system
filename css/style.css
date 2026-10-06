@@ -766,14 +766,26 @@ html, body {
    height now pushes the next down automatically, the same principle
    extended one level up. Collapsible sections (.event-toolkit,
    .observer-panel) default to collapsed, keeping the combined stack
-   short enough to fit typical 660-900px-tall phone viewports without
-   scrolling; a viewport that can't fit everything (very short landscape,
-   or several panels expanded at once) will clip at the top with no
-   scroll affordance — #ui-root staying `pointer-events: none` (so clicks
-   pass through empty space to the 3D scene/drag-to-look) is incompatible
-   with also making it a touch-scrollable region, so this is a known,
-   accepted limitation rather than a solved edge case. */
+   short enough to fit typical 660-900px-tall phone viewports in the
+   common case, but several panels expanded at once (or a short
+   landscape viewport) can still exceed it — confirmed: with nothing to
+   scroll, the stack simply clipped at the top, hiding the 3D scene
+   behind solid UI with no way to see or reach it. Fix: make #ui-root
+   itself the scroll container on mobile (see its own rule below)
+   instead of leaving it a dead, unscrollable overlay. */
 @media (max-width: 700px) {
+  #ui-root {
+    /* Trades the ~24px side margin's drag-to-look-through-empty-space
+       (pointer-events: none's whole point, desktop-only concern — at
+       this width panels already fill nearly the full viewport width)
+       for the ability to scroll past a UI stack taller than the
+       viewport. top:0 (was unset/bottom-anchored-only) turns the auto-
+       height box into an actual scroll region. */
+    top: 0;
+    overflow-y: auto;
+    pointer-events: auto;
+  }
+
   .observer-panel,
   .body-info-panel,
   .event-toolkit {
