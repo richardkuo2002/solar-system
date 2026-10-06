@@ -15,10 +15,16 @@
  * @param {{startCollapsed?: boolean}} [options] - v1.11.1: start collapsed
  *   instead of expanded, so a narrow-viewport page load isn't immediately
  *   covered by these panels (see app.js's matchMedia call site).
+ * @returns {{ setTitle(text:string): void }} v1.14 — body-info-panel.js and
+ *   ephemeris-hud.js's titles change on every render (selected body/sim
+ *   time), unlike Observer Mode/Event Toolkit's static labels; callers
+ *   there must go through `setTitle` instead of writing `titleEl.textContent`
+ *   directly, or the next render would wipe out the ▸/▾ prefix this module
+ *   owns.
  */
 export function makeCollapsible(titleEl, bodyEl, { startCollapsed = false } = {}) {
   if (startCollapsed) bodyEl.hidden = true;
-  const baseText = titleEl.textContent;
+  let baseText = titleEl.textContent;
   titleEl.classList.add('collapsible-title');
   // v1.8.6 — titleEl was a plain <div> with only a click handler: no
   // tabindex meant keyboard users could never reach it via Tab, and no
@@ -48,4 +54,11 @@ export function makeCollapsible(titleEl, bodyEl, { startCollapsed = false } = {}
   });
 
   render();
+
+  return {
+    setTitle(text) {
+      baseText = text;
+      render();
+    },
+  };
 }

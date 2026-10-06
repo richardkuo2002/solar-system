@@ -148,6 +148,22 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
+.ephemeris-hud-title {
+  font-weight: 600;
+}
+
+.ephemeris-hud-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Same fix as .observer-panel-body[hidden] above — the plain class rule's
+   explicit `display` otherwise defeats the `hidden` attribute entirely. */
+.ephemeris-hud-body[hidden] {
+  display: none;
+}
+
 .view-mode-controls button {
   font: 13px system-ui, sans-serif;
   padding: 6px 10px;
@@ -343,6 +359,18 @@ html, body {
 
 .body-info-panel-title {
   font-weight: 600;
+}
+
+.body-info-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Same fix as .observer-panel-body[hidden] above — the plain class rule's
+   explicit `display` otherwise defeats the `hidden` attribute entirely. */
+.body-info-panel-body[hidden] {
+  display: none;
 }
 
 .body-info-panel-results {
