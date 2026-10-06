@@ -4,13 +4,44 @@
 
 **Live demo: https://richardkuo2002.github.io/solar-system/**
 
-![Heliocentric top-down view — the inner solar system with the asteroid belt, real constellation lines, and the observer/retrograde tool panels](docs/screenshot-topdown.png)
-
 An interactive 3D solar system simulation, in the browser, with zero build
 step. Real orbital mechanics, real textures, and four different ways to
 look at the sky — top-down, free-flight, standing on a planet's surface, or
 sitting on Earth watching the other planets drift (including real
-retrograde motion).
+retrograde motion):
+
+<table>
+<tr>
+<td width="50%">
+
+![Heliocentric top-down view — the inner solar system with the asteroid belt and real constellation lines](docs/screenshot-topdown.png)
+**Top-Down** — the classic diagram view
+
+</td>
+<td width="50%">
+
+![Free-flight view — an angled, fly-anywhere look at the orbit paths](docs/screenshot-freeflight.png)
+**Free-Flight** — fly anywhere, look anywhere
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+![Geocentric view — a close, real-textured Moon as seen from Earth](docs/screenshot-geocentric.png)
+**Geocentric** — camera fixed on Earth, watching real retrograde loops unfold
+
+</td>
+<td width="50%">
+
+![Surface view — the night sky and constellations as seen standing on a planet](docs/screenshot-surface.png)
+**Surface** — stand on any planet and look up at its real sky
+
+</td>
+</tr>
+</table>
+
+*(All four are live screenshots from the actual app — not mockups.)*
 
 ## Features
 
