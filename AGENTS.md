@@ -14,3 +14,11 @@
   without asking first.
 - Never commit secrets, `.env` files, credentials, generated assets, or local
   agent memory.
+
+## UI / CSS changes
+
+- Any change touching `css/style.css` or layout-affecting `src/render/`
+  code: screenshot-check at both 390×844 (mobile) and 1366×768 (desktop)
+  before reporting the change done. See `docs/ui-review.md` for the fixed
+  checklist, the overflow check, and the AI review-loop rule (concrete
+  screenshot-anchored complaints, converge in ≤3 rounds).
