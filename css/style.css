@@ -674,6 +674,19 @@ html, body {
   border-radius: 4px;
 }
 
+/* Same fix as .observer-panel-body[hidden] above, missed here: the plain
+   class rules' own `display: flex` otherwise beats the browser's default
+   `[hidden] { display: none }` UA rule, so touch-controls.js's
+   `.hidden = true/false` mode-switching had no visual effect — both
+   groups rendered fixed in the same bottom-right spot on every touch
+   device regardless of view mode, overlapping each other (confirmed:
+   Top-Down mode on a phone showed a stray ▲ poking out above the ◀▶ row,
+   the vertical buttons' ▼ hidden behind it). */
+.touch-vertical-buttons[hidden],
+.touch-cycle-buttons[hidden] {
+  display: none;
+}
+
 .hover-label {
   position: fixed;
   pointer-events: none;
