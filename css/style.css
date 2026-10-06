@@ -400,16 +400,22 @@ html, body {
   color: #99b8d6;
 }
 
-/* v1.12 — the only other bottom-left fixed element is .touch-joystick-base
-   (bottom:20px, left:20px, 90x90px, touch devices only). bottom:120px clears
-   it with margin to spare on every viewport, so no matchMedia/touch-capable
-   branching is needed just to place this button (same "one position works
-   everywhere" choice as .attribution-footer's fixed corner). */
+/* v1.14 — used to be a flat `bottom: 120px` on every viewport ("one
+   position works everywhere", clearing .touch-joystick-base's 20+90px
+   with margin to spare). On a mouse/trackpad desktop that joystick never
+   renders at all (touch-controls.js is a no-op without a coarse pointer),
+   so the 120px gap was pure dead space floating the gear visibly above
+   .time-controls' own bottom edge instead of sitting flush with it.
+   bottom:12px here matches .time-controls' own margin-bottom from
+   #ui-root's bottom-anchored edge (see .time-controls below) — same
+   baseline, visually aligned. Touch devices restore the original 120px
+   clearance below, via the same `(pointer: coarse)` signal
+   touch-controls.js already uses to detect them. */
 .settings-button {
   pointer-events: auto;
   position: fixed;
   left: 20px;
-  bottom: 120px;
+  bottom: 12px;
   width: 36px;
   height: 36px;
   border-radius: 50%;
@@ -418,6 +424,12 @@ html, body {
   border: 1px solid #444;
   font-size: 16px;
   cursor: pointer;
+}
+
+@media (pointer: coarse) {
+  .settings-button {
+    bottom: 120px; /* clears .touch-joystick-base (bottom:20px, 90px tall) + 8px gap, unchanged from before */
+  }
 }
 
 /* v1.12.1 — `.settings-panel[hidden]` must come first (or otherwise win
@@ -432,11 +444,15 @@ html, body {
   display: none;
 }
 
+/* v1.14 — bottom tracks .settings-button's own default/coarse-pointer
+   split above (button bottom + 36px button height + 8px gap): 12+36+8=56
+   by default, 120+36+8=164 on touch — same math as before (the old flat
+   170px), just now matching wherever the button actually moved to. */
 .settings-panel {
   pointer-events: auto;
   position: fixed;
   left: 20px;
-  bottom: 170px;
+  bottom: 56px;
   width: 220px;
   display: flex;
   flex-direction: column;
@@ -447,6 +463,12 @@ html, body {
   border: 1px solid #444;
   border-radius: 4px;
   font: 13px system-ui, sans-serif;
+}
+
+@media (pointer: coarse) {
+  .settings-panel {
+    bottom: 164px;
+  }
 }
 
 .settings-panel-title {
@@ -825,6 +847,19 @@ html, body {
     top: 0;
     overflow-y: auto;
     pointer-events: auto;
+    /* v1.14 — now that body-info-panel/ephemeris-hud collapse by default
+       too (see their own CSS comments), the full stack is often much
+       shorter than the viewport, and without this it simply sits at the
+       top: the settings/time-controls/attribution cluster floated in the
+       middle of the screen with empty scene below it, not touching the
+       bottom edge the way it does on desktop. Flex + the `order`/
+       `margin-top: auto` trio below pushes that cluster down to the real
+       bottom whenever there's slack — and falls back to plain top-to-
+       bottom stacking (this scroll container's existing behavior) once
+       content is tall enough to fill the viewport on its own. */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
   }
 
   .observer-panel,
@@ -852,6 +887,7 @@ html, body {
     flex-wrap: wrap;
     justify-content: center;
     max-width: calc(100vw - 24px);
+    order: 2;
   }
 
   /* .attribution-footer is `position: fixed; bottom: 4px` — a fine corner
@@ -859,33 +895,33 @@ html, body {
      it. Wrapping .time-controls to 2 lines above makes its box (anchored
      to #ui-root's bottom edge, growing upward) tall enough to reach that
      same corner and print over this text (measured: 18px overlap).
-     Reusing --time-bar-clearance as its `bottom` instead — the value
-     app.js's ResizeObserver already keeps in sync with .time-controls'
-     real height for exactly this purpose — lifts it clear, but plants it
-     mid-screen instead, where it now collides with whatever the (also
-     newly-static) .right-column stack happens to occupy at that height.
-     Putting it back in normal flow sidesteps both: it renders in DOM
-     order (after .right-column, before .time-controls — see app.js),
-     so it always lands in the gap between them with no measurement
-     needed, the same principle as .left-column/.right-column above. */
+     Putting it back in normal flow sidesteps that. v1.14 — `order: 3`
+     moves it after .time-controls (was DOM order: footer, button,
+     time-controls — attribution printed above the time bar, not below
+     it); #ui-root's new flex order lets this file say where things go
+     without touching app.js's DOM append order. */
   .attribution-footer {
     position: static;
     display: block;
     width: fit-content;
-    margin: 0 auto 8px;
+    margin: 0 0 8px;
     text-align: center;
+    order: 3;
   }
 
-  /* .settings-button's fixed bottom:120px was chosen to clear
-     .touch-joystick-base (bottom:20px, 90px tall) on desktop/tablet, where
-     nothing else ever occupies that band. .attribution-footer flowing
-     into normal document position above now lands in that same band
-     (DOM order: footer, then this button, then .time-controls — see
-     app.js) and visibly prints under the gear icon. Flowing this button
-     too puts it in its natural DOM slot, between them, matching every
-     other element this breakpoint already un-fixes for the same reason. */
+  /* v1.14 — `order: 1` + `margin-top: auto` make this the first item of
+     the settings/time-controls/attribution trio (see their own `order`
+     above) and the one that absorbs #ui-root's leftover flex space,
+     pushing all three down to the real bottom edge together — see
+     #ui-root's own comment for why that space exists now. position:static
+     (overriding the base rule's `position: fixed; bottom: 12px`, itself a
+     v1.14 change — see that rule's own comment) is unchanged from before:
+     this button still needs to join the mobile stack's normal flow, not
+     float independently. */
   .settings-button {
     position: static;
-    margin: 0 auto 8px;
+    order: 1;
+    margin-top: auto;
+    margin-bottom: 8px;
   }
 }
